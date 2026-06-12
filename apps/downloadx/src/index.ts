@@ -9,7 +9,7 @@ export {
   META_SCHEMA_VERSION,
   TEMP_EXT,
 } from './constants.js';
-export { HttpStatusError } from './retry.js';
+export { HttpStatusError, RangeNotHonoredError } from './retry.js';
 export { SpeedTracker, AggregateSpeed } from './speedTracker.js';
 export { Throttle } from './throttle.js';
 export { planChunks, findSplitCandidate } from './chunkScheduler.js';
@@ -25,6 +25,7 @@ export {
 } from './meta.js';
 
 export type {
+  AppendFileFn,
   ChunkLifecyclePayload,
   ChunkMode,
   ChunkProgressPayload,
@@ -32,7 +33,9 @@ export type {
   ChunkSnapshot,
   ChunkSplitPayload,
   ChunkStatus,
+  DiagnosticPayload,
   DownloadCompletedPayload,
+  DownloadDescription,
   DownloadErrorPayload,
   DownloadEventListener,
   DownloadEventMap,
@@ -43,6 +46,7 @@ export type {
   DownloadStatePayload,
   DownloadXConfig,
   ExistsFn,
+  FileSizeFn,
   FetchFn,
   FetchHeaders,
   FetchInit,
@@ -54,6 +58,7 @@ export type {
   ProbeResult,
   ReadFileFn,
   RenameFn,
+  TruncateFn,
   UnlinkFn,
   WriteChunkFn,
   WriteFileFn,

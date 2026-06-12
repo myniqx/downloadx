@@ -1,7 +1,9 @@
 import { DEFAULT_CONFIG } from './constants.js';
 import { Download, type DownloadInternalConfig } from './download.js';
 import { TypedEventEmitter } from './events.js';
+import { Throttle } from './throttle.js';
 import type {
+  DownloadDescription,
   DownloadEventMap,
   DownloadEventName,
   DownloadOptions,
@@ -17,6 +19,7 @@ const RELAYED_EVENTS: readonly DownloadEventName[] = [
   'stateChange',
   'error',
   'completed',
+  'diagnostic',
 ];
 
 export class DownloadX {
@@ -29,6 +32,11 @@ export class DownloadX {
   private _targetPath: string;
   private _cachePath: string;
   private readonly baseConfig: DownloadXConfig;
+  /**
+   * Manager-wide bandwidth cap shared by ALL downloads (capacity 0 =
+   * unlimited). Per-download `speedLimit` still applies on top.
+   */
+  private readonly sharedThrottle = new Throttle(0);
 
   constructor(config: DownloadXConfig) {
     this.baseConfig = config;
@@ -112,6 +120,20 @@ export class DownloadX {
     return Array.from(this.downloads.values());
   }
 
+  /** Compact status reports for every registered download. */
+  describeAll(): DownloadDescription[] {
+    return this.list().map((d) => d.describe());
+  }
+
+  /** Manager-wide bandwidth cap in bytes/sec shared by all downloads. 0 = unlimited. */
+  setSpeedLimit(bytesPerSec: number): void {
+    this.sharedThrottle.setCapacity(bytesPerSec);
+  }
+
+  get speedLimit(): number {
+    return this.sharedThrottle.capacityBytesPerSec;
+  }
+
   setMaxParallel(n: number): void {
     if (n < 1) throw new Error('maxParallel must be >= 1');
     this._maxParallel = n;
@@ -180,6 +202,8 @@ export class DownloadX {
       speedLimit: options.speedLimit ?? cfg.speedLimit ?? DEFAULT_CONFIG.speedLimit,
       requestTimeout: cfg.requestTimeout ?? DEFAULT_CONFIG.requestTimeout,
       headers,
+      sharedThrottle: this.sharedThrottle,
+      ...(cfg.journal !== undefined ? { journal: cfg.journal } : {}),
     };
   }
 }

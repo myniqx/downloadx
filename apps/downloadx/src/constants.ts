@@ -27,8 +27,24 @@ export const DEFAULT_CONFIG = {
   retryBackoff: 2,
   speedSampleWindow: 3_000, // ms used by the moving-average hot/slow detector
   speedLimit: 0, // bytes/sec; 0 disables throttling
-  requestTimeout: 30_000,
+  requestTimeout: 30_000, // network IDLE timeout — aborts only when no bytes arrive for this long
 } as const;
+
+/**
+ * Sentinel chunk length for downloads whose total size is unknown (no
+ * Content-Length). The chunk streams until EOF; `downloadedBytes` never
+ * reaches this value, so completion is driven by the stream ending.
+ */
+export const UNKNOWN_SIZE_LENGTH = Number.MAX_SAFE_INTEGER;
+
+/**
+ * How long a chunk may stay classified `stalled` before the download aborts
+ * its current request and retries it from the bytes already written.
+ */
+export const STALL_RECOVERY_MS = 15_000;
+
+/** Max diagnostics retained in memory for {@link Download.describe}. */
+export const RECENT_DIAGNOSTICS_LIMIT = 10;
 
 /**
  * Threshold ratios used by the chunk-quality classifier.

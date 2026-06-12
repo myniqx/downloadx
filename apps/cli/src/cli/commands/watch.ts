@@ -155,8 +155,19 @@ function render(): void {
   process.stdout.write(lines.join('\n'));
 }
 
-export async function cmdWatch(simple: boolean): Promise<void> {
+export async function cmdWatch(simple: boolean, json = false): Promise<void> {
   await ensureDaemon();
+
+  if (json) {
+    // NDJSON stream: one self-contained event per line. Stable interface for
+    // scripts and LLM/agent consumers — no ANSI, no cursor control.
+    const close = openWatchStream(
+      (event) => { console.log(JSON.stringify(event)); },
+      (err) => { console.error(JSON.stringify({ event: 'streamError', message: err.message })); process.exit(1); },
+    );
+    process.on('SIGINT', () => { close(); process.exit(0); });
+    return;
+  }
 
   const downloads = await sendRequest<DownloadEntry[]>({ cmd: 'list' });
   for (const entry of downloads) {

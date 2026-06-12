@@ -79,22 +79,31 @@ Create a manager. Config fields:
 | `retryDelay` | `1000` | Base backoff delay (ms). |
 | `retryBackoff` | `2` | Exponential backoff multiplier. |
 | `speedSampleWindow` | `3000` | Moving-average window (ms) for quality. |
-| `speedLimit` | `0` | Bytes/sec. `0` = unlimited. |
-| `requestTimeout` | `30000` | Per-request timeout (ms). |
+| `speedLimit` | `0` | Bytes/sec per download. `0` = unlimited. |
+| `requestTimeout` | `30000` | Network **idle** timeout (ms): aborts and retries an attempt only when no bytes arrive for this long. Long downloads are unaffected while data flows. |
 | `headers` | `{}` | Default HTTP headers. |
+| `journal` | `false` | Write an NDJSON event journal (`{filename}.downloadx.log`) next to the meta file. Requires `io.appendFile`. |
 
 ### Manager methods
 
 - `addUrl(url, options?)` → `Download`
 - `start(id?)` / `pause(id?)` / `clear(id?)`
 - `list()` / `get(id)`
+- `describeAll()` — compact status reports for every download
 - `setMaxParallel(n)` / `setTargetPath(p)` / `setCachePath(p)`
+- `setSpeedLimit(bytesPerSec)` — manager-wide cap **shared by all downloads**
+  (per-download `speedLimit` still applies on top); 0 = unlimited
 
 ### `Download` methods
 
 - `start()` / `pause()` / `cancel()` / `clear()`
 - `speedLimit(bytesPerSec)` — 0 disables the cap live
+- `alloc()` — pre-allocate the part file to its final size (automatic at
+  start when `io.truncate` is provided)
 - `getChunkSnapshots()` — the exact state persisted to disk
+- `describe()` — compact JSON status report (state, percent, speed, ETA,
+  live chunk table, recent diagnostics); `describeText()` renders the same
+  as a short plain-text block, safe to paste into a prompt or log
 - `.emitter` — typed EventEmitter for this download
 
 ### Injected I/O
@@ -110,6 +119,10 @@ interface InjectedFunctions {
   rename: (from, to) => Promise<void>;
   unlink: (path) => Promise<void>;
   joinPath: (...segments) => string;
+  // Optional — enable extra features when provided:
+  truncate?: (path, size) => Promise<void>;   // disk pre-allocation
+  appendFile?: (path, bytes) => Promise<void>; // NDJSON journal
+  fileSize?: (path) => Promise<number>;        // final size verification
 }
 ```
 
@@ -134,6 +147,7 @@ listeners see exactly what the Download emitted).
 | `stateChange` | `{ downloadId, previous, current }` |
 | `error` | `{ downloadId, chunkId?, error, fatal }` |
 | `completed` | `{ downloadId, filename, totalBytes, durationMs }` |
+| `diagnostic` | `{ downloadId, chunkId?, level, code, message, timestamp, data? }` — retries, splits, timeouts, fallbacks; identical to the journal lines |
 
 ### Resume semantics
 
@@ -144,6 +158,25 @@ will:
 2. Compare ETag → Last-Modified → size against the stored meta.
 3. Resume from recorded chunk offsets if validators match; otherwise discard
    the old `.part` and start fresh.
+
+Ranged requests also carry `If-Range` (ETag or Last-Modified), so a resource
+that changes mid-download cannot be spliced into stale bytes — the server
+answers `200`, which triggers a clean single-chunk restart.
+
+### Robustness guarantees
+
+- A ranged request answered with `200` (server ignored `Range`) is detected
+  and the download restarts once as a single full-body request instead of
+  corrupting the file.
+- Servers without range support always restart interrupted chunks from byte
+  zero — partial progress is discarded rather than misaligned.
+- Chunk writes are clamped to the chunk's current range; a split that shrinks
+  an in-flight chunk simply makes it finish earlier.
+- Chunks stuck in `stalled` quality for ~15 s have their request reissued
+  automatically (within the normal retry budget).
+- Downloads with no `Content-Length` stream to EOF in a single chunk.
+- When `io.fileSize` is provided, the assembled file's size is verified
+  before the final rename.
 
 ### Dynamic chunking
 

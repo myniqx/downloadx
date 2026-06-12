@@ -28,6 +28,8 @@ export interface FetchResponse {
   readonly ok: boolean;
   readonly headers: FetchHeaders;
   readonly body: ReadableStream<Uint8Array> | null;
+  /** Final URL after redirects (WHATWG `Response.url`). Optional for custom fetchers. */
+  readonly url?: string;
   arrayBuffer(): Promise<ArrayBuffer>;
   text(): Promise<string>;
 }
@@ -67,6 +69,18 @@ export type UnlinkFn = (path: string) => Promise<void>;
 export type JoinPathFn = (...segments: string[]) => string;
 
 /**
+ * Set a file to exactly `size` bytes, creating it if missing (sparse/zero
+ * filled). Used for disk pre-allocation before chunked writes begin.
+ */
+export type TruncateFn = (path: string, size: number) => Promise<void>;
+
+/** Append `buffer` to `path`, creating the file if missing. Used by the journal. */
+export type AppendFileFn = (path: string, buffer: Uint8Array) => Promise<void>;
+
+/** Size of a file in bytes. Used to verify the assembled file before rename. */
+export type FileSizeFn = (path: string) => Promise<number>;
+
+/**
  * Full set of functions the package needs from the host environment.
  *
  * Consumers inject these once when creating the DownloadX instance. This allows
@@ -83,6 +97,12 @@ export interface InjectedFunctions {
   rename: RenameFn;
   unlink: UnlinkFn;
   joinPath: JoinPathFn;
+  /** Optional: enables disk pre-allocation (`Download.alloc`). */
+  truncate?: TruncateFn;
+  /** Optional: enables the NDJSON event journal sidecar. */
+  appendFile?: AppendFileFn;
+  /** Optional: enables final size verification before rename. */
+  fileSize?: FileSizeFn;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,8 +156,18 @@ export interface DownloadXConfig {
   /** Extra HTTP headers sent on every probe/chunk request. */
   headers?: Record<string, string>;
 
-  /** HTTP request timeout in ms. Undefined = no timeout. */
+  /**
+   * Network idle timeout in ms: a chunk request is aborted (and retried) when
+   * no bytes arrive for this long. Undefined = no timeout. This is NOT a cap
+   * on total request duration — long downloads are unaffected while data flows.
+   */
   requestTimeout?: number;
+
+  /**
+   * Write an NDJSON journal sidecar (`{filename}.downloadx.log`) recording
+   * retries, splits, timeouts, and state changes. Requires `io.appendFile`.
+   */
+  journal?: boolean;
 }
 
 /** Per-download overrides passed to {@link DownloadX.addUrl}. */
@@ -271,6 +301,8 @@ export interface DownloadProgressPayload {
   totalSpeed: number;
   activeChunks: number;
   percent: number | null;
+  /** Estimated remaining time in ms, or null when size/speed is unknown. */
+  etaMs: number | null;
 }
 
 export interface DownloadStatePayload {
@@ -293,6 +325,50 @@ export interface DownloadCompletedPayload {
   durationMs: number;
 }
 
+/**
+ * Machine-readable diagnostic record. Mirrors what the NDJSON journal stores,
+ * so log consumers and event consumers see identical data.
+ */
+export interface DiagnosticPayload {
+  downloadId: string;
+  chunkId?: string;
+  level: 'info' | 'warn' | 'error';
+  /** Stable machine-readable code, e.g. `idle-timeout`, `chunk-split`, `range-not-honored`. */
+  code: string;
+  message: string;
+  timestamp: number;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Compact, serialisable status report aimed at dashboards and LLM/agent
+ * consumers. Produced by {@link Download.describe}.
+ */
+export interface DownloadDescription {
+  id: string;
+  url: string;
+  filename: string;
+  state: DownloadState;
+  totalBytes: number | null;
+  downloadedBytes: number;
+  percent: number | null;
+  totalSpeedBps: number;
+  etaMs: number | null;
+  elapsedMs: number;
+  activeChunks: number;
+  totalChunks: number;
+  chunks: Array<{
+    id: string;
+    status: ChunkStatus;
+    quality: ChunkQuality;
+    offset: number;
+    length: number;
+    downloadedBytes: number;
+    retries: number;
+  }>;
+  recentDiagnostics: DiagnosticPayload[];
+}
+
 /** Strict event map shared by Download and DownloadX emitters. */
 export interface DownloadEventMap {
   progress: DownloadProgressPayload;
@@ -303,6 +379,7 @@ export interface DownloadEventMap {
   stateChange: DownloadStatePayload;
   error: DownloadErrorPayload;
   completed: DownloadCompletedPayload;
+  diagnostic: DiagnosticPayload;
 }
 
 export type DownloadEventName = keyof DownloadEventMap;

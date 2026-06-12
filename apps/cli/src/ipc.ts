@@ -22,14 +22,15 @@ export interface ResumeRequest    { cmd: 'resume'; id: string }
 export interface CancelRequest    { cmd: 'cancel'; id: string }
 export interface ClearRequest     { cmd: 'clear';  id: string }
 export interface ListRequest      { cmd: 'list' }
+export interface DescribeRequest  { cmd: 'describe'; id: string }
 export interface WatchRequest     { cmd: 'watch' }
 export interface UnwatchRequest   { cmd: 'unwatch' }
 export interface ShutdownRequest  { cmd: 'shutdown' }
 
 export type IpcRequest =
   | AddRequest | StartRequest | PauseRequest | ResumeRequest
-  | CancelRequest | ClearRequest | ListRequest | WatchRequest
-  | UnwatchRequest | ShutdownRequest;
+  | CancelRequest | ClearRequest | ListRequest | DescribeRequest
+  | WatchRequest | UnwatchRequest | ShutdownRequest;
 
 // Responses
 
@@ -84,9 +85,19 @@ export interface ErrorEvent {
   fatal: boolean;
 }
 
+export interface DiagnosticEvent {
+  event: 'diagnostic';
+  id: string;
+  chunkId: string | null;
+  level: 'info' | 'warn' | 'error';
+  code: string;
+  message: string;
+  timestamp: number;
+}
+
 export type IpcEvent =
   | ProgressEvent | ChunkProgressEvent | StateChangeEvent
-  | CompletedEvent | ErrorEvent;
+  | CompletedEvent | ErrorEvent | DiagnosticEvent;
 
 // Wire format: every line on the socket is one of these
 export type IpcMessage = IpcRequest | IpcResponse | IpcEvent;

@@ -7,7 +7,7 @@ import type { IpcRequest, IpcResponse, IpcEvent, DownloadEntry } from '../ipc.ts
 import { loadState, getDownloads } from './store.ts';
 import {
   addDownload, pauseDownload, resumeDownload, cancelDownload, clearDownload,
-  addEventSink, removeEventSink, restoreDownloads, onAutoShutdown,
+  addEventSink, removeEventSink, restoreDownloads, onAutoShutdown, describeDownload,
 } from './manager.ts';
 
 async function log(msg: string): Promise<void> {
@@ -31,6 +31,10 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
     }
     case 'list': {
       send(socket, { ok: true, data: getDownloads() } satisfies IpcResponse<DownloadEntry[]>);
+      break;
+    }
+    case 'describe': {
+      send(socket, { ok: true, data: describeDownload(req.id) });
       break;
     }
     case 'pause': {
