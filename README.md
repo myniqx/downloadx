@@ -1,25 +1,53 @@
 # downloadx
 
-An IDM-style, runtime-agnostic download manager for TypeScript. Zero runtime
-dependencies — `downloadx` only uses the I/O primitives you inject (fetch,
-file system functions, path joiner), so it runs unchanged in Node, Bun, Deno,
-or any edge environment where you can provide those primitives.
+An IDM-style, runtime-agnostic download manager for TypeScript.
+
+`downloadx` downloads files in parallel chunks with random-access disk writes,
+splits slow chunks dynamically so fast connections never idle, survives
+process restarts, and recovers from misbehaving servers — all with **zero
+runtime dependencies**. Every I/O primitive (fetch, file system, path joining)
+is injected by you, so the same package runs unchanged in Node, Bun, Deno,
+edge runtimes, or against a custom storage backend such as S3.
+
+This repository is a Bun monorepo containing two packages:
+
+| Package | Path | Description |
+|---------|------|-------------|
+| `downloadx` | `apps/downloadx` | The core library (npm package). |
+| `downloadx-cli` | `apps/cli` | A daemon-based CLI built on the library (Unix-socket IPC, live TUI, NDJSON streaming). |
 
 ## Features
 
-- Chunked parallel downloads with random-access disk writes (no temp-file
-  reshuffling at the end).
-- Automatic range-support detection (HEAD then ranged GET fallback).
-- Dynamic chunk splitting — slow chunks donate their tail to new workers so
-  the fast ones don't idle after the first one finishes.
-- Resume across process restarts (`.downloadx.json` sidecar, atomic writes,
-  ETag/Last-Modified validation).
-- Token-bucket speed limiting with live capacity changes.
-- Exponential-backoff retries with jitter, retryable vs. permanent HTTP
-  status distinction.
-- Strictly-typed `EventEmitter` exposing `progress`, `chunkProgress`,
-  `chunkLifecycle`, `chunkSplit`, `chunkQuality`, `stateChange`, `error`,
-  and `completed` events on both the `Download` and the `DownloadX` manager.
+- **Chunked parallel downloads** — the file is divided into byte ranges that
+  download concurrently and write directly to their final offsets. No
+  temp-file stitching at the end.
+- **Dynamic chunk splitting** — chunk throughput is compared against the
+  median; when a chunk finishes, the slowest/largest remaining chunk donates
+  its tail to a fresh worker, bounded by `targetChunkCount`.
+- **Resume across restarts** — a `.downloadx.json` sidecar (written
+  atomically) records the exact chunk layout; resume is validated with
+  ETag → Last-Modified → size, and ranged requests carry `If-Range` so a
+  changed resource can never be spliced into stale bytes.
+- **Misbehaving-server recovery** — a ranged request answered with `200 OK`
+  (server ignored `Range`) is detected and the download restarts once as a
+  single full-body request instead of corrupting the file.
+- **Network idle timeout** — an attempt is aborted and retried only when no
+  bytes arrive for `requestTimeout` ms. Long downloads run for hours as long
+  as data flows.
+- **Stall auto-recovery** — chunks stuck below ~15% of the median speed for
+  ~15 s get their HTTP request reissued automatically.
+- **Speed limiting** — token-bucket throttling per download plus an optional
+  manager-wide cap shared by all downloads; both adjustable live.
+- **Retries done right** — exponential backoff with full jitter, and a
+  retryable vs. permanent HTTP status distinction (a 404 fails fast, a 503
+  retries).
+- **Integrity** — optional disk pre-allocation before the first write and a
+  final size verification before the part file is renamed into place.
+- **Observability** — a strictly-typed event emitter, an NDJSON diagnostic
+  journal sidecar, and `describe()` / `describeText()` reports compact enough
+  to paste into a dashboard, a log line, or an LLM prompt.
+- **Unknown sizes handled** — downloads with no `Content-Length` stream to
+  EOF in a single chunk instead of failing.
 
 ## Install
 
@@ -30,9 +58,20 @@ npm install downloadx
 ## Quick start (Node)
 
 ```ts
-import { mkdir, rename, unlink, writeFile, readFile, stat, open } from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createDownloadX } from 'downloadx';
+
+// Open for random-access writing without ever truncating: 'r+' needs the
+// file to exist, 'wx' creates it atomically and fails (instead of
+// truncating) when a concurrent writer won the creation race.
+async function openRw(p: string) {
+  try { return await open(p, 'r+'); }
+  catch {
+    try { return await open(p, 'wx'); }
+    catch { return open(p, 'r+'); }
+  }
+}
 
 const manager = createDownloadX({
   io: {
@@ -42,21 +81,30 @@ const manager = createDownloadX({
     readFile: async (p) => new Uint8Array(await readFile(p)),
     writeFile: async (p, buf) => { await writeFile(p, buf); },
     writeChunk: async (p, offset, buf) => {
-      const fh = await open(p, 'r+').catch(async () => open(p, 'w+'));
+      const fh = await openRw(p);
       try { await fh.write(buf, 0, buf.length, offset); } finally { await fh.close(); }
     },
     rename: async (from, to) => { await rename(from, to); },
     unlink: async (p) => { await unlink(p).catch(() => undefined); },
     joinPath: (...segs) => join(...segs),
+    // Optional — each one unlocks a feature:
+    truncate: async (p, size) => {
+      const fh = await openRw(p);
+      try { await fh.truncate(size); } finally { await fh.close(); }
+    },
+    appendFile: async (p, buf) => { await appendFile(p, buf); },
+    fileSize: async (p) => (await stat(p)).size,
   },
   targetPath: './downloads',
   maxParallel: 3,
   targetChunkCount: 4,
+  journal: true,
 });
 
 const dl = manager.addUrl('https://example.com/big.iso');
 dl.emitter.on('progress', (p) => {
-  console.log(`${p.percent?.toFixed(1)}% @ ${(p.totalSpeed / 1e6).toFixed(2)} MB/s`);
+  const eta = p.etaMs === null ? '?' : `${Math.round(p.etaMs / 1000)}s`;
+  console.log(`${p.percent?.toFixed(1)}% @ ${(p.totalSpeed / 1e6).toFixed(2)} MB/s, ETA ${eta}`);
 });
 await dl.start();
 ```
@@ -73,7 +121,7 @@ Create a manager. Config fields:
 | `targetPath` | required | Directory where finished files land. |
 | `cachePath` | `targetPath` | Directory for in-flight meta/part files. |
 | `maxParallel` | `3` | Max concurrent active downloads. |
-| `targetChunkCount` | `4` | Upper bound on chunks per download. |
+| `targetChunkCount` | `4` | Upper bound on live chunks per download. |
 | `minChunkSize` | `1 MiB` | Smaller ranges won't be split further. |
 | `maxRetries` | `5` | Per-chunk HTTP retries. |
 | `retryDelay` | `1000` | Base backoff delay (ms). |
@@ -120,16 +168,16 @@ interface InjectedFunctions {
   unlink: (path) => Promise<void>;
   joinPath: (...segments) => string;
   // Optional — enable extra features when provided:
-  truncate?: (path, size) => Promise<void>;   // disk pre-allocation
+  truncate?: (path, size) => Promise<void>;    // disk pre-allocation
   appendFile?: (path, bytes) => Promise<void>; // NDJSON journal
   fileSize?: (path) => Promise<number>;        // final size verification
 }
 ```
 
-The `fetch` must match WHATWG `fetch` shape (Request/Response with streaming
-body and `AbortSignal`). Everything else maps directly to your chosen
-storage backend — disk, S3, IndexedDB, or a database — as long as
-`writeChunk` supports random-access offset writes.
+The `fetch` must match the WHATWG `fetch` shape (streaming body and
+`AbortSignal` support). Everything else maps directly to your chosen storage
+backend — disk, S3, IndexedDB, or a database — as long as `writeChunk`
+supports random-access offset writes **without truncating the file**.
 
 ### Events
 
@@ -139,7 +187,7 @@ listeners see exactly what the Download emitted).
 
 | Event | Payload |
 |-------|---------|
-| `progress` | Aggregate: `{ downloadId, totalBytes, downloadedBytes, totalSpeed, activeChunks, percent }` |
+| `progress` | Aggregate: `{ downloadId, totalBytes, downloadedBytes, totalSpeed, activeChunks, percent, etaMs }` |
 | `chunkProgress` | Per-chunk: `{ downloadId, chunkId, offset, length, downloadedBytes, instantSpeed, windowedSpeed, quality }` |
 | `chunkLifecycle` | `{ downloadId, chunkId, status }` — `pending`/`downloading`/`completed`/`failed`/`paused`/`reassigned` |
 | `chunkSplit` | `{ downloadId, sourceChunkId, newChunkId, splitOffset, reason }` |
@@ -182,19 +230,47 @@ answers `200`, which triggers a clean single-chunk restart.
 
 A chunk's throughput is compared against the median of all active chunks on
 a rolling window. If one falls below ~50% of the median it's marked `poor`;
-below ~15% it's `stalled`. When any chunk finishes (or stalls), the
-scheduler picks the slowest/largest remaining chunk, truncates its tail, and
-spawns a new chunk from the freed range, bounded by `targetChunkCount`.
+below ~15% it's `stalled`. When any chunk finishes, the scheduler picks the
+slowest/largest remaining chunk, truncates its tail, and spawns a new chunk
+from the freed range, bounded by `targetChunkCount`.
+
+## CLI
+
+`apps/cli` ships a daemon-based CLI (`downloadx`) that keeps downloads
+running in the background and talks to them over a Unix socket:
+
+```
+downloadx add <url> [--path <dir>]   Add and start a download
+downloadx list                        List all downloads
+downloadx status <id> [--json]        Detailed status report for a download
+downloadx pause <id>                  Pause a download
+downloadx resume <id>                 Resume a download
+downloadx cancel <id>                 Cancel a download
+downloadx clear <id>                  Remove a download from list
+downloadx watch [--simple|--json]     Live progress view (--json = NDJSON stream)
+downloadx stop                        Shut down the daemon
+```
+
+`watch --json` emits one self-contained JSON event per line (progress, chunk
+progress, state changes, diagnostics) — a stable interface for scripts and
+LLM/agent consumers. `status --json` prints the full `describe()` report.
 
 ## Development
 
 ```bash
-npm install
-npm test            # vitest
-npm run typecheck
-npm run build
+bun install
+bun run test        # vitest (library)
+bun run typecheck   # both packages
+bun run build       # both packages
 ```
 
 Tests are split into `unit/`, `integration/`, `edge/`, and `events/`
-directories. The suite uses an in-memory mock fs and programmable mock
+directories. The suite uses an in-memory mock fs and a programmable mock
 fetch, so there's no network or filesystem dependency.
+
+See **[proje.md](./proje.md)** for a file-by-file guide to the codebase and
+the rules to follow when making changes.
+
+## License
+
+MIT
