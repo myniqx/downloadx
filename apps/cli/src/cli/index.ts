@@ -22,7 +22,7 @@ Usage:
   downloadx watch [--simple|--json]                      Live progress view
   downloadx stop                                         Shut down the daemon
 
-  downloadx set <key> <value> [--id <#|id>]              Set a config value
+  downloadx set <key> <value> [--id <#|id>] [--override]  Set a config value (--override forces all downloads)
   downloadx get [key] [--id <#|id>]                      Get one or all config values
 
   Config keys: maxParallel, speedLimit, targetPath, cachePath, targetChunkCount, minChunkSize, journal
@@ -63,6 +63,7 @@ export async function runCli(argv: string[]): Promise<void> {
 
   const all       = argBoolean('--all');
   const force     = argBoolean('--force');
+  const override  = argBoolean('--override');
   const completed = argBoolean('--completed');
   const json      = argBoolean('--json');
   const simple    = argBoolean('--simple');
@@ -128,9 +129,9 @@ export async function runCli(argv: string[]): Promise<void> {
       const value = positional[1];
       try {
         await ensureDaemon();
-        const result = await sendRequest<string | null>({ cmd: 'set', key, value, ...(overlayId ? { id: overlayId } : {}) });
+        const result = await sendRequest<string | null>({ cmd: 'set', key, value, ...(overlayId ? { id: overlayId } : {}), ...(override ? { override } : {}) });
         if (result) console.log(result);
-        else if (key && value) console.log(`Set ${key} = ${value}${overlayId ? ` for download ${overlayId}` : ''}`);
+        else if (key && value) console.log(`Set ${key} = ${value}${overlayId ? ` for download ${overlayId}` : ''}${override ? ' (override)' : ''}`);
       } catch (e) { cliError(`${e instanceof Error ? e.message : e}`); }
       break;
     }

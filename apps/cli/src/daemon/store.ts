@@ -9,7 +9,7 @@ interface State {
 
 let state: State = { downloads: [] };
 
-const DEFAULT_CONFIG: DaemonConfig = {
+export const DEFAULT_CONFIG: DaemonConfig = {
   maxParallel: 3,
   speedLimit: 0,
   targetPath: DOWNLOADS_DIR,
@@ -19,30 +19,19 @@ const DEFAULT_CONFIG: DaemonConfig = {
   journal: true,
 };
 
-let config: DaemonConfig = { ...DEFAULT_CONFIG };
-
-export function getConfig(): DaemonConfig {
-  return config;
-}
-
-export async function loadConfig(): Promise<void> {
+export async function loadConfig(): Promise<DaemonConfig> {
   try {
     const raw = await readFile(CONFIG_FILE, 'utf8');
-    config = { ...DEFAULT_CONFIG, ...JSON.parse(raw) as Partial<DaemonConfig> };
+    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) as Partial<DaemonConfig> };
   } catch {
-    config = { ...DEFAULT_CONFIG };
+    return { ...DEFAULT_CONFIG };
   }
 }
 
-export async function saveConfig(): Promise<void> {
+export async function saveConfig(config: DaemonConfig): Promise<void> {
   await mkdir(dirname(CONFIG_FILE), { recursive: true });
   await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
 }
-
-const VALID_KEYS = new Set<keyof DaemonConfig>(['maxParallel', 'speedLimit', 'targetPath', 'cachePath', 'targetChunkCount', 'minChunkSize', 'journal']);
-const KEY_MAP: Record<string, keyof DaemonConfig> = Object.fromEntries(
-  [...VALID_KEYS].map((k) => [k.toLowerCase(), k])
-);
 
 export function parseSpeed(value: string): number {
   const m = /^(\d+(?:\.\d+)?)\s*(kb|mb|gb|k|m|g)?$/i.exec(value.trim());
@@ -54,38 +43,6 @@ export function parseSpeed(value: string): number {
     case 'kb': case 'k': return Math.round(n * 1024);
     default: return Math.round(n);
   }
-}
-
-export function setConfigKey(key: string, value: string): void {
-  const canonical = KEY_MAP[key.toLowerCase()];
-  if (!canonical) throw new Error(`Unknown config key '${key}'. Valid keys: ${[...VALID_KEYS].join(', ')}`);
-  key = canonical;
-  const c = config as unknown as Record<string, unknown>;
-  if (key === 'maxParallel') {
-    const n = Number(value);
-    if (!Number.isInteger(n) || n < 1) throw new Error(`'maxParallel' must be a positive integer`);
-    c[key] = n;
-  } else if (key === 'speedLimit') {
-    c[key] = value === '0' ? 0 : parseSpeed(value);
-  } else if (key === 'targetChunkCount') {
-    const n = Number(value);
-    if (!Number.isInteger(n) || n < 1) throw new Error(`'targetChunkCount' must be a positive integer`);
-    c[key] = n;
-  } else if (key === 'minChunkSize') {
-    c[key] = parseSpeed(value);
-  } else if (key === 'journal') {
-    if (value !== 'true' && value !== 'false') throw new Error(`'journal' must be 'true' or 'false'`);
-    c[key] = value === 'true';
-  } else {
-    c[key] = value;
-  }
-}
-
-export function getConfigKey(key?: string): DaemonConfig | unknown {
-  if (!key) return config;
-  const canonical = KEY_MAP[key.toLowerCase()];
-  if (!canonical) throw new Error(`Unknown config key '${key}'. Valid keys: ${[...VALID_KEYS].join(', ')}`);
-  return config[canonical];
 }
 
 function sortByAddedAt(): void {

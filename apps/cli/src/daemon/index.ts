@@ -4,11 +4,11 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SOCKET_PATH, PID_FILE, LOG_FILE, IPC_DELIMITER, DATA_DIR } from '../constants.ts';
 import type { IpcRequest, IpcResponse, IpcEvent, DownloadEntry } from '../ipc.ts';
-import { loadState, loadConfig, getDownloads, resolveDownload, getAllIds, getConfigKey, setConfigKey, saveConfig, parseSpeed } from './store.ts';
+import { loadState, loadConfig, getDownloads, resolveDownload, getAllIds, parseSpeed } from './store.ts';
 import {
   addDownload, pauseDownload, resumeDownload, restartDownload, cancelDownload, clearDownload,
-  addEventSink, removeEventSink, restoreDownloads, onAutoShutdown, describeDownload, applyConfig,
-  setDownloadConfig, getDownloadConfig,
+  addEventSink, removeEventSink, restoreDownloads, onAutoShutdown, describeDownload,
+  setDownloadConfig, getDownloadConfig, initManager, setGlobalConfig, getGlobalConfig, persistConfig,
 } from './manager.ts';
 
 async function log(msg: string): Promise<void> {
@@ -152,9 +152,8 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
         const ok = setDownloadConfig(entry.id, canonicalKey, parsed);
         if (!ok) throw new Error(`Key '${canonicalKey}' is not settable on a download`);
       } else {
-        setConfigKey(key, req.value);
-        await saveConfig();
-        applyConfig();
+        setGlobalConfig(key, req.value, req.override === true);
+        await persistConfig();
       }
       send(socket, { ok: true, data: null });
       break;
@@ -174,7 +173,7 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
           send(socket, { ok: true, data: getDownloadConfig(entry.id, canonicalKey) });
         }
       } else {
-        send(socket, { ok: true, data: getConfigKey(req.key) });
+        send(socket, { ok: true, data: getGlobalConfig(req.key) });
       }
       break;
     }
@@ -246,7 +245,8 @@ export async function runDaemon(): Promise<void> {
   process.on('SIGTERM', async () => { await cleanup(); process.exit(0); });
   process.on('SIGINT',  async () => { await cleanup(); process.exit(0); });
 
-  await loadConfig();
+  const config = await loadConfig();
+  initManager(config);
   await loadState();
   await writePid();
   await startServer();

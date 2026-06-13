@@ -47,7 +47,7 @@ export interface ListRequest     { cmd: 'list' }
 export interface StatusRequest   { cmd: 'status';   id: string }
 export interface WatchRequest    { cmd: 'watch' }
 export interface ShutdownRequest { cmd: 'shutdown' }
-export interface SetRequest      { cmd: 'set';      key?: string | undefined; value?: string | undefined; id?: string | undefined }
+export interface SetRequest      { cmd: 'set';      key?: string | undefined; value?: string | undefined; id?: string | undefined; override?: boolean }
 export interface GetRequest      { cmd: 'get';      key?: string | undefined; id?: string | undefined }
 
 export type IpcRequest =
