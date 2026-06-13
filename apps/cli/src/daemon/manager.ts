@@ -1,5 +1,15 @@
-import { mkdir, rename, unlink, writeFile, readFile, stat, open, appendFile } from 'node:fs/promises';
+import {
+  mkdir,
+  rename,
+  unlink,
+  writeFile,
+  readFile,
+  stat,
+  open,
+  appendFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
+
 import {
   createDownloadX,
   type Download,
@@ -12,9 +22,10 @@ import {
   type DownloadErrorPayload,
   type DiagnosticPayload,
 } from '@downloadx/core';
+
 import type { DownloadEntry, DaemonConfig, IpcEvent } from '../ipc.ts';
-import { upsertDownload, removeDownload, getDownload, saveConfig } from './store.ts';
 import { resolveConfigKey } from './config-keys.ts';
+import { upsertDownload, removeDownload, getDownload, saveConfig } from './store.ts';
 
 type EventSink = (event: IpcEvent) => void;
 type DownloadXInstance = ReturnType<typeof createDownloadX>;
@@ -51,22 +62,47 @@ async function openRw(p: string) {
 function makeIo() {
   return {
     fetch: (globalThis as unknown as { fetch: typeof fetch }).fetch,
-    mkdir: async (p: string) => { await mkdir(p, { recursive: true }); },
-    exists: async (p: string) => { try { await stat(p); return true; } catch { return false; } },
+    mkdir: async (p: string) => {
+      await mkdir(p, { recursive: true });
+    },
+    exists: async (p: string) => {
+      try {
+        await stat(p);
+        return true;
+      } catch {
+        return false;
+      }
+    },
     readFile: async (p: string) => new Uint8Array(await readFile(p)),
-    writeFile: async (p: string, buf: Uint8Array) => { await writeFile(p, buf); },
+    writeFile: async (p: string, buf: Uint8Array) => {
+      await writeFile(p, buf);
+    },
     writeChunk: async (p: string, offset: number, buf: Uint8Array) => {
       const fh = await openRw(p);
-      try { await fh.write(buf, 0, buf.length, offset); } finally { await fh.close(); }
+      try {
+        await fh.write(buf, 0, buf.length, offset);
+      } finally {
+        await fh.close();
+      }
     },
-    rename: async (from: string, to: string) => { await rename(from, to); },
-    unlink: async (p: string) => { await unlink(p).catch(() => undefined); },
+    rename: async (from: string, to: string) => {
+      await rename(from, to);
+    },
+    unlink: async (p: string) => {
+      await unlink(p).catch(() => undefined);
+    },
     joinPath: (...segs: string[]) => join(...segs),
     truncate: async (p: string, size: number) => {
       const fh = await openRw(p);
-      try { await fh.truncate(size); } finally { await fh.close(); }
+      try {
+        await fh.truncate(size);
+      } finally {
+        await fh.close();
+      }
     },
-    appendFile: async (p: string, buf: Uint8Array) => { await appendFile(p, buf); },
+    appendFile: async (p: string, buf: Uint8Array) => {
+      await appendFile(p, buf);
+    },
     fileSize: async (p: string) => (await stat(p)).size,
   };
 }
@@ -91,9 +127,20 @@ function getManager(): DownloadXInstance {
   return manager;
 }
 
-type GlobalConfigKey = 'maxParallel' | 'speedLimit' | 'targetPath' | 'cachePath' | 'targetChunkCount' | 'minChunkSize' | 'journal';
+type GlobalConfigKey =
+  | 'maxParallel'
+  | 'speedLimit'
+  | 'targetPath'
+  | 'cachePath'
+  | 'targetChunkCount'
+  | 'minChunkSize'
+  | 'journal';
 
-export async function setGlobalConfig(key: string, rawValue: string, override: boolean): Promise<void> {
+export async function setGlobalConfig(
+  key: string,
+  rawValue: string,
+  override: boolean,
+): Promise<void> {
   const def = resolveConfigKey(key, false);
   const parsed = def.parse(rawValue);
   const canonical = def.canonical as GlobalConfigKey;
@@ -236,7 +283,11 @@ export function describeDownload(id: string): DownloadDescription {
   };
 }
 
-export async function addDownload(id: string, url: string, targetPath: string | null): Promise<DownloadEntry> {
+export async function addDownload(
+  id: string,
+  url: string,
+  targetPath: string | null,
+): Promise<DownloadEntry> {
   const mgr = getManager();
   const dl = mgr.addUrl(url, { id });
   dlRefs.set(id, dl);

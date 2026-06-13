@@ -15,7 +15,8 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     canLocal: false,
     parse(raw) {
       const n = Number(raw);
-      if (!Number.isInteger(n) || n < 1) throw new Error(`'maxParallel' must be a positive integer`);
+      if (!Number.isInteger(n) || n < 1)
+        throw new Error(`'maxParallel' must be a positive integer`);
       return n;
     },
   },
@@ -50,7 +51,8 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     canLocal: true,
     parse(raw) {
       const n = Number(raw);
-      if (!Number.isInteger(n) || n < 1) throw new Error(`'targetChunkCount' must be a positive integer`);
+      if (!Number.isInteger(n) || n < 1)
+        throw new Error(`'targetChunkCount' must be a positive integer`);
       return n;
     },
   },
@@ -73,15 +75,11 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
   },
 ];
 
-export const CONFIG_KEY_MAP = new Map(
-  CONFIG_KEYS.map((def) => [def.canonical.toLowerCase(), def])
-);
+export const CONFIG_KEY_MAP = new Map(CONFIG_KEYS.map((def) => [def.canonical.toLowerCase(), def]));
 
 export const LOCAL_KEYS = CONFIG_KEYS.filter((d) => d.canLocal);
 
-export const LOCAL_KEY_MAP = new Map(
-  LOCAL_KEYS.map((def) => [def.canonical.toLowerCase(), def])
-);
+export const LOCAL_KEY_MAP = new Map(LOCAL_KEYS.map((def) => [def.canonical.toLowerCase(), def]));
 
 export function resolveConfigKey(raw: string, local: boolean): ConfigKeyDef {
   const map = local ? LOCAL_KEY_MAP : CONFIG_KEY_MAP;

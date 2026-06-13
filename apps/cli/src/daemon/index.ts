@@ -1,16 +1,30 @@
-import { createServer, type Socket } from 'node:net';
-import { mkdir, unlink, writeFile, appendFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { mkdir, unlink, writeFile, appendFile } from 'node:fs/promises';
+import { createServer, type Socket } from 'node:net';
+import { dirname } from 'node:path';
+
 import { SOCKET_PATH, PID_FILE, LOG_FILE, IPC_DELIMITER, DATA_DIR } from '../constants.ts';
 import type { IpcRequest, IpcResponse, IpcEvent, DownloadEntry } from '../ipc.ts';
-import { loadState, loadConfig, getDownloads, resolveDownload, getAllIds } from './store.ts';
 import { CONFIG_KEYS, LOCAL_KEYS, resolveConfigKey } from './config-keys.ts';
 import {
-  addDownload, pauseDownload, resumeDownload, restartDownload, cancelDownload, clearDownload,
-  addEventSink, removeEventSink, restoreDownloads, onAutoShutdown, describeDownload,
-  setDownloadConfig, getDownloadConfig, initManager, setGlobalConfig, getGlobalConfig,
+  addDownload,
+  pauseDownload,
+  resumeDownload,
+  restartDownload,
+  cancelDownload,
+  clearDownload,
+  addEventSink,
+  removeEventSink,
+  restoreDownloads,
+  onAutoShutdown,
+  describeDownload,
+  setDownloadConfig,
+  getDownloadConfig,
+  initManager,
+  setGlobalConfig,
+  getGlobalConfig,
 } from './manager.ts';
+import { loadState, loadConfig, getDownloads, resolveDownload, getAllIds } from './store.ts';
 
 async function log(msg: string): Promise<void> {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -21,7 +35,6 @@ async function log(msg: string): Promise<void> {
 function send(socket: Socket, msg: IpcResponse | IpcEvent): void {
   socket.write(JSON.stringify(msg) + IPC_DELIMITER);
 }
-
 
 function resolveId(raw: string): string {
   if (raw === 'all') return raw;
@@ -97,7 +110,10 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       if (!req.key) {
         const colW = Math.max(...activeKeys.map((d) => d.canonical.length)) + 2;
         const lines = activeKeys
-          .map((d) => `  ${d.canonical.padEnd(colW)} ${isLocal ? (d.localDescription ?? d.description) : d.description}`)
+          .map(
+            (d) =>
+              `  ${d.canonical.padEnd(colW)} ${isLocal ? (d.localDescription ?? d.description) : d.description}`,
+          )
           .join('\n');
         send(socket, { ok: true, data: lines });
         break;
@@ -129,7 +145,7 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
         if (!entry) throw new Error(`No download matching '${req.id}'`);
         if (!req.key) {
           const all = Object.fromEntries(
-            LOCAL_KEYS.map((d) => [d.canonical, getDownloadConfig(entry.id, d.canonical)])
+            LOCAL_KEYS.map((d) => [d.canonical, getDownloadConfig(entry.id, d.canonical)]),
           );
           send(socket, { ok: true, data: all });
         } else {
@@ -182,7 +198,9 @@ async function startServer(): Promise<void> {
       }
     });
 
-    socket.on('error', () => { /* client disconnected */ });
+    socket.on('error', () => {
+      /* client disconnected */
+    });
   });
 
   server.listen(SOCKET_PATH, async () => {
@@ -206,8 +224,14 @@ async function cleanup(): Promise<void> {
 }
 
 export async function runDaemon(): Promise<void> {
-  process.on('SIGTERM', async () => { await cleanup(); process.exit(0); });
-  process.on('SIGINT', async () => { await cleanup(); process.exit(0); });
+  process.on('SIGTERM', async () => {
+    await cleanup();
+    process.exit(0);
+  });
+  process.on('SIGINT', async () => {
+    await cleanup();
+    process.exit(0);
+  });
 
   const config = await loadConfig();
   initManager(config);
