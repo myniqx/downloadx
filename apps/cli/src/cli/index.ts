@@ -1,6 +1,6 @@
 import { cmdAdd } from './commands/add.ts';
 import { cmdList } from './commands/list.ts';
-import { cmdPause, cmdResume, cmdCancel, cmdClear } from './commands/pause.ts';
+import { cmdPause, cmdResume, cmdRestart, cmdCancel, cmdClear } from './commands/pause.ts';
 import { cmdStatus } from './commands/status.ts';
 import { cmdWatch } from './commands/watch.ts';
 import { ensureDaemon, sendRequest } from './client.ts';
@@ -12,10 +12,13 @@ Usage:
   downloadx add <url> [--path <dir>] [--speed <bytes>]   Add and start a download
   downloadx list                                          List all downloads
   downloadx status <#|id> [--json]                       Detailed status for a download
-  downloadx pause  <#|id|all>                            Pause one or all downloads
-  downloadx resume <#|id|all>                            Resume one or all downloads
-  downloadx cancel <#|id|all>                            Cancel one or all downloads
-  downloadx clear  <#|id|all>                            Remove one or all from list
+  downloadx pause   <#|id> [--all]                       Pause one or all downloads
+  downloadx resume  <#|id> [--all]                       Resume one or all downloads
+  downloadx restart <#|id> [--force] | --all [--force]   Restart from scratch, confirms before deleting .part files
+  downloadx cancel  <#|id> [--all]                       Cancel one or all downloads
+  downloadx clear   <#|id> [--force]                     Remove from list (confirms if incomplete)
+  downloadx clear   --all [--force]                      Remove all (confirms incomplete ones)
+  downloadx clear   --completed                          Remove only completed downloads
   downloadx watch [--simple|--json]                      Live progress view
   downloadx stop                                         Shut down the daemon
 
@@ -51,26 +54,45 @@ export async function runCli(argv: string[]): Promise<void> {
       break;
     }
     case 'pause': {
-      if (!args[0]) cliError('Usage: downloadx pause <#|id|all>');
-      try { await cmdPause(args[0]); }
+      const all = args.includes('--all');
+      const id = args.find((a) => !a.startsWith('--'));
+      if (!all && !id) cliError('Usage: downloadx pause <#|id> [--all]');
+      try { await cmdPause(all ? 'all' : id!); }
       catch (e) { cliError(`Could not pause: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'resume': {
-      if (!args[0]) cliError('Usage: downloadx resume <#|id|all>');
-      try { await cmdResume(args[0]); }
+      const all = args.includes('--all');
+      const id = args.find((a) => !a.startsWith('--'));
+      if (!all && !id) cliError('Usage: downloadx resume <#|id> [--all]');
+      try { await cmdResume(all ? 'all' : id!); }
       catch (e) { cliError(`Could not resume: ${e instanceof Error ? e.message : e}`); }
       break;
     }
+    case 'restart': {
+      const all = args.includes('--all');
+      const force = args.includes('--force');
+      const id = args.find((a) => !a.startsWith('--'));
+      if (!all && !id) cliError('Usage: downloadx restart <#|id> [--force] | --all [--force]');
+      try { await cmdRestart(all ? '' : id!, { force, all }); }
+      catch (e) { cliError(`Could not restart: ${e instanceof Error ? e.message : e}`); }
+      break;
+    }
     case 'cancel': {
-      if (!args[0]) cliError('Usage: downloadx cancel <#|id|all>');
-      try { await cmdCancel(args[0]); }
+      const all = args.includes('--all');
+      const id = args.find((a) => !a.startsWith('--'));
+      if (!all && !id) cliError('Usage: downloadx cancel <#|id> [--all]');
+      try { await cmdCancel(all ? 'all' : id!); }
       catch (e) { cliError(`Could not cancel: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'clear': {
-      if (!args[0]) cliError('Usage: downloadx clear <#|id|all>');
-      try { await cmdClear(args[0]); }
+      const force = args.includes('--force');
+      const completed = args.includes('--completed');
+      const all = args.includes('--all') || args[0] === 'all';
+      const target = args.find((a) => !a.startsWith('--')) ?? '';
+      if (!all && !completed && !target) cliError('Usage: downloadx clear <#|id> [--force] | --all [--force] | --completed');
+      try { await cmdClear(target, { force, completed, all }); }
       catch (e) { cliError(`Could not clear: ${e instanceof Error ? e.message : e}`); }
       break;
     }

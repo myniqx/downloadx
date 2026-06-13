@@ -42,7 +42,7 @@ export async function cmdList(): Promise<void> {
     const color = STATUS_COLOR[d.status] ?? '';
     const idx = `#${String(i + 1).padStart(indexWidth)}`;
 
-    if (d.status === 'completed' && d.filename) {
+    if (d.status === 'completed' && d.filename && d.targetPath) {
       const fullPath = join(d.targetPath, d.filename);
       const exists = await fileExists(fullPath);
       const icon = exists ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;

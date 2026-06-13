@@ -180,7 +180,6 @@ export class Download {
       }
     }
     await this.safeUnlink(this.partFilePath);
-    await this.safeUnlink(this.targetFilePath);
     if (this._probe) {
       await deleteMeta(this.config.io, {
         dir: this.config.cachePath,

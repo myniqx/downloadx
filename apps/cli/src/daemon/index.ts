@@ -6,7 +6,7 @@ import { SOCKET_PATH, PID_FILE, LOG_FILE, IPC_DELIMITER, DATA_DIR } from '../con
 import type { IpcRequest, IpcResponse, IpcEvent, DownloadEntry } from '../ipc.ts';
 import { loadState, loadConfig, getDownloads, resolveDownload, getAllIds, getConfigKey, setConfigKey, saveConfig, upsertDownload, parseSpeed } from './store.ts';
 import {
-  addDownload, pauseDownload, resumeDownload, cancelDownload, clearDownload,
+  addDownload, pauseDownload, resumeDownload, restartDownload, cancelDownload, clearDownload,
   addEventSink, removeEventSink, restoreDownloads, onAutoShutdown, describeDownload, applyConfig,
 } from './manager.ts';
 
@@ -74,6 +74,12 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
     case 'resume': {
       const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
       await runForIds(ids, resumeDownload);
+      send(socket, { ok: true, data: null });
+      break;
+    }
+    case 'restart': {
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, restartDownload);
       send(socket, { ok: true, data: null });
       break;
     }

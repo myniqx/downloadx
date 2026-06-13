@@ -1,5 +1,5 @@
 import { ensureDaemon, sendRequest, openWatchStream } from '../client.ts';
-import type { DownloadEntry, IpcEvent, ProgressEvent, ChunkProgressEvent, StateChangeEvent, CompletedEvent } from '../../ipc.ts';
+import type { DownloadEntry, IpcEvent, ProgressEvent, ChunkProgressEvent, ChunkLifecycleEvent, StateChangeEvent, CompletedEvent } from '../../ipc.ts';
 
 const RESET  = '\x1b[0m';
 const BOLD   = '\x1b[1m';
@@ -187,13 +187,13 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
       (event) => {
         if (event.event === 'progress') {
           const e = event as ProgressEvent;
-          console.log(`[${e.id.slice(0, 8)}] ${e.percent?.toFixed(1) ?? '?'}% @ ${fmtSpeed(e.totalSpeed)}`);
+          console.log(`[${e.downloadId.slice(0, 8)}] ${e.percent?.toFixed(1) ?? '?'}% @ ${fmtSpeed(e.totalSpeed)}`);
         } else if (event.event === 'completed') {
           const e = event as CompletedEvent;
-          console.log(`[${e.id.slice(0, 8)}] Completed: ${e.filename} (${fmtBytes(e.totalBytes)})`);
+          console.log(`[${e.downloadId.slice(0, 8)}] Completed: ${e.filename} (${fmtBytes(e.totalBytes)})`);
         } else if (event.event === 'stateChange') {
           const e = event as StateChangeEvent;
-          console.log(`[${e.id.slice(0, 8)}] ${e.previous} → ${e.current}`);
+          console.log(`[${e.downloadId.slice(0, 8)}] ${e.previous} → ${e.current}`);
         }
       },
       (err) => { console.error(err.message); process.exit(1); },
@@ -218,7 +218,7 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
       switch (event.event) {
         case 'progress': {
           const e = event as ProgressEvent;
-          const ds = state.get(e.id);
+          const ds = state.get(e.downloadId);
           if (ds) {
             ds.downloadedBytes = e.downloadedBytes;
             ds.totalBytes = e.totalBytes;
@@ -229,7 +229,7 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
         }
         case 'chunkProgress': {
           const e = event as ChunkProgressEvent;
-          const ds = state.get(e.id);
+          const ds = state.get(e.downloadId);
           if (ds) {
             const existing = ds.chunks.get(e.chunkId);
             ds.chunks.set(e.chunkId, {
@@ -244,15 +244,23 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
           }
           break;
         }
+        case 'chunkLifecycle': {
+          const e = event as ChunkLifecycleEvent;
+          if (e.status === 'completed' || e.status === 'reassigned') {
+            const ds = state.get(e.downloadId);
+            if (ds) ds.chunks.delete(e.chunkId);
+          }
+          break;
+        }
         case 'stateChange': {
           const e = event as StateChangeEvent;
-          const ds = state.get(e.id);
+          const ds = state.get(e.downloadId);
           if (ds) ds.entry.status = e.current;
           break;
         }
         case 'completed': {
           const e = event as CompletedEvent;
-          const ds = state.get(e.id);
+          const ds = state.get(e.downloadId);
           if (ds) {
             ds.entry.status = 'completed';
             ds.entry.filename = e.filename;

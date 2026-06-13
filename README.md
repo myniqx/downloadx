@@ -249,22 +249,59 @@ npm install -g @downloadx/cli
 Keeps downloads running in the background via a daemon that talks over a Unix socket:
 
 ```
-downloadx add <url> [--path <dir>]        Add and start a download
-downloadx list                             List all downloads
-downloadx status <#|id> [--json]          Detailed status for a download
-downloadx pause  <#|id|all>               Pause one or all downloads
-downloadx resume <#|id|all>               Resume one or all downloads
-downloadx cancel <#|id|all>               Cancel one or all downloads
-downloadx clear  <#|id|all>               Remove one or all from list
-downloadx watch [--simple|--json]         Live progress view
-downloadx stop                            Shut down the daemon
+downloadx add <url> [--path <dir>]               Add and start a download
+downloadx list                                    List all downloads
+downloadx status <#|id> [--json]                  Detailed status for a download
+downloadx pause  <#|id> [--all]                   Pause one or all downloads
+downloadx resume <#|id> [--all]                   Resume one or all downloads (works for errored downloads too)
+downloadx restart <#|id> [--force] [--all]        Restart from scratch, keeps list position
+downloadx cancel <#|id> [--all]                   Cancel one or all downloads
+downloadx clear  <#|id> [--force]                 Remove from list (confirms if incomplete)
+downloadx clear  --all [--force]                  Remove all (confirms incomplete ones)
+downloadx clear  --completed                      Remove only completed downloads
+downloadx watch [--simple|--json]                 Live progress view
+downloadx stop                                    Shut down the daemon
 
-<#> refers to the index shown by 'list' (e.g. 1, 2, #1, #2)
+downloadx set <key> <value> [--id <#|id>]         Set a config value
+downloadx get [key]                               Get one or all config values
 ```
+
+`<#>` refers to the index shown by `list` (e.g. `1`, `2`, `#1`, `#2`).
+
+`restart` deletes `.part` files and restarts from byte zero. It always asks for
+confirmation unless `--force` is passed. The download keeps its position in the
+list and its original `addedAt` timestamp.
+
+`clear` only removes the entry from the list and deletes in-progress `.part`,
+`.meta`, and `.journal` files — it never touches the finished file in the target
+directory.
 
 `watch --json` emits one self-contained JSON event per line (progress, chunk
 progress, state changes, diagnostics) — a stable interface for scripts and
 LLM/agent consumers. `status --json` prints the full `describe()` report.
+
+### Configuration
+
+Config is stored in `~/.local/share/downloadx/config.json` and applied live without restarting the daemon.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `maxParallel` | `3` | Max concurrent active downloads |
+| `speedLimit` | `0` | Global speed cap shared by all downloads. `0` = unlimited. Accepts `500kb`, `3mb`, `1.5gb` or raw bytes |
+| `targetPath` | `~/.local/share/downloadx/downloads` | Default directory for completed files |
+| `cachePath` | `~/.local/share/downloadx/cache` | Directory for in-progress `.part` files |
+
+Per-download overrides (via `--id`): `speedLimit`, `targetPath`.
+`cachePath` is fixed at download creation time and cannot be changed per-download.
+
+```bash
+downloadx set maxParallel 5
+downloadx set speedLimit 3mb
+downloadx set targetPath ~/Downloads
+downloadx set speedLimit 1mb --id 2   # limit only download #2
+downloadx get                          # show all config values
+downloadx get speedLimit               # show one value
+```
 
 ## Development
 

@@ -6,6 +6,7 @@ import {
   type DownloadDescription,
   type DownloadProgressPayload,
   type ChunkProgressPayload,
+  type ChunkLifecyclePayload,
   type DownloadStatePayload,
   type DownloadCompletedPayload,
   type DownloadErrorPayload,
@@ -119,36 +120,21 @@ function attachListeners(id: string, dl: Download): void {
         totalBytes: p.totalBytes ?? stored.totalBytes,
       });
     }
-    emit({
-      event: 'progress',
-      id,
-      downloadedBytes: p.downloadedBytes,
-      totalBytes: p.totalBytes ?? null,
-      totalSpeed: p.totalSpeed,
-      activeChunks: p.activeChunks,
-      percent: p.percent ?? null,
-    });
+    emit({ ...p, event: 'progress' });
   });
 
   dl.emitter.on('chunkProgress', (p: ChunkProgressPayload) => {
-    emit({
-      event: 'chunkProgress',
-      id,
-      chunkId: p.chunkId,
-      offset: p.offset,
-      length: p.length,
-      downloadedBytes: p.downloadedBytes,
-      instantSpeed: p.instantSpeed,
-      windowedSpeed: p.windowedSpeed,
-      quality: p.quality,
-    });
+    emit({ ...p, event: 'chunkProgress' });
+  });
+
+  dl.emitter.on('chunkLifecycle', (p: ChunkLifecyclePayload) => {
+    emit({ ...p, event: 'chunkLifecycle' });
   });
 
   dl.emitter.on('stateChange', (p: DownloadStatePayload) => {
     const stored = getDownload(id);
-    const next = p.current as DownloadEntry['status'];
-    if (stored) void upsertDownload({ ...stored, status: next });
-    emit({ event: 'stateChange', id, previous: p.previous as DownloadEntry['status'], current: next });
+    if (stored) void upsertDownload({ ...stored, status: p.current });
+    emit({ ...p, event: 'stateChange' });
   });
 
   dl.emitter.on('completed', (p: DownloadCompletedPayload) => {
@@ -164,7 +150,7 @@ function attachListeners(id: string, dl: Download): void {
         targetPath: finalTargetPath,
       });
     }
-    emit({ event: 'completed', id, filename: p.filename, totalBytes: p.totalBytes, durationMs: p.durationMs });
+    emit({ ...p, event: 'completed' });
     onDownloadFinished();
   });
 
@@ -174,19 +160,12 @@ function attachListeners(id: string, dl: Download): void {
       void upsertDownload({ ...stored, status: 'failed', errorMessage: p.error.message });
       onDownloadFinished();
     }
-    emit({ event: 'error', id, chunkId: p.chunkId ?? null, message: p.error.message, fatal: p.fatal });
+    const { error, ...rest } = p;
+    emit({ ...rest, event: 'error', message: error.message });
   });
 
   dl.emitter.on('diagnostic', (p: DiagnosticPayload) => {
-    emit({
-      event: 'diagnostic',
-      id,
-      chunkId: p.chunkId ?? null,
-      level: p.level,
-      code: p.code,
-      message: p.message,
-      timestamp: p.timestamp,
-    });
+    emit({ ...p, event: 'diagnostic' });
   });
 }
 
@@ -258,6 +237,34 @@ export async function resumeDownload(id: string): Promise<void> {
     activeCount++;
   }
   await dl.start();
+}
+
+export async function restartDownload(id: string): Promise<void> {
+  const entry = getDownload(id);
+  if (!entry) throw new Error(`Download ${id} not found`);
+  const existing = dlRefs.get(id);
+  if (existing) {
+    await existing.clear();
+    dlRefs.delete(id);
+  }
+  const mgr = getManager();
+  const dl = mgr.addUrl(entry.url, {
+    id,
+    ...(entry.speedLimit !== null && entry.speedLimit > 0 ? { speedLimit: entry.speedLimit } : {}),
+  });
+  dlRefs.set(id, dl);
+  attachListeners(id, dl);
+  await upsertDownload({
+    ...entry,
+    status: 'queued',
+    filename: null,
+    totalBytes: null,
+    downloadedBytes: 0,
+    completedAt: null,
+    errorMessage: null,
+  });
+  activeCount++;
+  void dl.start();
 }
 
 export async function cancelDownload(id: string): Promise<void> {
