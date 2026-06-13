@@ -142,7 +142,7 @@ describe('event payloads — DownloadX relay parity', () => {
     const body = makeBytes(256);
     const harness = makeHarness();
     harness.fetch.route('https://x/rel.bin', { body });
-    const dlx = createDownloadX(harness.config);
+    const dlx = await createDownloadX(harness.config);
 
     const eventNames: DownloadEventName[] = [
       'progress',
@@ -155,7 +155,7 @@ describe('event payloads — DownloadX relay parity', () => {
       'completed',
     ];
 
-    const d = dlx.addUrl('https://x/rel.bin');
+    const d = await dlx.addUrl('https://x/rel.bin');
 
     const downloadBuckets = new Map<DownloadEventName, unknown[]>();
     const managerBuckets = new Map<DownloadEventName, unknown[]>();

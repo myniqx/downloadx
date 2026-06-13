@@ -3,6 +3,7 @@ import type {
   ExistsFn,
   FileSizeFn,
   JoinPathFn,
+  ListDirFn,
   MkdirFn,
   ReadFileFn,
   RenameFn,
@@ -103,6 +104,19 @@ export class MockFs {
     return buf.length;
   };
 
+  readonly listDir: ListDirFn = async (path: string) => {
+    const prefix = path.endsWith('/') ? path : `${path}/`;
+    const out: string[] = [];
+    for (const file of this.files.keys()) {
+      if (!file.startsWith(prefix)) continue;
+      const rest = file.slice(prefix.length);
+      // Only direct children — skip nested paths.
+      if (rest.includes('/')) continue;
+      out.push(rest);
+    }
+    return out;
+  };
+
   // Test inspection helpers — not part of the InjectedFunctions surface.
   peek(path: string): Uint8Array | undefined {
     const b = this.files.get(path);
@@ -130,6 +144,7 @@ export class MockFs {
     rename: RenameFn;
     unlink: UnlinkFn;
     joinPath: JoinPathFn;
+    listDir: ListDirFn;
     truncate: TruncateFn;
     appendFile: AppendFileFn;
     fileSize: FileSizeFn;
@@ -143,6 +158,7 @@ export class MockFs {
       rename: this.rename,
       unlink: this.unlink,
       joinPath: this.joinPath,
+      listDir: this.listDir,
       truncate: this.truncate,
       appendFile: this.appendFile,
       fileSize: this.fileSize,

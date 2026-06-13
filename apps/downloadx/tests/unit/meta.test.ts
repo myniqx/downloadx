@@ -43,12 +43,17 @@ function exampleSnap(over: Partial<ChunkSnapshot> = {}): ChunkSnapshot {
 describe('meta persistence', () => {
   it('persistMeta writes via tmp + rename (atomic) and loadMeta reads back', async () => {
     const { fs, io } = makeHarness();
-    const meta = createMeta({ id: 'd1', probe: exampleProbe(), chunks: [exampleSnap()] });
-    await persistMeta(io, { dir: '/dl', filename: 'y.bin' }, meta);
-    expect(fs.hasFile(metaPath(io, { dir: '/dl', filename: 'y.bin' }))).toBe(true);
+    const meta = createMeta({
+      id: 'd1',
+      url: 'https://x/y.bin',
+      probe: exampleProbe(),
+      chunks: [exampleSnap()],
+    });
+    await persistMeta(io, { dir: '/dl', id: 'd1' }, meta);
+    expect(fs.hasFile(metaPath(io, { dir: '/dl', id: 'd1' }))).toBe(true);
     // tmp file should not remain after rename.
-    expect(fs.hasFile(`${metaPath(io, { dir: '/dl', filename: 'y.bin' })}.tmp`)).toBe(false);
-    const loaded = await loadMeta(io, { dir: '/dl', filename: 'y.bin' });
+    expect(fs.hasFile(`${metaPath(io, { dir: '/dl', id: 'd1' })}.tmp`)).toBe(false);
+    const loaded = await loadMeta(io, { dir: '/dl', id: 'd1' });
     expect(loaded).not.toBeNull();
     expect(loaded?.id).toBe('d1');
     expect(loaded?.chunks[0]?.id).toBe('c0');
@@ -56,42 +61,48 @@ describe('meta persistence', () => {
 
   it('loadMeta returns null when the file is missing', async () => {
     const { io } = makeHarness();
-    const loaded = await loadMeta(io, { dir: '/dl', filename: 'missing.bin' });
+    const loaded = await loadMeta(io, { dir: '/dl', id: 'missing' });
     expect(loaded).toBeNull();
   });
 
   it('loadMeta treats a corrupt JSON payload as missing', async () => {
     const { fs, io } = makeHarness();
     await fs.writeFile(
-      metaPath(io, { dir: '/dl', filename: 'bad.bin' }),
+      metaPath(io, { dir: '/dl', id: 'bad' }),
       new TextEncoder().encode('{not json'),
     );
-    const loaded = await loadMeta(io, { dir: '/dl', filename: 'bad.bin' });
+    const loaded = await loadMeta(io, { dir: '/dl', id: 'bad' });
     expect(loaded).toBeNull();
   });
 
   it('loadMeta rejects payloads with wrong schemaVersion', async () => {
     const { fs, io } = makeHarness();
-    const target = metaPath(io, { dir: '/dl', filename: 'old.bin' });
+    const target = metaPath(io, { dir: '/dl', id: 'old' });
     await fs.writeFile(
       target,
       new TextEncoder().encode(JSON.stringify({ schemaVersion: 2, id: 'x' })),
     );
-    const loaded = await loadMeta(io, { dir: '/dl', filename: 'old.bin' });
+    const loaded = await loadMeta(io, { dir: '/dl', id: 'old' });
     expect(loaded).toBeNull();
   });
 
   it('deleteMeta removes the file', async () => {
     const { fs, io } = makeHarness();
-    const meta = createMeta({ id: 'd1', probe: exampleProbe(), chunks: [exampleSnap()] });
-    await persistMeta(io, { dir: '/dl', filename: 'y.bin' }, meta);
-    await deleteMeta(io, { dir: '/dl', filename: 'y.bin' });
-    expect(fs.hasFile(metaPath(io, { dir: '/dl', filename: 'y.bin' }))).toBe(false);
+    const meta = createMeta({
+      id: 'd1',
+      url: 'https://x/y.bin',
+      probe: exampleProbe(),
+      chunks: [exampleSnap()],
+    });
+    await persistMeta(io, { dir: '/dl', id: 'd1' }, meta);
+    await deleteMeta(io, { dir: '/dl', id: 'd1' });
+    expect(fs.hasFile(metaPath(io, { dir: '/dl', id: 'd1' }))).toBe(false);
   });
 
   it('updateMeta merges state/chunks and bumps updatedAt', () => {
     const meta = createMeta({
       id: 'd1',
+      url: 'https://x/y.bin',
       probe: exampleProbe(),
       chunks: [exampleSnap()],
       now: () => 1_000,
@@ -107,12 +118,22 @@ describe('meta persistence', () => {
 
 describe('canResumeAgainst', () => {
   it('requires matching total size', () => {
-    const meta = createMeta({ id: 'd', probe: exampleProbe({ totalSize: 1024 }), chunks: [] });
+    const meta = createMeta({
+      id: 'd',
+      url: 'https://x/y.bin',
+      probe: exampleProbe({ totalSize: 1024 }),
+      chunks: [],
+    });
     expect(canResumeAgainst(meta, exampleProbe({ totalSize: 2048 }))).toBe(false);
   });
 
   it('requires matching ETag when both sides have it', () => {
-    const meta = createMeta({ id: 'd', probe: exampleProbe({ etag: 'A' }), chunks: [] });
+    const meta = createMeta({
+      id: 'd',
+      url: 'https://x/y.bin',
+      probe: exampleProbe({ etag: 'A' }),
+      chunks: [],
+    });
     expect(canResumeAgainst(meta, exampleProbe({ etag: 'B' }))).toBe(false);
     expect(canResumeAgainst(meta, exampleProbe({ etag: 'A' }))).toBe(true);
   });
@@ -120,6 +141,7 @@ describe('canResumeAgainst', () => {
   it('falls back to Last-Modified when ETag is absent on either side', () => {
     const meta = createMeta({
       id: 'd',
+      url: 'https://x/y.bin',
       probe: exampleProbe({ etag: null, lastModified: 'Mon, 01 Jan 2020' }),
       chunks: [],
     });
@@ -133,7 +155,7 @@ describe('canResumeAgainst', () => {
 
   it('accepts when no validators exist on either side and sizes match', () => {
     const bare: ProbeResult = exampleProbe({ etag: null, lastModified: null });
-    const meta = createMeta({ id: 'd', probe: bare, chunks: [] });
+    const meta = createMeta({ id: 'd', url: 'https://x/y.bin', probe: bare, chunks: [] });
     expect(canResumeAgainst(meta, bare)).toBe(true);
   });
 });

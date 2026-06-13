@@ -194,7 +194,7 @@ describe('Download integration — pause and resume', () => {
     await run;
     await download.clear();
     expect(harness.fs.hasFile('/dl/drop.bin')).toBe(false);
-    expect(harness.fs.hasFile('/dl/drop.bin.downloadx.json')).toBe(false);
+    expect(harness.fs.hasFile('/dl/d8.downloadx.json')).toBe(false);
     expect(harness.fs.hasFile(`/dl/drop.bin${TEMP_EXT}`)).toBe(false);
   });
 });
@@ -256,11 +256,11 @@ describe('Download integration — DownloadX relay', () => {
     const harness = makeHarness();
     harness.fetch.route('https://x/r.bin', { body });
     const { createDownloadX } = await import('../../src/downloadX.js');
-    const dlx = createDownloadX(harness.config);
+    const dlx = await createDownloadX(harness.config);
     const relayed: string[] = [];
     dlx.emitter.on('stateChange', (p) => relayed.push(p.current));
     dlx.emitter.on('completed', (p) => relayed.push(`completed:${p.filename}`));
-    const d = dlx.addUrl('https://x/r.bin');
+    const d = await dlx.addUrl('https://x/r.bin');
     await d.start();
     expect(relayed).toContain('completed:r.bin');
     expect(relayed.some((s) => s === 'downloading' || s === 'probing')).toBe(true);
@@ -273,9 +273,9 @@ describe('Download integration — DownloadX relay', () => {
     harness.fetch.route('https://x/a.bin', { body });
     harness.fetch.route('https://x/b.bin', { body });
     const { createDownloadX } = await import('../../src/downloadX.js');
-    const dlx = createDownloadX(harness.config);
-    const a = dlx.addUrl('https://x/a.bin');
-    const b = dlx.addUrl('https://x/b.bin');
+    const dlx = await createDownloadX(harness.config);
+    const a = await dlx.addUrl('https://x/a.bin');
+    const b = await dlx.addUrl('https://x/b.bin');
     await dlx.start();
 
     // Wait until either one completes — at which point check that the other
@@ -303,9 +303,9 @@ describe('Download integration — DownloadX relay', () => {
     harness.fetch.route('https://x/l1', { body: makeBytes(16) });
     harness.fetch.route('https://x/l2', { body: makeBytes(16) });
     const { createDownloadX } = await import('../../src/downloadX.js');
-    const dlx = createDownloadX(harness.config);
-    dlx.addUrl('https://x/l1');
-    dlx.addUrl('https://x/l2');
+    const dlx = await createDownloadX(harness.config);
+    await dlx.addUrl('https://x/l1');
+    await dlx.addUrl('https://x/l2');
     expect(dlx.list()).toHaveLength(2);
   });
 
@@ -313,9 +313,9 @@ describe('Download integration — DownloadX relay', () => {
     const harness = makeHarness();
     harness.fetch.route('https://x/dup', { body: makeBytes(16) });
     const { createDownloadX } = await import('../../src/downloadX.js');
-    const dlx = createDownloadX(harness.config);
-    const a = dlx.addUrl('https://x/dup');
-    const b = dlx.addUrl('https://x/dup');
+    const dlx = await createDownloadX(harness.config);
+    const a = await dlx.addUrl('https://x/dup');
+    const b = await dlx.addUrl('https://x/dup');
     expect(a).toBe(b);
   });
 });

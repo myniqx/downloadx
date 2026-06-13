@@ -254,7 +254,7 @@ describe('features — journal, describe, preallocation', () => {
     const d = new Download('r6', 'https://x/j.bin', {}, internal(harness, { journal: true }));
     await d.start();
     expect(d.state).toBe('completed');
-    const log = harness.fs.peek('/dl/j.bin.downloadx.log');
+    const log = harness.fs.peek('/dl/r6.downloadx.log');
     expect(log).toBeDefined();
     const lines = new TextDecoder().decode(log!).trim().split('\n');
     expect(lines.length).toBeGreaterThan(0);
