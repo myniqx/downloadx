@@ -7,6 +7,7 @@ import {
   stat,
   open,
   appendFile,
+  readdir,
 } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -23,12 +24,12 @@ import {
   type DiagnosticPayload,
 } from '@downloadx/core';
 
-import type { DownloadEntry, DaemonConfig, IpcEvent } from '../ipc.ts';
+import type { DaemonConfig, DownloadEntry, IpcEvent } from '../ipc.ts';
 import { resolveConfigKey } from './config-keys.ts';
-import { upsertDownload, removeDownload, getDownload, saveConfig } from './store.ts';
+import { saveConfig } from './config.ts';
 
 type EventSink = (event: IpcEvent) => void;
-type DownloadXInstance = ReturnType<typeof createDownloadX>;
+type DownloadXInstance = Awaited<ReturnType<typeof createDownloadX>>;
 
 const sinks = new Set<EventSink>();
 
@@ -92,6 +93,13 @@ function makeIo() {
       await unlink(p).catch(() => undefined);
     },
     joinPath: (...segs: string[]) => join(...segs),
+    listDir: async (p: string): Promise<string[]> => {
+      try {
+        return await readdir(p);
+      } catch {
+        return [];
+      }
+    },
     truncate: async (p: string, size: number) => {
       const fh = await openRw(p);
       try {
@@ -109,8 +117,8 @@ function makeIo() {
 
 let manager: DownloadXInstance | null = null;
 
-export function initManager(config: DaemonConfig): void {
-  manager = createDownloadX({
+export async function initManager(config: DaemonConfig): Promise<void> {
+  manager = await createDownloadX({
     io: makeIo(),
     targetPath: config.targetPath,
     cachePath: config.cachePath,
@@ -120,6 +128,9 @@ export function initManager(config: DaemonConfig): void {
     journal: config.journal,
     ...(config.speedLimit > 0 ? { speedLimit: config.speedLimit } : {}),
   });
+  // Restored downloads need their event sinks wired up too so list/status
+  // updates flow through the IPC stream after a daemon restart.
+  for (const dl of manager.list()) attachListeners(dl);
 }
 
 function getManager(): DownloadXInstance {
@@ -175,7 +186,49 @@ export function getGlobalConfig(key?: string): DaemonConfig | unknown {
   return snapshot[def.canonical as GlobalConfigKey];
 }
 
-const dlRefs = new Map<string, Download>();
+function toEntry(dl: Download): DownloadEntry {
+  const meta = dl.meta;
+  const total = dl.totalBytes;
+  return {
+    id: dl.id,
+    url: dl.url,
+    filename: meta.filename,
+    targetPath: meta.targetPath,
+    status: dl.state,
+    addedAt: meta.addedAt,
+    completedAt: meta.completedAt,
+    totalBytes: total,
+    downloadedBytes: dl.downloadedBytes,
+    errorMessage: meta.errorMessage,
+  };
+}
+
+export function getDownload(id: string): DownloadEntry | undefined {
+  const dl = getManager().get(id);
+  return dl ? toEntry(dl) : undefined;
+}
+
+export function getDownloads(): DownloadEntry[] {
+  return getManager()
+    .list()
+    .map(toEntry)
+    .sort((a, b) => a.addedAt - b.addedAt);
+}
+
+export function getAllIds(): string[] {
+  return getManager()
+    .list()
+    .sort((a, b) => a.meta.addedAt - b.meta.addedAt)
+    .map((d) => d.id);
+}
+
+/** Resolves "#1", "1" (1-based index), a prefix or a full id to a stored entry. */
+export function resolveDownload(idOrIndex: string): DownloadEntry | undefined {
+  const entries = getDownloads();
+  const n = /^#?(\d+)$/.exec(idOrIndex);
+  if (n) return entries[Number(n[1]) - 1];
+  return entries.find((d) => d.id === idOrIndex || d.id.startsWith(idOrIndex));
+}
 
 let activeCount = 0;
 let shutdownCallback: (() => void) | null = null;
@@ -189,16 +242,8 @@ function onDownloadFinished(): void {
   if (activeCount === 0 && shutdownCallback) shutdownCallback();
 }
 
-function attachListeners(id: string, dl: Download): void {
+function attachListeners(dl: Download): void {
   dl.emitter.on('progress', (p: DownloadProgressPayload) => {
-    const stored = getDownload(id);
-    if (stored) {
-      void upsertDownload({
-        ...stored,
-        downloadedBytes: p.downloadedBytes,
-        totalBytes: p.totalBytes ?? stored.totalBytes,
-      });
-    }
     emit({ ...p, event: 'progress' });
   });
 
@@ -211,34 +256,16 @@ function attachListeners(id: string, dl: Download): void {
   });
 
   dl.emitter.on('stateChange', (p: DownloadStatePayload) => {
-    const stored = getDownload(id);
-    if (stored) void upsertDownload({ ...stored, status: p.current });
     emit({ ...p, event: 'stateChange' });
   });
 
   dl.emitter.on('completed', (p: DownloadCompletedPayload) => {
-    const stored = getDownload(id);
-    if (stored) {
-      const finalTargetPath = stored.targetPath ?? getManager().targetPath;
-      void upsertDownload({
-        ...stored,
-        status: 'completed',
-        filename: p.filename,
-        totalBytes: p.totalBytes,
-        completedAt: Date.now(),
-        targetPath: finalTargetPath,
-      });
-    }
     emit({ ...p, event: 'completed' });
     onDownloadFinished();
   });
 
   dl.emitter.on('error', (p: DownloadErrorPayload) => {
-    const stored = getDownload(id);
-    if (stored && p.fatal) {
-      void upsertDownload({ ...stored, status: 'failed', errorMessage: p.error.message });
-      onDownloadFinished();
-    }
+    if (p.fatal) onDownloadFinished();
     const { error, ...rest } = p;
     emit({ ...rest, event: 'error', message: error.message });
   });
@@ -249,141 +276,67 @@ function attachListeners(id: string, dl: Download): void {
 }
 
 export function setDownloadConfig(id: string, key: string, value: unknown): boolean {
-  const dl = dlRefs.get(id);
+  const dl = getManager().get(id);
   if (!dl) throw new Error(`Download ${id} not active`);
   return dl.set(key, value);
 }
 
 export function getDownloadConfig<T>(id: string, key: string): T | undefined {
-  const dl = dlRefs.get(id);
+  const dl = getManager().get(id);
   if (!dl) throw new Error(`Download ${id} not active`);
   return dl.get<T>(key);
 }
 
 export function describeDownload(id: string): DownloadDescription {
-  const dl = dlRefs.get(id);
-  if (dl) return dl.describe();
-  const entry = getDownload(id);
-  if (!entry) throw new Error(`Download ${id} not found`);
-  return {
-    id: entry.id,
-    url: entry.url,
-    filename: entry.filename ?? '',
-    state: entry.status as DownloadDescription['state'],
-    totalBytes: entry.totalBytes ?? null,
-    downloadedBytes: entry.downloadedBytes,
-    percent: entry.totalBytes ? Math.round((entry.downloadedBytes / entry.totalBytes) * 100) : null,
-    totalSpeedBps: 0,
-    etaMs: null,
-    elapsedMs: entry.completedAt ? entry.completedAt - entry.addedAt : Date.now() - entry.addedAt,
-    activeChunks: 0,
-    totalChunks: 0,
-    chunks: [],
-    recentDiagnostics: [],
-  };
+  const dl = getManager().get(id);
+  if (!dl) throw new Error(`Download ${id} not found`);
+  return dl.describe();
 }
 
 export async function addDownload(
-  id: string,
   url: string,
   targetPath: string | null,
 ): Promise<DownloadEntry> {
   const mgr = getManager();
-  const dl = mgr.addUrl(url, { id });
-  dlRefs.set(id, dl);
-  attachListeners(id, dl);
-
-  const entry: DownloadEntry = {
-    id,
-    url,
-    filename: null,
-    targetPath,
-    status: 'queued',
-    addedAt: Date.now(),
-    completedAt: null,
-    totalBytes: null,
-    downloadedBytes: 0,
-    errorMessage: null,
-  };
-
-  await upsertDownload(entry);
+  const dl = await mgr.addUrl(url);
+  if (targetPath !== null) dl.setTargetPath(targetPath);
+  attachListeners(dl);
   activeCount++;
   void dl.start();
-  return entry;
+  return toEntry(dl);
 }
 
 export async function pauseDownload(id: string): Promise<void> {
-  const dl = dlRefs.get(id);
+  const dl = getManager().get(id);
   if (!dl) throw new Error(`Download ${id} not active`);
-  await dl.pause();
+  dl.pause();
 }
 
 export async function resumeDownload(id: string): Promise<void> {
-  const entry = getDownload(id);
-  if (!entry) throw new Error(`Download ${id} not found`);
-  const mgr = getManager();
-  const existing = dlRefs.get(id);
-  const dl = existing ?? mgr.addUrl(entry.url, { id: entry.id });
-  if (!existing) {
-    dlRefs.set(id, dl);
-    attachListeners(id, dl);
-    activeCount++;
-  }
-  await dl.start();
+  const dl = getManager().get(id);
+  if (!dl) throw new Error(`Download ${id} not found`);
+  activeCount++;
+  void dl.start();
 }
 
 export async function restartDownload(id: string): Promise<void> {
-  const entry = getDownload(id);
-  if (!entry) throw new Error(`Download ${id} not found`);
-  const existing = dlRefs.get(id);
-  if (existing) {
-    await existing.clear();
-    dlRefs.delete(id);
-  }
   const mgr = getManager();
-  const dl = mgr.addUrl(entry.url, { id });
-  dlRefs.set(id, dl);
-  attachListeners(id, dl);
-  await upsertDownload({
-    ...entry,
-    status: 'queued',
-    filename: null,
-    totalBytes: null,
-    downloadedBytes: 0,
-    completedAt: null,
-    errorMessage: null,
-  });
+  const existing = mgr.get(id);
+  if (!existing) throw new Error(`Download ${id} not found`);
+  const url = existing.url;
+  await existing.clear();
+  await mgr.remove(id);
+  const dl = await mgr.addUrl(url, { id });
+  attachListeners(dl);
   activeCount++;
   void dl.start();
 }
 
 export async function cancelDownload(id: string): Promise<void> {
-  const dl = dlRefs.get(id);
-  if (dl) await dl.cancel();
-  const entry = getDownload(id);
-  if (entry) await upsertDownload({ ...entry, status: 'cancelled' });
+  const dl = getManager().get(id);
+  if (dl) dl.cancel();
 }
 
 export async function clearDownload(id: string): Promise<void> {
-  const dl = dlRefs.get(id);
-  if (dl) await dl.clear();
-  dlRefs.delete(id);
-  await removeDownload(id);
-}
-
-export async function restoreDownloads(entries: DownloadEntry[]): Promise<void> {
-  const mgr = getManager();
-  for (const entry of entries) {
-    if (entry.status === 'downloading' || entry.status === 'queued') {
-      const dl = mgr.addUrl(entry.url, { id: entry.id });
-      dlRefs.set(entry.id, dl);
-      attachListeners(entry.id, dl);
-      activeCount++;
-      void dl.start();
-    } else if (entry.status === 'paused') {
-      const dl = mgr.addUrl(entry.url, { id: entry.id });
-      dlRefs.set(entry.id, dl);
-      attachListeners(entry.id, dl);
-    }
-  }
+  await getManager().clear(id);
 }

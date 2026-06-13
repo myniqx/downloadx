@@ -8,11 +8,15 @@ import type {
 } from './types.js';
 
 /**
- * Sidecar JSON persisted next to the download file:
- *   `{cachePath}/{filename}.downloadx.json`
+ * Sidecar JSON persisted under the cache directory:
+ *   `{cachePath}/{id}.downloadx.json`
+ *
+ * The file is keyed by download id (not filename) so it can be written before
+ * the probe completes — that lets `createDownloadX` rebuild its in-memory list
+ * from disk on next startup, even for downloads that never started.
  *
  * Written atomically: write-to-tmp then rename, so a crash in the middle of
- * `persist()` can't corrupt an existing valid meta file.
+ * `persistMeta()` can't corrupt an existing valid meta file.
  */
 
 const textEncoder = new TextEncoder();
@@ -21,46 +25,89 @@ const textDecoder = new TextDecoder('utf-8', { fatal: true });
 export interface MetaLocator {
   /** Directory the meta JSON lives in (usually cachePath). */
   dir: string;
-  /** Final filename of the download (without the `.downloadx.json` suffix). */
-  filename: string;
+  /** Download id — the meta filename is `{id}.downloadx.json`. */
+  id: string;
 }
 
 export function metaPath(io: InjectedFunctions, locator: MetaLocator): string {
-  return io.joinPath(locator.dir, `${locator.filename}${META_EXT}`);
+  return io.joinPath(locator.dir, `${locator.id}${META_EXT}`);
 }
 
 function tmpPath(target: string): string {
   return `${target}.tmp`;
 }
 
+export interface CreateEmptyMetaInput {
+  id: string;
+  url: string;
+  now?: () => number;
+}
+
+/**
+ * Meta for a download that has been registered but not probed yet. Fields that
+ * depend on the probe (filename, finalUrl, totalSize, etc.) start as null/zero
+ * and are filled in by {@link applyProbeToMeta} once the probe completes.
+ */
+export function createEmptyMeta(input: CreateEmptyMetaInput): MetaFile {
+  const ts = (input.now ?? Date.now)();
+  return {
+    schemaVersion: META_SCHEMA_VERSION,
+    id: input.id,
+    url: input.url,
+    finalUrl: null,
+    filename: null,
+    totalSize: null,
+    acceptsRanges: false,
+    etag: null,
+    lastModified: null,
+    contentType: null,
+    createdAt: ts,
+    updatedAt: ts,
+    state: 'idle',
+    chunks: [],
+    addedAt: ts,
+    completedAt: null,
+    errorMessage: null,
+    speedLimit: null,
+    targetChunkCount: null,
+    targetPath: null,
+  };
+}
+
 export interface CreateMetaInput {
   id: string;
+  url: string;
   probe: ProbeResult;
   chunks: ChunkSnapshot[];
   now?: () => number;
 }
 
+/** Builds a fresh meta directly from a probe result (used when no prior meta exists). */
 export function createMeta(input: CreateMetaInput): MetaFile {
-  const ts = (input.now ?? Date.now)();
-  return {
-    schemaVersion: META_SCHEMA_VERSION,
-    id: input.id,
-    url: input.probe.url,
-    finalUrl: input.probe.finalUrl,
-    filename: input.probe.filename,
-    totalSize: input.probe.totalSize,
-    acceptsRanges: input.probe.acceptsRanges,
-    etag: input.probe.etag,
-    lastModified: input.probe.lastModified,
-    contentType: input.probe.contentType,
-    createdAt: ts,
-    updatedAt: ts,
-    state: 'idle',
-    chunks: input.chunks,
-    speedLimit: null,
-    targetChunkCount: null,
-    targetPath: null,
-  };
+  const meta = createEmptyMeta(
+    input.now !== undefined
+      ? { id: input.id, url: input.url, now: input.now }
+      : { id: input.id, url: input.url },
+  );
+  return applyProbeToMeta(meta, input.probe, input.chunks);
+}
+
+/** Merges a probe result into an existing meta, returning the same object. */
+export function applyProbeToMeta(
+  meta: MetaFile,
+  probe: ProbeResult,
+  chunks: ChunkSnapshot[],
+): MetaFile {
+  meta.finalUrl = probe.finalUrl;
+  meta.filename = probe.filename;
+  meta.totalSize = probe.totalSize;
+  meta.acceptsRanges = probe.acceptsRanges;
+  meta.etag = probe.etag;
+  meta.lastModified = probe.lastModified;
+  meta.contentType = probe.contentType;
+  meta.chunks = chunks;
+  meta.updatedAt = Date.now();
+  return meta;
 }
 
 export async function loadMeta(
@@ -80,6 +127,25 @@ export async function loadMeta(
     // file is left on disk so the user can inspect it if needed.
     return null;
   }
+}
+
+/**
+ * Scans `dir` for `*.downloadx.json` files and loads each one sequentially.
+ * Corrupt or schema-mismatched files are skipped (left on disk). Sequential
+ * instead of parallel because some injected I/O backends may not handle high
+ * concurrency, and restore happens once at startup — latency isn't critical.
+ */
+export async function listMetaFiles(io: InjectedFunctions, dir: string): Promise<MetaFile[]> {
+  if (!(await io.exists(dir))) return [];
+  const entries = await io.listDir(dir);
+  const out: MetaFile[] = [];
+  for (const name of entries) {
+    if (!name.endsWith(META_EXT)) continue;
+    const id = name.slice(0, -META_EXT.length);
+    const meta = await loadMeta(io, { dir, id });
+    if (meta !== null) out.push(meta);
+  }
+  return out;
 }
 
 export async function persistMeta(
@@ -105,7 +171,16 @@ export async function deleteMeta(io: InjectedFunctions, locator: MetaLocator): P
 export function updateMeta(
   meta: MetaFile,
   patch: Partial<
-    Pick<MetaFile, 'state' | 'chunks' | 'speedLimit' | 'targetChunkCount' | 'targetPath'>
+    Pick<
+      MetaFile,
+      | 'state'
+      | 'chunks'
+      | 'speedLimit'
+      | 'targetChunkCount'
+      | 'targetPath'
+      | 'completedAt'
+      | 'errorMessage'
+    >
   >,
 ): MetaFile {
   if (patch.state !== undefined) meta.state = patch.state;
@@ -113,6 +188,8 @@ export function updateMeta(
   if ('speedLimit' in patch) meta.speedLimit = patch.speedLimit ?? null;
   if ('targetChunkCount' in patch) meta.targetChunkCount = patch.targetChunkCount ?? null;
   if ('targetPath' in patch) meta.targetPath = patch.targetPath ?? null;
+  if ('completedAt' in patch) meta.completedAt = patch.completedAt ?? null;
+  if ('errorMessage' in patch) meta.errorMessage = patch.errorMessage ?? null;
   meta.updatedAt = Date.now();
   return meta;
 }
@@ -151,8 +228,8 @@ function validate(value: unknown): MetaFile {
   }
   assertString(v, 'id');
   assertString(v, 'url');
-  assertString(v, 'finalUrl');
-  assertString(v, 'filename');
+  assertNullableString(v, 'finalUrl');
+  assertNullableString(v, 'filename');
   assertNullableNumber(v, 'totalSize');
   assertBoolean(v, 'acceptsRanges');
   assertNullableString(v, 'etag');
@@ -163,6 +240,9 @@ function validate(value: unknown): MetaFile {
   assertString(v, 'state');
   if (!Array.isArray(v['chunks'])) throw new Error('meta: chunks must be array');
   const chunks = v['chunks'].map((c, i) => validateChunk(c, i));
+  assertNumber(v, 'addedAt');
+  assertNullableNumber(v, 'completedAt');
+  assertNullableString(v, 'errorMessage');
   assertNullableNumber(v, 'speedLimit');
   assertNullableNumber(v, 'targetChunkCount');
   assertNullableString(v, 'targetPath');

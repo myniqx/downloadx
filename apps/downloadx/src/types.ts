@@ -61,6 +61,9 @@ export type UnlinkFn = (path: string) => Promise<void>;
 /** Join path segments using the target platform separator. */
 export type JoinPathFn = (...segments: string[]) => string;
 
+/** List entries inside a directory. Returns plain names, no paths. */
+export type ListDirFn = (path: string) => Promise<string[]>;
+
 /**
  * Set a file to exactly `size` bytes, creating it if missing (sparse/zero
  * filled). Used for disk pre-allocation before chunked writes begin.
@@ -90,6 +93,7 @@ export interface InjectedFunctions {
   rename: RenameFn;
   unlink: UnlinkFn;
   joinPath: JoinPathFn;
+  listDir: ListDirFn;
   /** Optional: enables disk pre-allocation (`Download.alloc`). */
   truncate?: TruncateFn;
   /** Optional: enables the NDJSON event journal sidecar. */
@@ -240,22 +244,30 @@ export interface ProbeResult {
   filename: string;
 }
 
-/** JSON shape persisted as `{filename}.downloadx.json`. */
+/** JSON shape persisted as `{id}.downloadx.json`. */
 export interface MetaFile {
   readonly schemaVersion: number;
   readonly id: string;
   readonly url: string;
-  readonly finalUrl: string;
-  readonly filename: string;
-  readonly totalSize: number | null;
-  readonly acceptsRanges: boolean;
-  readonly etag: string | null;
-  readonly lastModified: string | null;
-  readonly contentType: string | null;
+  /** Resolved URL after redirects; null until the first successful probe. */
+  finalUrl: string | null;
+  /** Filename inferred from probe/Content-Disposition/URL; null until known. */
+  filename: string | null;
+  totalSize: number | null;
+  acceptsRanges: boolean;
+  etag: string | null;
+  lastModified: string | null;
+  contentType: string | null;
   readonly createdAt: number;
   updatedAt: number;
   state: DownloadState;
   chunks: ChunkSnapshot[];
+  /** When the download was first registered (addUrl). */
+  readonly addedAt: number;
+  /** Set when the download transitions to `completed`. */
+  completedAt: number | null;
+  /** Set when the download transitions to `error`. */
+  errorMessage: string | null;
   /** Per-download user preference overrides. null = use global config value. */
   speedLimit: number | null;
   targetChunkCount: number | null;

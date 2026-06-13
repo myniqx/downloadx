@@ -1,6 +1,7 @@
 import { DEFAULT_CONFIG } from './constants.js';
 import { Download, type DownloadInternalConfig } from './download.js';
 import { TypedEventEmitter } from './events.js';
+import { deleteMeta, listMetaFiles, persistMeta } from './meta.js';
 import { Throttle } from './throttle.js';
 import type {
   DownloadDescription,
@@ -46,11 +47,30 @@ export class DownloadX {
   }
 
   /**
+   * Scans `cachePath` for persisted meta files and rebuilds the in-memory
+   * download list. Called by {@link createDownloadX}; safe to invoke multiple
+   * times — only metas whose id isn't already registered are added.
+   */
+  async restoreFromCache(): Promise<void> {
+    const metas = await listMetaFiles(this.baseConfig.io, this._cachePath);
+    for (const meta of metas) {
+      if (this.downloads.has(meta.id)) continue;
+      const download = Download.fromMeta(meta, this.internalConfigFor({}));
+      const unrelay = download.emitter.pipeTo(this.emitter, RELAYED_EVENTS);
+      this.downloads.set(meta.id, download);
+      this.unrelay.set(meta.id, unrelay);
+    }
+  }
+
+  /**
    * Register a new download. Returns the {@link Download} handle for imperative
    * control. Pass `autoStart: true` in options to begin immediately; otherwise
    * call `start()` on the handle or `DownloadX.start(id)`.
+   *
+   * Persists an early meta sidecar so the download survives a restart even if
+   * it never reached the probe stage.
    */
-  addUrl(url: string, options: DownloadOptions = {}): Download {
+  async addUrl(url: string, options: DownloadOptions = {}): Promise<Download> {
     const id = options.id ?? hashUrl(url);
     const existing = this.downloads.get(id);
     if (existing) return existing;
@@ -59,6 +79,14 @@ export class DownloadX {
     this.downloads.set(id, download);
     this.unrelay.set(id, unrelay);
 
+    await this.baseConfig.io.mkdir(this._cachePath);
+    await persistMeta(
+      this.baseConfig.io,
+      { dir: this._cachePath, id },
+      download.meta,
+    );
+
+    // TODO: add cli global config autoStart...
     if (options.autoStart === true) {
       void this.start(id);
     }
@@ -92,7 +120,11 @@ export class DownloadX {
     if (idx !== -1) this.queue.splice(idx, 1);
   }
 
-  /** Cancel and delete data for one (or all) downloads. */
+  /**
+   * Cancel and delete the part file, meta sidecar, and journal for one (or
+   * all) downloads. Works on completed downloads too — that's how the caller
+   * removes a finished entry from the list.
+   */
   async clear(id?: string): Promise<void> {
     if (id === undefined) {
       await Promise.all(Array.from(this.downloads.values()).map((d) => d.clear()));
@@ -273,8 +305,15 @@ export class DownloadX {
   }
 }
 
-export function createDownloadX(config: DownloadXConfig): DownloadX {
-  return new DownloadX(config);
+/**
+ * Build a {@link DownloadX} and rehydrate any persisted downloads found in
+ * `cachePath`. Restored downloads are left in their last persisted state (no
+ * autostart) — the caller decides what to resume.
+ */
+export async function createDownloadX(config: DownloadXConfig): Promise<DownloadX> {
+  const dx = new DownloadX(config);
+  await dx.restoreFromCache();
+  return dx;
 }
 
 /**

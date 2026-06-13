@@ -9,14 +9,12 @@ import type {
 } from '@downloadx/core';
 import type { DownloadState } from '@downloadx/core';
 
-export type DownloadStatus = DownloadState | 'queued' | 'failed';
-
 export interface DownloadEntry {
   id: string;
   url: string;
   filename: string | null;
   targetPath: string | null;
-  status: DownloadStatus;
+  status: DownloadState;
   addedAt: number;
   completedAt: number | null;
   totalBytes: number | null;

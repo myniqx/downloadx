@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdir, unlink, writeFile, appendFile } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { dirname } from 'node:path';
@@ -6,6 +5,7 @@ import { dirname } from 'node:path';
 import { SOCKET_PATH, PID_FILE, LOG_FILE, IPC_DELIMITER, DATA_DIR } from '../constants.ts';
 import type { IpcRequest, IpcResponse, IpcEvent, DownloadEntry } from '../ipc.ts';
 import { CONFIG_KEYS, LOCAL_KEYS, resolveConfigKey } from './config-keys.ts';
+import { loadConfig } from './config.ts';
 import {
   addDownload,
   pauseDownload,
@@ -15,7 +15,6 @@ import {
   clearDownload,
   addEventSink,
   removeEventSink,
-  restoreDownloads,
   onAutoShutdown,
   describeDownload,
   setDownloadConfig,
@@ -23,8 +22,10 @@ import {
   initManager,
   setGlobalConfig,
   getGlobalConfig,
+  getDownloads,
+  getAllIds,
+  resolveDownload,
 } from './manager.ts';
-import { loadState, loadConfig, getDownloads, resolveDownload, getAllIds } from './store.ts';
 
 async function log(msg: string): Promise<void> {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -50,8 +51,7 @@ async function runForIds(ids: string[], fn: (id: string) => Promise<void>): Prom
 async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
   switch (req.cmd) {
     case 'add': {
-      const id = randomUUID();
-      const entry = await addDownload(id, req.url, req.targetPath ?? null);
+      const entry = await addDownload(req.url, req.targetPath ?? null);
       send(socket, { ok: true, data: entry } satisfies IpcResponse<DownloadEntry>);
       break;
     }
@@ -234,11 +234,9 @@ export async function runDaemon(): Promise<void> {
   });
 
   const config = await loadConfig();
-  initManager(config);
-  await loadState();
+  await initManager(config);
   await writePid();
   await startServer();
-  await restoreDownloads(getDownloads());
 
   onAutoShutdown(async () => {
     await log('All downloads finished, shutting down.');

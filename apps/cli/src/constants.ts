@@ -1,13 +1,13 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const XDG_DATA_HOME = process.env['XDG_DATA_HOME'] ?? join(homedir(), '.local', 'share');
-export const DATA_DIR = join(XDG_DATA_HOME, 'downloadx');
+export const DATA_DIR =
+  process.env['WORKING_DIR'] ??
+  join(process.env['XDG_DATA_HOME'] ?? join(homedir(), '.local', 'share'), 'downloadx');
 
 export const SOCKET_PATH = join(DATA_DIR, 'daemon.sock');
 export const PID_FILE = join(DATA_DIR, 'daemon.pid');
 export const LOG_FILE = join(DATA_DIR, 'daemon.log');
-export const STATE_FILE = join(DATA_DIR, 'state.json');
 export const CONFIG_FILE = join(DATA_DIR, 'config.json');
 export const DOWNLOADS_DIR = join(DATA_DIR, 'downloads');
 export const CACHE_DIR = join(DATA_DIR, 'cache');

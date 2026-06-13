@@ -9,11 +9,11 @@ import {
 } from './constants.js';
 import { TypedEventEmitter } from './events.js';
 import {
+  applyProbeToMeta,
   canResumeAgainst,
-  createMeta,
+  createEmptyMeta,
   deleteMeta,
   dehydrateState,
-  loadMeta,
   persistMeta,
   updateMeta,
 } from './meta.js';
@@ -61,7 +61,7 @@ export class Download {
 
   private _state: DownloadState = 'idle';
   private _probe: ProbeResult | null = null;
-  private _meta: MetaFile | null = null;
+  private _meta: MetaFile;
   private chunks: Chunk[] = [];
   private readonly aggregate = new AggregateSpeed();
   private throttle: Throttle;
@@ -79,12 +79,39 @@ export class Download {
   private readonly stalledSince = new Map<string, number>();
   private readonly recentDiagnostics: DiagnosticPayload[] = [];
 
-  constructor(id: string, url: string, options: DownloadOptions, config: DownloadInternalConfig) {
+  /**
+   * Rebuilds a Download from a persisted meta file (used during cache restore).
+   * The download is left in its dehydrated state (no probe, no live chunks) —
+   * the next `start()` call will re-probe and rehydrate as needed.
+   */
+  static fromMeta(meta: MetaFile, config: DownloadInternalConfig): Download {
+    return new Download(meta.id, meta.url, {}, config, meta);
+  }
+
+  constructor(
+    id: string,
+    url: string,
+    options: DownloadOptions,
+    config: DownloadInternalConfig,
+    initialMeta?: MetaFile,
+  ) {
     this.id = id;
     this.url = url;
     this.options = options;
     this.config = config;
     this.throttle = new Throttle(effectiveSpeedLimit(options, config));
+    if (initialMeta !== undefined) {
+      this._meta = initialMeta;
+      // Rehydrate per-download overrides so resumed downloads keep their settings.
+      if (initialMeta.speedLimit !== null) this.throttle.setCapacity(initialMeta.speedLimit);
+      if (initialMeta.targetChunkCount !== null)
+        this.config.targetChunkCount = initialMeta.targetChunkCount;
+      if (initialMeta.targetPath !== null) this.config.targetPath = initialMeta.targetPath;
+      this._state = dehydrateState(initialMeta.state);
+      initialMeta.state = this._state;
+    } else {
+      this._meta = createEmptyMeta({ id, url });
+    }
     this.emitter.on('chunkLifecycle', (payload) => {
       if (
         payload.status === 'completed' ||
@@ -120,22 +147,29 @@ export class Download {
     return this._probe;
   }
 
-  get meta(): MetaFile | null {
+  get meta(): MetaFile {
     return this._meta;
   }
 
   get totalBytes(): number | null {
-    return this._probe?.totalSize ?? null;
+    return this._probe?.totalSize ?? this._meta.totalSize;
   }
 
   get downloadedBytes(): number {
+    if (this.chunks.length === 0) {
+      let sum = 0;
+      for (const c of this._meta.chunks) sum += c.downloadedBytes;
+      return sum;
+    }
     let sum = 0;
     for (const c of this.chunks) sum += c.downloadedBytes;
     return sum;
   }
 
   get filename(): string {
-    return this._probe?.filename ?? this.options.filename ?? `download-${this.id}`;
+    return (
+      this._probe?.filename ?? this._meta.filename ?? this.options.filename ?? `download-${this.id}`
+    );
   }
 
   get targetFilePath(): string {
@@ -152,6 +186,7 @@ export class Download {
     if (this._state === 'completed') return Promise.resolve();
     this.pauseRequested = false;
     this.cancelRequested = false;
+    this._meta.errorMessage = null;
     this.runningPromise = this.execute().finally(() => {
       this.runningPromise = null;
     });
@@ -184,29 +219,27 @@ export class Download {
       }
     }
     await this.safeUnlink(this.partFilePath);
-    if (this._probe) {
-      await deleteMeta(this.config.io, {
-        dir: this.config.cachePath,
-        filename: this.filename,
-      }).catch(() => undefined);
-      await this.safeUnlink(this.journalPath());
-    }
+    await deleteMeta(this.config.io, {
+      dir: this.config.cachePath,
+      id: this.id,
+    }).catch(() => undefined);
+    await this.safeUnlink(this.journalPath());
   }
 
   /** Change the speed limit mid-download. 0 = unlimited. null clears the per-download override. */
   setSpeedLimit(bytesPerSec: number | null): void {
     const effective = bytesPerSec ?? 0;
     this.throttle.setCapacity(effective);
-    if (this._meta !== null) this._meta.speedLimit = bytesPerSec;
+    this._meta.speedLimit = bytesPerSec;
   }
   get speedLimitOverride(): number | null {
-    return this._meta?.speedLimit ?? null;
+    return this._meta.speedLimit;
   }
 
   /** Upper bound on live chunks; takes effect on the next split decision. */
   setTargetChunkCount(n: number | null): void {
     this.config.targetChunkCount = n ?? this.config.targetChunkCount;
-    if (this._meta !== null) this._meta.targetChunkCount = n;
+    this._meta.targetChunkCount = n;
   }
   get targetChunkCount(): number {
     return this.config.targetChunkCount;
@@ -215,10 +248,10 @@ export class Download {
   /** Override the target directory for this download's final file. null clears the override. */
   setTargetPath(path: string | null): void {
     if (path !== null) this.config.targetPath = path;
-    if (this._meta !== null) this._meta.targetPath = path;
+    this._meta.targetPath = path;
   }
   get targetPathOverride(): string | null {
-    return this._meta?.targetPath ?? null;
+    return this._meta.targetPath;
   }
 
   /** Minimum bytes remaining before a chunk can be split; takes effect on the next split decision. */
@@ -275,7 +308,7 @@ export class Download {
       case 'targetPath':
         return this.targetPathOverride as T;
       case 'targetChunkCount':
-        return (this._meta?.targetChunkCount ?? null) as T;
+        return (this._meta.targetChunkCount ?? null) as T;
       case 'minChunkSize':
         return this.minChunkSize as T;
       case 'journal':
@@ -300,9 +333,9 @@ export class Download {
       speedLimit: this.throttle.capacityBytesPerSec,
       /** null = no per-download override, global value is in effect */
       overrides: {
-        speedLimit: this._meta?.speedLimit ?? null,
-        targetChunkCount: this._meta?.targetChunkCount ?? null,
-        targetPath: this._meta?.targetPath ?? null,
+        speedLimit: this._meta.speedLimit,
+        targetChunkCount: this._meta.targetChunkCount,
+        targetPath: this._meta.targetPath,
       },
     };
   }
@@ -457,7 +490,7 @@ export class Download {
           );
           this._probe = { ...this._probe, acceptsRanges: false };
           this.chunks = [];
-          this._meta = null;
+          this._meta.chunks = [];
           await this.safeUnlink(this.partFilePath);
           await this.loadOrInitMeta(true);
           this.instantiateChunksFromMeta();
@@ -494,6 +527,7 @@ export class Download {
       this.stopProgressTimer();
       const error = err instanceof Error ? err : new Error(String(err));
       this.setState('error');
+      this._meta.errorMessage = error.message;
       this.emitter.emit('error', {
         downloadId: this.id,
         error,
@@ -510,20 +544,27 @@ export class Download {
     }
   }
 
+  /**
+   * Reconciles the in-memory meta with a fresh probe result. If the existing
+   * chunks can be resumed against the probe, they're kept; otherwise the chunk
+   * plan is rebuilt and any leftover part file is discarded.
+   */
   private async loadOrInitMeta(forceFresh = false): Promise<void> {
     if (this._probe === null) throw new Error('Probe missing — unreachable');
-    const locator = { dir: this.config.cachePath, filename: this._probe.filename };
-    const existing = forceFresh ? null : await loadMeta(this.config.io, locator);
-    if (existing !== null && canResumeAgainst(existing, this._probe)) {
-      this._meta = existing;
-      if (existing.speedLimit !== null) this.throttle.setCapacity(existing.speedLimit);
-      if (existing.targetChunkCount !== null)
-        this.config.targetChunkCount = existing.targetChunkCount;
-      if (existing.targetPath !== null) this.config.targetPath = existing.targetPath;
+    const locator = { dir: this.config.cachePath, id: this.id };
+    const hasResumableChunks =
+      !forceFresh &&
+      this._meta.chunks.length > 0 &&
+      canResumeAgainst(this._meta, this._probe);
+
+    if (hasResumableChunks) {
+      applyProbeToMeta(this._meta, this._probe, this._meta.chunks);
+      await persistMeta(this.config.io, locator, this._meta);
       return;
     }
-    // Fresh meta — throw away any partial file, we can't trust it.
-    if (existing !== null) {
+
+    // Fresh chunks needed — any partial file can't be trusted.
+    if (this._meta.chunks.length > 0) {
       await this.safeUnlink(this.partFilePath);
     }
     const mode = this.options.chunkMode ?? DEFAULT_CONFIG.chunkMode;
@@ -551,12 +592,11 @@ export class Download {
       quality: 'good',
       retries: 0,
     }));
-    this._meta = createMeta({ id: this.id, probe: this._probe, chunks: snapshots });
+    applyProbeToMeta(this._meta, this._probe, snapshots);
     await persistMeta(this.config.io, locator, this._meta);
   }
 
   private instantiateChunksFromMeta(): void {
-    if (this._meta === null) throw new Error('Meta missing — unreachable');
     if (this._probe === null) throw new Error('Probe missing — unreachable');
     const acceptsRanges = this._probe.acceptsRanges;
     this.chunks = this._meta.chunks.map((snap) => this.buildChunk(snap, acceptsRanges));
@@ -688,12 +728,12 @@ export class Download {
           'size-mismatch',
           `assembled file is ${actual} bytes, expected ${expected}`,
         );
+        const msg = `size mismatch after download: expected ${expected} bytes, found ${actual}`;
         this.setState('error');
+        this._meta.errorMessage = msg;
         this.emitter.emit('error', {
           downloadId: this.id,
-          error: new Error(
-            `size mismatch after download: expected ${expected} bytes, found ${actual}`,
-          ),
+          error: new Error(msg),
           fatal: true,
         });
         await this.persistCurrentMeta().catch(() => undefined);
@@ -701,13 +741,9 @@ export class Download {
       }
     }
     await this.config.io.rename(this.partFilePath, this.targetFilePath);
-    if (this._probe !== null) {
-      await deleteMeta(this.config.io, {
-        dir: this.config.cachePath,
-        filename: this._probe.filename,
-      }).catch(() => undefined);
-    }
     this.setState('completed');
+    this._meta.completedAt = Date.now();
+    await this.persistCurrentMeta().catch(() => undefined);
     this.emitter.emit('completed', {
       downloadId: this.id,
       filename: this.filename,
@@ -725,7 +761,7 @@ export class Download {
     if (this._state === next) return;
     const prev = this._state;
     this._state = next;
-    if (this._meta !== null) this._meta.state = dehydrateState(next);
+    this._meta.state = dehydrateState(next);
     this.emitter.emit('stateChange', {
       downloadId: this.id,
       previous: prev,
@@ -815,32 +851,28 @@ export class Download {
   }
 
   private journalPath(): string {
-    return this.config.io.joinPath(
-      this.config.cachePath,
-      `${this._probe?.filename ?? `download-${this.id}`}.downloadx.log`,
-    );
+    return this.config.io.joinPath(this.config.cachePath, `${this.id}.downloadx.log`);
   }
 
   /** Fire-and-forget NDJSON append; journal problems never affect the download. */
   private journalWrite(payload: DiagnosticPayload): void {
     if (this.config.journal !== true) return;
     const append = this.config.io.appendFile;
-    if (append === undefined || this._probe === null) return;
+    if (append === undefined) return;
     const line = new TextEncoder().encode(`${JSON.stringify(payload)}\n`);
     void append(this.journalPath(), line).catch(() => undefined);
   }
 
   private async persistCurrentMeta(): Promise<void> {
-    if (this._meta === null || this._probe === null) return;
     updateMeta(this._meta, {
       state: dehydrateState(this._state),
-      chunks: this.getChunkSnapshots(),
+      chunks: this.chunks.length > 0 ? this.getChunkSnapshots() : this._meta.chunks,
     });
     await persistMeta(
       this.config.io,
       {
         dir: this.config.cachePath,
-        filename: this._probe.filename,
+        id: this.id,
       },
       this._meta,
     );

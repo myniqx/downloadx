@@ -1,4 +1,25 @@
-import { parseSpeed } from './store.ts';
+/**
+ * Parses a human-friendly size/speed string into bytes.
+ * Accepts: `500kb`, `3mb`, `1.5gb`, or raw `1048576`. Case-insensitive.
+ */
+function parseSpeed(value: string): number {
+  const m = /^(\d+(?:\.\d+)?)\s*(kb|mb|gb|k|m|g)?$/i.exec(value.trim());
+  if (!m) throw new Error(`Invalid speed '${value}'. Examples: 500kb, 3mb, 1.5gb, 1048576`);
+  const n = parseFloat(m[1]!);
+  switch (m[2]?.toLowerCase()) {
+    case 'gb':
+    case 'g':
+      return Math.round(n * 1024 * 1024 * 1024);
+    case 'mb':
+    case 'm':
+      return Math.round(n * 1024 * 1024);
+    case 'kb':
+    case 'k':
+      return Math.round(n * 1024);
+    default:
+      return Math.round(n);
+  }
+}
 
 export type ConfigKeyDef = {
   canonical: string;

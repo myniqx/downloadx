@@ -10,7 +10,10 @@ export { planChunks, findSplitCandidate } from './chunkScheduler.js';
 export { probeUrl, filenameFromDisposition, filenameFromUrl } from './probe.js';
 export {
   createMeta,
+  createEmptyMeta,
+  applyProbeToMeta,
   loadMeta,
+  listMetaFiles,
   persistMeta,
   deleteMeta,
   updateMeta,
@@ -47,6 +50,7 @@ export type {
   FetchResponse,
   InjectedFunctions,
   JoinPathFn,
+  ListDirFn,
   MetaFile,
   MkdirFn,
   ProbeResult,
