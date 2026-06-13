@@ -112,8 +112,9 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       const key = req.key?.toLowerCase();
 
       if (!key) {
+        const colW = Math.max(...Object.keys(activeKeys).map((k) => k.length)) + 2;
         const lines = Object.entries(activeKeys)
-          .map(([k, desc]) => `  ${k.padEnd(14)} ${desc}`)
+          .map(([k, desc]) => `  ${k.padEnd(colW)} ${desc}`)
           .join('\n');
         send(socket, { ok: true, data: lines });
         break;
