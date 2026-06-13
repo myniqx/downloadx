@@ -7,7 +7,6 @@ import type {
   DownloadErrorPayload,
   DiagnosticPayload,
 } from '@downloadx/core';
-
 import type { DownloadState } from '@downloadx/core';
 
 export type DownloadStatus = DownloadState | 'queued' | 'failed';
@@ -37,28 +36,81 @@ export interface DaemonConfig {
 
 // Requests
 
-export interface AddRequest      { cmd: 'add';      url: string; targetPath?: string }
-export interface PauseRequest    { cmd: 'pause';    id: string }
-export interface ResumeRequest   { cmd: 'resume';   id: string }
-export interface RestartRequest  { cmd: 'restart';  id: string }
-export interface CancelRequest   { cmd: 'cancel';   id: string }
-export interface ClearRequest    { cmd: 'clear';    id: string }
-export interface ListRequest     { cmd: 'list' }
-export interface StatusRequest   { cmd: 'status';   id: string }
-export interface WatchRequest    { cmd: 'watch' }
-export interface ShutdownRequest { cmd: 'shutdown' }
-export interface SetRequest      { cmd: 'set';      key?: string | undefined; value?: string | undefined; id?: string | undefined; override?: boolean }
-export interface GetRequest      { cmd: 'get';      key?: string | undefined; id?: string | undefined }
+export interface AddRequest {
+  cmd: 'add';
+  url: string;
+  targetPath?: string;
+}
+export interface PauseRequest {
+  cmd: 'pause';
+  id: string;
+}
+export interface ResumeRequest {
+  cmd: 'resume';
+  id: string;
+}
+export interface RestartRequest {
+  cmd: 'restart';
+  id: string;
+}
+export interface CancelRequest {
+  cmd: 'cancel';
+  id: string;
+}
+export interface ClearRequest {
+  cmd: 'clear';
+  id: string;
+}
+export interface ListRequest {
+  cmd: 'list';
+}
+export interface StatusRequest {
+  cmd: 'status';
+  id: string;
+}
+export interface WatchRequest {
+  cmd: 'watch';
+}
+export interface ShutdownRequest {
+  cmd: 'shutdown';
+}
+export interface SetRequest {
+  cmd: 'set';
+  key?: string | undefined;
+  value?: string | undefined;
+  id?: string | undefined;
+  override?: boolean;
+}
+export interface GetRequest {
+  cmd: 'get';
+  key?: string | undefined;
+  id?: string | undefined;
+}
 
 export type IpcRequest =
-  | AddRequest | PauseRequest | ResumeRequest | RestartRequest
-  | CancelRequest | ClearRequest | ListRequest | StatusRequest
-  | WatchRequest | ShutdownRequest | SetRequest | GetRequest;
+  | AddRequest
+  | PauseRequest
+  | ResumeRequest
+  | RestartRequest
+  | CancelRequest
+  | ClearRequest
+  | ListRequest
+  | StatusRequest
+  | WatchRequest
+  | ShutdownRequest
+  | SetRequest
+  | GetRequest;
 
 // Responses
 
-export interface OkResponse<T = unknown>    { ok: true;  data: T }
-export interface ErrorResponse              { ok: false; error: string }
+export interface OkResponse<T = unknown> {
+  ok: true;
+  data: T;
+}
+export interface ErrorResponse {
+  ok: false;
+  error: string;
+}
 export type IpcResponse<T = unknown> = OkResponse<T> | ErrorResponse;
 
 // Events (pushed to watch subscribers)
@@ -93,8 +145,13 @@ export interface DiagnosticEvent extends DiagnosticPayload {
 }
 
 export type IpcEvent =
-  | ProgressEvent | ChunkProgressEvent | ChunkLifecycleEvent | StateChangeEvent
-  | CompletedEvent | ErrorEvent | DiagnosticEvent;
+  | ProgressEvent
+  | ChunkProgressEvent
+  | ChunkLifecycleEvent
+  | StateChangeEvent
+  | CompletedEvent
+  | ErrorEvent
+  | DiagnosticEvent;
 
 // Wire format: every line on the socket is one of these
 export type IpcMessage = IpcRequest | IpcResponse | IpcEvent;

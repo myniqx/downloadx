@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   canResumeAgainst,
   createMeta,
@@ -61,7 +62,10 @@ describe('meta persistence', () => {
 
   it('loadMeta treats a corrupt JSON payload as missing', async () => {
     const { fs, io } = makeHarness();
-    await fs.writeFile(metaPath(io, { dir: '/dl', filename: 'bad.bin' }), new TextEncoder().encode('{not json'));
+    await fs.writeFile(
+      metaPath(io, { dir: '/dl', filename: 'bad.bin' }),
+      new TextEncoder().encode('{not json'),
+    );
     const loaded = await loadMeta(io, { dir: '/dl', filename: 'bad.bin' });
     expect(loaded).toBeNull();
   });
@@ -69,7 +73,10 @@ describe('meta persistence', () => {
   it('loadMeta rejects payloads with wrong schemaVersion', async () => {
     const { fs, io } = makeHarness();
     const target = metaPath(io, { dir: '/dl', filename: 'old.bin' });
-    await fs.writeFile(target, new TextEncoder().encode(JSON.stringify({ schemaVersion: 2, id: 'x' })));
+    await fs.writeFile(
+      target,
+      new TextEncoder().encode(JSON.stringify({ schemaVersion: 2, id: 'x' })),
+    );
     const loaded = await loadMeta(io, { dir: '/dl', filename: 'old.bin' });
     expect(loaded).toBeNull();
   });
@@ -117,10 +124,7 @@ describe('canResumeAgainst', () => {
       chunks: [],
     });
     expect(
-      canResumeAgainst(
-        meta,
-        exampleProbe({ etag: null, lastModified: 'Mon, 01 Jan 2020' }),
-      ),
+      canResumeAgainst(meta, exampleProbe({ etag: null, lastModified: 'Mon, 01 Jan 2020' })),
     ).toBe(true);
     expect(
       canResumeAgainst(meta, exampleProbe({ etag: null, lastModified: 'Tue, 02 Jan 2020' })),

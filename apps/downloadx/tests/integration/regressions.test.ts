@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { Chunk } from '../../src/chunk.js';
 import { UNKNOWN_SIZE_LENGTH } from '../../src/constants.js';
 import { Download, type DownloadInternalConfig } from '../../src/download.js';
@@ -7,7 +8,10 @@ import type { DownloadEventMap, FetchFn, FetchResponse } from '../../src/types.j
 import { makeHarness } from '../helpers/config.js';
 import { equalBytes, makeBytes } from '../helpers/fixtures.js';
 
-function internal(h: ReturnType<typeof makeHarness>, patch: Partial<DownloadInternalConfig> = {}): DownloadInternalConfig {
+function internal(
+  h: ReturnType<typeof makeHarness>,
+  patch: Partial<DownloadInternalConfig> = {},
+): DownloadInternalConfig {
   return {
     io: h.io,
     targetPath: h.config.targetPath,
@@ -51,7 +55,9 @@ function makeStreamResponse(pieces: Uint8Array[], status = 206): FetchResponse {
   };
 }
 
-function chunkParams(overrides: Partial<ConstructorParameters<typeof Chunk>[0]>): ConstructorParameters<typeof Chunk>[0] {
+function chunkParams(
+  overrides: Partial<ConstructorParameters<typeof Chunk>[0]>,
+): ConstructorParameters<typeof Chunk>[0] {
   return {
     id: 'c0',
     downloadId: 'd0',
@@ -80,18 +86,20 @@ describe('regression — chunk length shrinks while the stream is in flight (spl
     const pieces = Array.from({ length: 10 }, () => makeBytes(10, 1));
     let truncated: { offset: number; length: number } | null = null;
 
-    const chunk = new Chunk(chunkParams({
-      length: 100,
-      fetch: async () => makeStreamResponse(pieces),
-      writeChunk: async (_p, offset, buf) => {
-        writes.push({ offset, length: buf.length });
-        // Shrink the chunk after the third write, exactly like a split does.
-        if (writes.length === 3 && truncated === null) {
-          truncated = chunk.truncateTail(10);
-          expect(truncated).not.toBeNull();
-        }
-      },
-    }));
+    const chunk = new Chunk(
+      chunkParams({
+        length: 100,
+        fetch: async () => makeStreamResponse(pieces),
+        writeChunk: async (_p, offset, buf) => {
+          writes.push({ offset, length: buf.length });
+          // Shrink the chunk after the third write, exactly like a split does.
+          if (writes.length === 3 && truncated === null) {
+            truncated = chunk.truncateTail(10);
+            expect(truncated).not.toBeNull();
+          }
+        },
+      }),
+    );
 
     await chunk.run();
 
@@ -110,7 +118,12 @@ describe('regression — chunk length shrinks while the stream is in flight (spl
 describe('regression — server advertises ranges but answers 200', () => {
   it('falls back to a single-chunk download and still produces correct bytes', async () => {
     const body = makeBytes(2048, 9);
-    const harness = makeHarness({ targetChunkCount: 4, minChunkSize: 16, maxRetries: 1, retryDelay: 1 });
+    const harness = makeHarness({
+      targetChunkCount: 4,
+      minChunkSize: 16,
+      maxRetries: 1,
+      retryDelay: 1,
+    });
     // acceptsRanges:false makes the mock ignore Range headers (responds 200
     // with the full body), while the extra header makes the probe believe
     // ranges are supported — the classic misbehaving-CDN setup.
@@ -119,7 +132,12 @@ describe('regression — server advertises ranges but answers 200', () => {
       acceptsRanges: false,
       extraHeaders: { 'Accept-Ranges': 'bytes' },
     });
-    const d = new Download('r2', 'https://x/liar.bin', {}, internal(harness, { maxRetries: 1, retryDelay: 1 }));
+    const d = new Download(
+      'r2',
+      'https://x/liar.bin',
+      {},
+      internal(harness, { maxRetries: 1, retryDelay: 1 }),
+    );
     await d.start();
     expect(d.state).toBe('completed');
     expect(equalBytes(harness.fs.peek('/dl/liar.bin')!, body)).toBe(true);
@@ -130,15 +148,17 @@ describe('regression — resume without range support restarts from zero', () =>
   it('discards stale progress instead of writing start-of-file bytes mid-file', async () => {
     const body = makeBytes(200, 3);
     const writes: Array<{ offset: number }> = [];
-    const chunk = new Chunk(chunkParams({
-      length: 200,
-      acceptsRanges: false,
-      initialDownloadedBytes: 80, // pretend a previous attempt got this far
-      fetch: async () => makeStreamResponse([body], 200),
-      writeChunk: async (_p, offset) => {
-        writes.push({ offset });
-      },
-    }));
+    const chunk = new Chunk(
+      chunkParams({
+        length: 200,
+        acceptsRanges: false,
+        initialDownloadedBytes: 80, // pretend a previous attempt got this far
+        fetch: async () => makeStreamResponse([body], 200),
+        writeChunk: async (_p, offset) => {
+          writes.push({ offset });
+        },
+      }),
+    );
     await chunk.run();
     expect(chunk.status).toBe('completed');
     expect(chunk.downloadedBytes).toBe(200);
@@ -157,18 +177,24 @@ describe('regression — idle timeout retries instead of killing long downloads'
         // First attempt: server goes silent — reject only when aborted, with
         // the abort reason (matches WHATWG fetch behaviour).
         return new Promise((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () => {
-            reject(init.signal?.reason ?? new Error('aborted'));
-          }, { once: true });
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              reject(init.signal?.reason ?? new Error('aborted'));
+            },
+            { once: true },
+          );
         });
       }
       return makeStreamResponse([body]);
     };
-    const chunk = new Chunk(chunkParams({
-      length: 64,
-      requestTimeout: 30, // idle timeout in ms
-      fetch: silentFetch,
-    }));
+    const chunk = new Chunk(
+      chunkParams({
+        length: 64,
+        requestTimeout: 30, // idle timeout in ms
+        fetch: silentFetch,
+      }),
+    );
     await chunk.run();
     expect(chunk.status).toBe('completed');
     expect(attempt).toBe(2);
@@ -200,11 +226,16 @@ describe('regression — unknown total size streams to EOF', () => {
         text: () => res.text(),
       };
     };
-    const d = new Download('r5', 'https://x/nosize.bin', {}, internal(harness, {
-      io: { ...harness.io, fetch: stripSize },
-      maxRetries: 1,
-      retryDelay: 1,
-    }));
+    const d = new Download(
+      'r5',
+      'https://x/nosize.bin',
+      {},
+      internal(harness, {
+        io: { ...harness.io, fetch: stripSize },
+        maxRetries: 1,
+        retryDelay: 1,
+      }),
+    );
     await d.start();
     expect(d.state).toBe('completed');
     expect(d.totalBytes).toBeNull();
@@ -256,7 +287,12 @@ describe('features — journal, describe, preallocation', () => {
     const body = makeBytes(2048, 12);
     const harness = makeHarness({ targetChunkCount: 2, minChunkSize: 32 });
     harness.fetch.route('https://x/pre.bin', { body, streamChunks: [64, 64, 64] });
-    const d = new Download('r8', 'https://x/pre.bin', {}, internal(harness, { targetChunkCount: 2, minChunkSize: 32 }));
+    const d = new Download(
+      'r8',
+      'https://x/pre.bin',
+      {},
+      internal(harness, { targetChunkCount: 2, minChunkSize: 32 }),
+    );
     const run = d.start();
     // Shortly after start the part file should already be full-size.
     await new Promise((r) => setTimeout(r, 10));
@@ -272,8 +308,17 @@ describe('features — journal, describe, preallocation', () => {
   it('progress events carry an ETA when size and speed are known', async () => {
     const body = makeBytes(4096, 2);
     const harness = makeHarness({ targetChunkCount: 2, minChunkSize: 32 });
-    harness.fetch.route('https://x/eta.bin', { body, streamChunks: Array(16).fill(256), delayMs: 5 });
-    const d = new Download('r9', 'https://x/eta.bin', {}, internal(harness, { targetChunkCount: 2, minChunkSize: 32 }));
+    harness.fetch.route('https://x/eta.bin', {
+      body,
+      streamChunks: Array(16).fill(256),
+      delayMs: 5,
+    });
+    const d = new Download(
+      'r9',
+      'https://x/eta.bin',
+      {},
+      internal(harness, { targetChunkCount: 2, minChunkSize: 32 }),
+    );
     const etas: Array<number | null> = [];
     d.emitter.on('progress', (p) => etas.push(p.etaMs));
     await d.start();

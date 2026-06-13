@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { AggregateSpeed, SpeedTracker } from '../../src/speedTracker.js';
 import { FakeClock } from '../helpers/clock.js';
 

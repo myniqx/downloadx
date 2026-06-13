@@ -2,13 +2,7 @@ export { createDownloadX, DownloadX } from './downloadX.js';
 export { Download } from './download.js';
 export { Chunk } from './chunk.js';
 export { TypedEventEmitter } from './events.js';
-export {
-  APP_NAME,
-  DEFAULT_CONFIG,
-  META_EXT,
-  META_SCHEMA_VERSION,
-  TEMP_EXT,
-} from './constants.js';
+export { APP_NAME, DEFAULT_CONFIG, META_EXT, META_SCHEMA_VERSION, TEMP_EXT } from './constants.js';
 export { HttpStatusError, RangeNotHonoredError } from './retry.js';
 export { SpeedTracker, AggregateSpeed } from './speedTracker.js';
 export { Throttle } from './throttle.js';

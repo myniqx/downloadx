@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { Download, type DownloadInternalConfig } from '../../src/download.js';
 import { createDownloadX } from '../../src/downloadX.js';
 import type {
@@ -9,11 +10,14 @@ import type {
   DownloadProgressPayload,
   DownloadStatePayload,
 } from '../../src/types.js';
-import { collectEvents } from '../helpers/events.js';
 import { makeHarness } from '../helpers/config.js';
+import { collectEvents } from '../helpers/events.js';
 import { makeBytes } from '../helpers/fixtures.js';
 
-function internal(h: ReturnType<typeof makeHarness>, patch: Partial<DownloadInternalConfig> = {}): DownloadInternalConfig {
+function internal(
+  h: ReturnType<typeof makeHarness>,
+  patch: Partial<DownloadInternalConfig> = {},
+): DownloadInternalConfig {
   return {
     io: h.io,
     targetPath: h.config.targetPath,
@@ -77,7 +81,12 @@ describe('event payloads — Download', () => {
     const body = makeBytes(2048);
     const harness = makeHarness({ targetChunkCount: 2, minChunkSize: 32 });
     harness.fetch.route('https://x/p.bin', { body, streamChunks: Array(8).fill(256) });
-    const d = new Download('ev3', 'https://x/p.bin', {}, internal(harness, { targetChunkCount: 2, minChunkSize: 32 }));
+    const d = new Download(
+      'ev3',
+      'https://x/p.bin',
+      {},
+      internal(harness, { targetChunkCount: 2, minChunkSize: 32 }),
+    );
     const progress = collectEvents(d.emitter, 'chunkProgress');
     await d.start();
     const all = progress.stop() as ChunkProgressPayload[];

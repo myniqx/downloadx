@@ -82,9 +82,7 @@ export function findSplitCandidate(opts: FindSplitOptions): SplitCandidate | nul
   if (opts.activeChunks.length >= opts.maxChunks) return null;
 
   const eligible = opts.activeChunks.filter(
-    (c) =>
-      c.status === 'downloading' &&
-      c.remainingBytes >= opts.minChunkSize * 2,
+    (c) => c.status === 'downloading' && c.remainingBytes >= opts.minChunkSize * 2,
   );
   if (eligible.length === 0) return null;
 
@@ -106,8 +104,7 @@ export function findSplitCandidate(opts: FindSplitOptions): SplitCandidate | nul
 }
 
 function scoreChunk(chunk: Chunk): number {
-  const qualityWeight =
-    chunk.quality === 'stalled' ? 3 : chunk.quality === 'poor' ? 2 : 1;
+  const qualityWeight = chunk.quality === 'stalled' ? 3 : chunk.quality === 'poor' ? 2 : 1;
   // Remaining bytes normalised to MiB so the quality multiplier dominates
   // for comparable remainders, but size still breaks ties.
   const remainingMiB = chunk.remainingBytes / (1024 * 1024);

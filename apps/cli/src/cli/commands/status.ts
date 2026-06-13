@@ -1,16 +1,23 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ensureDaemon, sendRequest } from '../client.ts';
+
 import type { DownloadDescription } from '@downloadx/core';
+
+import { ensureDaemon, sendRequest } from '../client.ts';
 
 type StatusData = DownloadDescription & { targetPath: string };
 
 const GREEN = '\x1b[32m';
-const RED   = '\x1b[31m';
+const RED = '\x1b[31m';
 const RESET = '\x1b[0m';
 
 async function fileExists(p: string): Promise<boolean> {
-  try { await stat(p); return true; } catch { return false; }
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function fmtBytes(n: number | null): string {
@@ -40,7 +47,9 @@ export async function cmdStatus(id: string, json: boolean): Promise<void> {
   }
 
   const pct = desc.percent === null ? '' : ` (${desc.percent}%)`;
-  console.log(`${desc.filename} [${desc.state}] ${fmtBytes(desc.downloadedBytes)} / ${fmtBytes(desc.totalBytes)}${pct}`);
+  console.log(
+    `${desc.filename} [${desc.state}] ${fmtBytes(desc.downloadedBytes)} / ${fmtBytes(desc.totalBytes)}${pct}`,
+  );
 
   if (desc.state === 'completed' && desc.filename) {
     const fullPath = join(desc.targetPath, desc.filename);
@@ -51,12 +60,15 @@ export async function cmdStatus(id: string, json: boolean): Promise<void> {
   }
 
   if (desc.state === 'downloading') {
-    console.log(`speed ${fmtBytes(desc.totalSpeedBps)}/s  ETA ${fmtMs(desc.etaMs)}  chunks ${desc.activeChunks} active / ${desc.totalChunks} total`);
+    console.log(
+      `speed ${fmtBytes(desc.totalSpeedBps)}/s  ETA ${fmtMs(desc.etaMs)}  chunks ${desc.activeChunks} active / ${desc.totalChunks} total`,
+    );
   }
   for (const c of desc.chunks) {
-    const chunkPct = c.length > 0 && c.length !== Number.MAX_SAFE_INTEGER
-      ? `${Math.round((c.downloadedBytes / c.length) * 100)}%`
-      : fmtBytes(c.downloadedBytes);
+    const chunkPct =
+      c.length > 0 && c.length !== Number.MAX_SAFE_INTEGER
+        ? `${Math.round((c.downloadedBytes / c.length) * 100)}%`
+        : fmtBytes(c.downloadedBytes);
     const retries = c.retries > 0 ? `  retries ${c.retries}` : '';
     console.log(`  ${c.id}: ${c.status}/${c.quality} ${chunkPct}${retries}`);
   }

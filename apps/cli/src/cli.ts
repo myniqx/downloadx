@@ -1,5 +1,5 @@
-import { runDaemon } from './daemon/index.ts';
 import { runCli } from './cli/index.ts';
+import { runDaemon } from './daemon/index.ts';
 
 const argv = process.argv.slice(2);
 

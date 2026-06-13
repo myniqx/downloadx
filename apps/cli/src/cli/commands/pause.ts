@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline';
-import { ensureDaemon, sendRequest } from '../client.ts';
+
 import type { DownloadEntry } from '../../ipc.ts';
+import { ensureDaemon, sendRequest } from '../client.ts';
 
 async function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -38,16 +39,17 @@ export async function cmdClear(
   const entries = await sendRequest<DownloadEntry[]>({ cmd: 'list' });
 
   if (opts.all) {
-    const toDelete = opts.completed
-      ? entries.filter((e) => e.status === 'completed')
-      : entries;
+    const toDelete = opts.completed ? entries.filter((e) => e.status === 'completed') : entries;
     const incomplete = toDelete.filter((e) => e.status !== 'completed');
 
     if (incomplete.length > 0 && !opts.force) {
       const ok = await confirm(
         `${incomplete.length} incomplete download(s) and their .part files will be deleted. Continue?`,
       );
-      if (!ok) { console.log('Aborted.'); return; }
+      if (!ok) {
+        console.log('Aborted.');
+        return;
+      }
     }
 
     await Promise.all(toDelete.map((e) => sendRequest({ cmd: 'clear', id: e.id })));
@@ -72,7 +74,10 @@ export async function cmdClear(
     const ok = await confirm(
       `Download is not finished. Its .part files will be deleted. Continue?`,
     );
-    if (!ok) { console.log('Aborted.'); return; }
+    if (!ok) {
+      console.log('Aborted.');
+      return;
+    }
   }
 
   await sendRequest({ cmd: 'clear', id: entry.id });
@@ -91,7 +96,10 @@ export async function cmdRestart(
       const ok = await confirm(
         `All ${entries.length} download(s) will be restarted from scratch and their .part files deleted. Continue?`,
       );
-      if (!ok) { console.log('Aborted.'); return; }
+      if (!ok) {
+        console.log('Aborted.');
+        return;
+      }
     }
     await Promise.all(entries.map((e) => sendRequest({ cmd: 'restart', id: e.id })));
     console.log(`Restarted ${entries.length} download(s).`);
@@ -106,8 +114,13 @@ export async function cmdRestart(
 
   if (!opts.force) {
     const name = entry.filename ?? entry.url.split('/').pop() ?? entry.id.slice(0, 8);
-    const ok = await confirm(`"${name}" will be restarted from scratch and its .part files deleted. Continue?`);
-    if (!ok) { console.log('Aborted.'); return; }
+    const ok = await confirm(
+      `"${name}" will be restarted from scratch and its .part files deleted. Continue?`,
+    );
+    if (!ok) {
+      console.log('Aborted.');
+      return;
+    }
   }
 
   await sendRequest({ cmd: 'restart', id: entry.id });

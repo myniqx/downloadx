@@ -1,31 +1,39 @@
+import type {
+  DownloadEntry,
+  IpcEvent,
+  ProgressEvent,
+  ChunkProgressEvent,
+  ChunkLifecycleEvent,
+  StateChangeEvent,
+  CompletedEvent,
+} from '../../ipc.ts';
 import { ensureDaemon, sendRequest, openWatchStream } from '../client.ts';
-import type { DownloadEntry, IpcEvent, ProgressEvent, ChunkProgressEvent, ChunkLifecycleEvent, StateChangeEvent, CompletedEvent } from '../../ipc.ts';
 
-const RESET  = '\x1b[0m';
-const BOLD   = '\x1b[1m';
+const RESET = '\x1b[0m';
+const BOLD = '\x1b[1m';
 const CLEAR_SCREEN = '\x1b[2J\x1b[H';
-const HIDE_CURSOR  = '\x1b[?25l';
-const SHOW_CURSOR  = '\x1b[?25h';
+const HIDE_CURSOR = '\x1b[?25l';
+const SHOW_CURSOR = '\x1b[?25h';
 
 // 8 distinct colors for chunks (cycling)
 const CHUNK_COLORS = [
-  '\x1b[36m',  // cyan
-  '\x1b[33m',  // yellow
-  '\x1b[35m',  // magenta
-  '\x1b[32m',  // green
-  '\x1b[34m',  // blue
-  '\x1b[91m',  // bright red
-  '\x1b[96m',  // bright cyan
-  '\x1b[93m',  // bright yellow
+  '\x1b[36m', // cyan
+  '\x1b[33m', // yellow
+  '\x1b[35m', // magenta
+  '\x1b[32m', // green
+  '\x1b[34m', // blue
+  '\x1b[91m', // bright red
+  '\x1b[96m', // bright cyan
+  '\x1b[93m', // bright yellow
 ];
 
 const STATUS_COLOR: Record<string, string> = {
-  queued:      '\x1b[90m',
+  queued: '\x1b[90m',
   downloading: '\x1b[36m',
-  paused:      '\x1b[33m',
-  completed:   '\x1b[32m',
-  failed:      '\x1b[31m',
-  cancelled:   '\x1b[90m',
+  paused: '\x1b[33m',
+  completed: '\x1b[32m',
+  failed: '\x1b[31m',
+  cancelled: '\x1b[90m',
 };
 
 interface ChunkState {
@@ -90,8 +98,8 @@ function renderBar(ds: DownloadState, barWidth: number): string {
   for (const chunk of ds.chunks.values()) {
     const color = CHUNK_COLORS[chunk.colorIdx % CHUNK_COLORS.length]!;
     const startCell = Math.floor((chunk.offset / total) * barWidth);
-    const endCell   = Math.floor(((chunk.offset + chunk.downloadedBytes) / total) * barWidth);
-    const fullEnd   = Math.floor(((chunk.offset + chunk.length) / total) * barWidth);
+    const endCell = Math.floor(((chunk.offset + chunk.downloadedBytes) / total) * barWidth);
+    const fullEnd = Math.floor(((chunk.offset + chunk.length) / total) * barWidth);
 
     // Downloaded portion — solid block
     for (let i = startCell; i <= Math.min(endCell, barWidth - 1); i++) {
@@ -112,7 +120,7 @@ function renderLegend(ds: DownloadState): string {
   for (const chunk of ds.chunks.values()) {
     const color = CHUNK_COLORS[chunk.colorIdx % CHUNK_COLORS.length]!;
     const speed = chunk.speed > 0 ? ` ${fmtSpeed(chunk.speed)}` : '';
-    const qual  = chunk.quality !== 'good' ? ` (${chunk.quality})` : '';
+    const qual = chunk.quality !== 'good' ? ` (${chunk.quality})` : '';
     parts.push(`${color}█${RESET} c${idx + 1}${speed}${qual}`);
     idx++;
   }
@@ -133,13 +141,13 @@ function render(): void {
     const { entry } = ds;
     const name = entry.filename ?? entry.url.split('/').pop() ?? entry.url;
     const statusColor = STATUS_COLOR[entry.status] ?? '';
-    const pct  = ds.percent !== null ? `${ds.percent.toFixed(1)}%` : '?%';
+    const pct = ds.percent !== null ? `${ds.percent.toFixed(1)}%` : '?%';
     const speed = ds.totalSpeed > 0 ? `↓ ${fmtSpeed(ds.totalSpeed)}` : '';
-    const eta   = fmtEta(ds.downloadedBytes, ds.totalBytes, ds.totalSpeed);
-    const size  = `${fmtBytes(ds.downloadedBytes)} / ${fmtBytes(ds.totalBytes)}`;
+    const eta = fmtEta(ds.downloadedBytes, ds.totalBytes, ds.totalSpeed);
+    const size = `${fmtBytes(ds.downloadedBytes)} / ${fmtBytes(ds.totalBytes)}`;
 
     const header = `${statusColor}${entry.id.slice(0, 8)}${RESET}  ${BOLD}${name}${RESET}`;
-    const meta   = `${pct.padStart(6)}  ${size}  ${speed}  ETA ${eta}`;
+    const meta = `${pct.padStart(6)}  ${size}  ${speed}  ETA ${eta}`;
     lines.push(header);
     lines.push(meta);
 
@@ -162,10 +170,18 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
     // NDJSON stream: one self-contained event per line. Stable interface for
     // scripts and LLM/agent consumers — no ANSI, no cursor control.
     const close = openWatchStream(
-      (event) => { console.log(JSON.stringify(event)); },
-      (err) => { console.error(JSON.stringify({ event: 'streamError', message: err.message })); process.exit(1); },
+      (event) => {
+        console.log(JSON.stringify(event));
+      },
+      (err) => {
+        console.error(JSON.stringify({ event: 'streamError', message: err.message }));
+        process.exit(1);
+      },
     );
-    process.on('SIGINT', () => { close(); process.exit(0); });
+    process.on('SIGINT', () => {
+      close();
+      process.exit(0);
+    });
     return;
   }
 
@@ -187,18 +203,28 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
       (event) => {
         if (event.event === 'progress') {
           const e = event as ProgressEvent;
-          console.log(`[${e.downloadId.slice(0, 8)}] ${e.percent?.toFixed(1) ?? '?'}% @ ${fmtSpeed(e.totalSpeed)}`);
+          console.log(
+            `[${e.downloadId.slice(0, 8)}] ${e.percent?.toFixed(1) ?? '?'}% @ ${fmtSpeed(e.totalSpeed)}`,
+          );
         } else if (event.event === 'completed') {
           const e = event as CompletedEvent;
-          console.log(`[${e.downloadId.slice(0, 8)}] Completed: ${e.filename} (${fmtBytes(e.totalBytes)})`);
+          console.log(
+            `[${e.downloadId.slice(0, 8)}] Completed: ${e.filename} (${fmtBytes(e.totalBytes)})`,
+          );
         } else if (event.event === 'stateChange') {
           const e = event as StateChangeEvent;
           console.log(`[${e.downloadId.slice(0, 8)}] ${e.previous} → ${e.current}`);
         }
       },
-      (err) => { console.error(err.message); process.exit(1); },
+      (err) => {
+        console.error(err.message);
+        process.exit(1);
+      },
     );
-    process.on('SIGINT', () => { close(); process.exit(0); });
+    process.on('SIGINT', () => {
+      close();
+      process.exit(0);
+    });
     return;
   }
 

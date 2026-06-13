@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { Throttle } from '../../src/throttle.js';
 import { FakeClock } from '../helpers/clock.js';
 

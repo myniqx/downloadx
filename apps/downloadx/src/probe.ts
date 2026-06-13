@@ -77,7 +77,9 @@ async function tryRangeGet(opts: ProbeOptions): Promise<ProbeRaw> {
   // special case: the server rejected our range but the resource itself is
   // reachable, so treat it as "no range support" rather than a hard failure.
   if (!res.ok && res.status !== 206 && res.status !== 416) {
-    throw new Error(`probe: HTTP ${res.status} ${('statusText' in res ? (res as { statusText: string }).statusText : '')}`);
+    throw new Error(
+      `probe: HTTP ${res.status} ${'statusText' in res ? (res as { statusText: string }).statusText : ''}`,
+    );
   }
   const raw = extract(opts.url, res);
   raw.acceptsRanges = raw.acceptsRanges || res.status === 206;
@@ -85,13 +87,15 @@ async function tryRangeGet(opts: ProbeOptions): Promise<ProbeRaw> {
   return raw;
 }
 
-function extract(url: string, res: { status: number; headers: { get(n: string): string | null }; url?: string }): ProbeRaw {
+function extract(
+  url: string,
+  res: { status: number; headers: { get(n: string): string | null }; url?: string },
+): ProbeRaw {
   const contentLength = parseIntHeader(res.headers.get('content-length'));
   const contentRange = res.headers.get('content-range');
   const totalSize = contentRange ? parseContentRangeTotal(contentRange) : contentLength;
   const acceptRanges = res.headers.get('accept-ranges');
-  const acceptsRanges =
-    acceptRanges !== null && acceptRanges.toLowerCase().includes('bytes');
+  const acceptsRanges = acceptRanges !== null && acceptRanges.toLowerCase().includes('bytes');
 
   return {
     status: res.status,

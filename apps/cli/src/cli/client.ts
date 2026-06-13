@@ -1,13 +1,23 @@
-import { connect } from 'node:net';
 import { spawn } from 'node:child_process';
 import { unlink } from 'node:fs/promises';
-import { SOCKET_PATH, IPC_DELIMITER, DAEMON_STARTUP_TIMEOUT_MS, DAEMON_STARTUP_POLL_MS, IPC_REQUEST_TIMEOUT_MS } from '../constants.ts';
+import { connect } from 'node:net';
+
+import {
+  SOCKET_PATH,
+  IPC_DELIMITER,
+  DAEMON_STARTUP_TIMEOUT_MS,
+  DAEMON_STARTUP_POLL_MS,
+  IPC_REQUEST_TIMEOUT_MS,
+} from '../constants.ts';
 import type { IpcRequest, IpcResponse, IpcEvent } from '../ipc.ts';
 
 function canConnect(): Promise<boolean> {
   return new Promise((resolve) => {
     const s = connect(SOCKET_PATH);
-    s.once('connect', () => { s.destroy(); resolve(true); });
+    s.once('connect', () => {
+      s.destroy();
+      resolve(true);
+    });
     s.once('error', () => resolve(false));
   });
 }
@@ -18,7 +28,9 @@ async function waitForDaemon(): Promise<void> {
     if (await canConnect()) return;
     await new Promise((r) => setTimeout(r, DAEMON_STARTUP_POLL_MS));
   }
-  throw new Error(`Daemon did not start within ${DAEMON_STARTUP_TIMEOUT_MS / 1000}s. Check logs: ~/.local/share/downloadx/daemon.log`);
+  throw new Error(
+    `Daemon did not start within ${DAEMON_STARTUP_TIMEOUT_MS / 1000}s. Check logs: ~/.local/share/downloadx/daemon.log`,
+  );
 }
 
 export async function ensureDaemon(): Promise<void> {
@@ -46,7 +58,11 @@ export function sendRequest<T = unknown>(req: IpcRequest): Promise<T> {
       reject(new Error('Daemon did not respond in time'));
     }, IPC_REQUEST_TIMEOUT_MS);
 
-    const done = (fn: () => void) => { clearTimeout(timer); socket.destroy(); fn(); };
+    const done = (fn: () => void) => {
+      clearTimeout(timer);
+      socket.destroy();
+      fn();
+    };
 
     socket.on('connect', () => {
       socket.write(JSON.stringify(req) + IPC_DELIMITER);

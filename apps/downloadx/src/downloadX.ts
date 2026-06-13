@@ -203,7 +203,9 @@ export class DownloadX {
   }
 
   /** Returns the current effective global config — live values from setters, not the frozen constructor input. */
-  getConfig(): Required<Omit<DownloadXConfig, 'io' | 'headers'>> & { headers: Record<string, string> } {
+  getConfig(): Required<Omit<DownloadXConfig, 'io' | 'headers'>> & {
+    headers: Record<string, string>;
+  } {
     return {
       targetPath: this._targetPath,
       cachePath: this._cachePath,
@@ -255,7 +257,8 @@ export class DownloadX {
       targetPath: this._targetPath,
       cachePath: this._cachePath,
       maxParallel: this._maxParallel,
-      targetChunkCount: options.targetChunkCount ?? cfg.targetChunkCount ?? DEFAULT_CONFIG.targetChunkCount,
+      targetChunkCount:
+        options.targetChunkCount ?? cfg.targetChunkCount ?? DEFAULT_CONFIG.targetChunkCount,
       minChunkSize: cfg.minChunkSize ?? DEFAULT_CONFIG.minChunkSize,
       maxRetries: options.maxRetries ?? cfg.maxRetries ?? DEFAULT_CONFIG.maxRetries,
       retryDelay: options.retryDelay ?? cfg.retryDelay ?? DEFAULT_CONFIG.retryDelay,

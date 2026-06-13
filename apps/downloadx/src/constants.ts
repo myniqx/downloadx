@@ -67,6 +67,4 @@ export const NON_RETRYABLE_STATUS = new Set<number>([
 ]);
 
 /** HTTP status codes we treat as transient and worth retrying. */
-export const RETRYABLE_STATUS = new Set<number>([
-  408, 425, 429, 500, 502, 503, 504,
-]);
+export const RETRYABLE_STATUS = new Set<number>([408, 425, 429, 500, 502, 503, 504]);

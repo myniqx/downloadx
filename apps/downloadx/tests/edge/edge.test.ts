@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
+
 import { TEMP_EXT } from '../../src/constants.js';
 import { Download, type DownloadInternalConfig } from '../../src/download.js';
 import { makeHarness } from '../helpers/config.js';
 import { equalBytes, makeBytes } from '../helpers/fixtures.js';
 
-function internal(h: ReturnType<typeof makeHarness>, patch: Partial<DownloadInternalConfig> = {}): DownloadInternalConfig {
+function internal(
+  h: ReturnType<typeof makeHarness>,
+  patch: Partial<DownloadInternalConfig> = {},
+): DownloadInternalConfig {
   return {
     io: h.io,
     targetPath: h.config.targetPath,
@@ -28,7 +32,12 @@ describe('edge cases — transient HTTP failures', () => {
     const body = makeBytes(256);
     const harness = makeHarness({ maxRetries: 3, retryDelay: 1, retryBackoff: 1 });
     harness.fetch.route('https://x/transient', { body, failTimes: 2, failStatus: 503 });
-    const d = new Download('e1', 'https://x/transient', {}, internal(harness, { maxRetries: 3, retryDelay: 1, retryBackoff: 1 }));
+    const d = new Download(
+      'e1',
+      'https://x/transient',
+      {},
+      internal(harness, { maxRetries: 3, retryDelay: 1, retryBackoff: 1 }),
+    );
     await d.start();
     expect(d.state).toBe('completed');
     expect(equalBytes(harness.fs.peek('/dl/transient')!, body)).toBe(true);
@@ -43,7 +52,12 @@ describe('edge cases — transient HTTP failures', () => {
       failHeadTimes: 10,
       failStatus: 404,
     });
-    const d = new Download('e2', 'https://x/gone', {}, internal(harness, { maxRetries: 5, retryDelay: 1 }));
+    const d = new Download(
+      'e2',
+      'https://x/gone',
+      {},
+      internal(harness, { maxRetries: 5, retryDelay: 1 }),
+    );
     await d.start();
     expect(d.state).toBe('error');
   });
@@ -56,7 +70,12 @@ describe('edge cases — transient HTTP failures', () => {
       failHeadTimes: 999,
       failStatus: 503,
     });
-    const d = new Download('e3', 'https://x/down', {}, internal(harness, { maxRetries: 1, retryDelay: 1 }));
+    const d = new Download(
+      'e3',
+      'https://x/down',
+      {},
+      internal(harness, { maxRetries: 1, retryDelay: 1 }),
+    );
     await d.start();
     expect(d.state).toBe('error');
   });
@@ -73,7 +92,12 @@ describe('edge cases — resume validator changes', () => {
       streamChunks: [64, 64, 64, 64],
     });
 
-    const d1 = new Download('e4', 'https://x/mut.bin', {}, internal(harness, { targetChunkCount: 2, minChunkSize: 32 }));
+    const d1 = new Download(
+      'e4',
+      'https://x/mut.bin',
+      {},
+      internal(harness, { targetChunkCount: 2, minChunkSize: 32 }),
+    );
     const r = d1.start();
     setTimeout(() => d1.pause(), 2);
     await r;
@@ -85,7 +109,12 @@ describe('edge cases — resume validator changes', () => {
 
     // Upstream now serves a different payload with a different ETag.
     harness.fetch.updateRoute('https://x/mut.bin', { body: bodyNew, etag: 'v2' });
-    const d2 = new Download('e4', 'https://x/mut.bin', {}, internal(harness, { targetChunkCount: 2, minChunkSize: 32 }));
+    const d2 = new Download(
+      'e4',
+      'https://x/mut.bin',
+      {},
+      internal(harness, { targetChunkCount: 2, minChunkSize: 32 }),
+    );
     await d2.start();
     expect(d2.state).toBe('completed');
     // Resulting file should match the NEW payload bit-for-bit; if meta hadn't
@@ -100,7 +129,10 @@ describe('edge cases — resume validator changes', () => {
     const harness = makeHarness();
     harness.fetch.route('https://x/corrupt', { body });
     // Pre-seed a corrupt meta file at the path a Download would look for.
-    await harness.fs.writeFile('/dl/corrupt.downloadx.json', new TextEncoder().encode('{malformed'));
+    await harness.fs.writeFile(
+      '/dl/corrupt.downloadx.json',
+      new TextEncoder().encode('{malformed'),
+    );
     const d = new Download('e5', 'https://x/corrupt', {}, internal(harness));
     await d.start();
     expect(d.state).toBe('completed');
@@ -113,7 +145,12 @@ describe('edge cases — scheduler and sizing', () => {
     const body = makeBytes(8);
     const harness = makeHarness({ targetChunkCount: 8, minChunkSize: 32 });
     harness.fetch.route('https://x/tiny', { body });
-    const d = new Download('e6', 'https://x/tiny', {}, internal(harness, { targetChunkCount: 8, minChunkSize: 32 }));
+    const d = new Download(
+      'e6',
+      'https://x/tiny',
+      {},
+      internal(harness, { targetChunkCount: 8, minChunkSize: 32 }),
+    );
     await d.start();
     expect(d.state).toBe('completed');
     expect(d.getChunkSnapshots()).toHaveLength(1);
@@ -141,7 +178,12 @@ describe('edge cases — scheduler and sizing', () => {
       body,
       streamChunks: Array(32).fill(128),
     });
-    const d = new Download('e8', 'https://x/cap', {}, internal(harness, { targetChunkCount: 3, minChunkSize: 32 }));
+    const d = new Download(
+      'e8',
+      'https://x/cap',
+      {},
+      internal(harness, { targetChunkCount: 3, minChunkSize: 32 }),
+    );
     await d.start();
     expect(d.state).toBe('completed');
     // At least one chunk (the original plan) and no more than 3 active at any
@@ -167,7 +209,12 @@ describe('edge cases — filesystem behaviour', () => {
     const body = makeBytes(512);
     const harness = makeHarness({ targetChunkCount: 1, minChunkSize: 64 });
     harness.fetch.route('https://x/tmp.bin', { body });
-    const d = new Download('e10', 'https://x/tmp.bin', {}, internal(harness, { targetChunkCount: 1, minChunkSize: 64 }));
+    const d = new Download(
+      'e10',
+      'https://x/tmp.bin',
+      {},
+      internal(harness, { targetChunkCount: 1, minChunkSize: 64 }),
+    );
     await d.start();
     expect(harness.fs.hasFile(`/dl/tmp.bin${TEMP_EXT}`)).toBe(false);
     expect(harness.fs.hasFile('/dl/tmp.bin')).toBe(true);

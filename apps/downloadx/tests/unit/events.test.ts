@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { TypedEventEmitter } from '../../src/events.js';
 
 interface TestMap {

@@ -22,10 +22,7 @@ export class TypedEventEmitter<EventMap extends object> {
     /* swallow by default */
   };
 
-  on<E extends keyof EventMap>(
-    event: E,
-    listener: (payload: EventMap[E]) => void,
-  ): () => void {
+  on<E extends keyof EventMap>(event: E, listener: (payload: EventMap[E]) => void): () => void {
     let set = this.listeners.get(event);
     if (!set) {
       set = new Set();
@@ -35,10 +32,7 @@ export class TypedEventEmitter<EventMap extends object> {
     return () => this.off(event, listener);
   }
 
-  once<E extends keyof EventMap>(
-    event: E,
-    listener: (payload: EventMap[E]) => void,
-  ): () => void {
+  once<E extends keyof EventMap>(event: E, listener: (payload: EventMap[E]) => void): () => void {
     const wrapper = (payload: EventMap[E]): void => {
       this.off(event, wrapper);
       listener(payload);
@@ -46,10 +40,7 @@ export class TypedEventEmitter<EventMap extends object> {
     return this.on(event, wrapper);
   }
 
-  off<E extends keyof EventMap>(
-    event: E,
-    listener: (payload: EventMap[E]) => void,
-  ): void {
+  off<E extends keyof EventMap>(event: E, listener: (payload: EventMap[E]) => void): void {
     const set = this.listeners.get(event);
     if (!set) return;
     set.delete(listener as (payload: EventMap[keyof EventMap]) => void);

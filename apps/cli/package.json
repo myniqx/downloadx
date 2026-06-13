@@ -2,36 +2,39 @@
   "name": "@downloadx/cli",
   "version": "0.1.0",
   "description": "Daemon-based CLI for downloadx — parallel chunked downloads via Unix socket IPC.",
-  "author": "myniqx",
-  "license": "MIT",
+  "keywords": [
+    "cli",
+    "daemon",
+    "download",
+    "download-manager",
+    "parallel-download"
+  ],
   "homepage": "https://myniqx.dev/projects/downloadx",
+  "bugs": {
+    "url": "https://github.com/myniqx/downloadx/issues"
+  },
+  "license": "MIT",
+  "author": "myniqx",
   "repository": {
     "type": "git",
     "url": "https://github.com/myniqx/downloadx.git",
     "directory": "apps/cli"
   },
-  "bugs": {
-    "url": "https://github.com/myniqx/downloadx/issues"
-  },
-  "type": "module",
   "bin": {
     "downloadx": "./dist/cli.js"
   },
   "files": [
     "dist"
   ],
-  "keywords": [
-    "download",
-    "download-manager",
-    "cli",
-    "daemon",
-    "parallel-download"
-  ],
+  "type": "module",
   "publishConfig": {
     "access": "public"
   },
-  "engines": {
-    "node": ">=18"
+  "scripts": {
+    "build": "bun build src/cli.ts --outdir dist --target node --banner '#!/usr/bin/env node'",
+    "dx": "node ./dist/cli.js",
+    "dev": "bun run src/cli.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@downloadx/core": "^0.1.0"
@@ -41,10 +44,7 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0"
   },
-  "scripts": {
-    "build": "bun build src/cli.ts --outdir dist --target node --banner '#!/usr/bin/env node'",
-    "dx": "node ./dist/cli.js",
-    "dev": "bun run src/cli.ts",
-    "typecheck": "tsc --noEmit"
+  "engines": {
+    "node": ">=18"
   }
 }

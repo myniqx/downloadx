@@ -7,9 +7,11 @@
   "scripts": {
     "build": "bun run --filter '*' build",
     "test": "bun run --filter '*' test",
+    "fmt": "oxfmt",
     "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
+    "oxfmt": "^0.54.0",
     "typescript": "^5.6.0"
   }
 }

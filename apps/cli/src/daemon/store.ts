@@ -1,7 +1,8 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { DownloadEntry, DaemonConfig } from '../ipc.ts';
+
 import { STATE_FILE, CONFIG_FILE, DOWNLOADS_DIR, CACHE_DIR } from '../constants.ts';
+import type { DownloadEntry, DaemonConfig } from '../ipc.ts';
 
 interface State {
   downloads: DownloadEntry[];
@@ -22,7 +23,7 @@ export const DEFAULT_CONFIG: DaemonConfig = {
 export async function loadConfig(): Promise<DaemonConfig> {
   try {
     const raw = await readFile(CONFIG_FILE, 'utf8');
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) as Partial<DaemonConfig> };
+    return { ...DEFAULT_CONFIG, ...(JSON.parse(raw) as Partial<DaemonConfig>) };
   } catch {
     return { ...DEFAULT_CONFIG };
   }
@@ -38,10 +39,17 @@ export function parseSpeed(value: string): number {
   if (!m) throw new Error(`Invalid speed '${value}'. Examples: 500kb, 3mb, 1.5gb, 1048576`);
   const n = parseFloat(m[1]!);
   switch (m[2]?.toLowerCase()) {
-    case 'gb': case 'g': return Math.round(n * 1024 * 1024 * 1024);
-    case 'mb': case 'm': return Math.round(n * 1024 * 1024);
-    case 'kb': case 'k': return Math.round(n * 1024);
-    default: return Math.round(n);
+    case 'gb':
+    case 'g':
+      return Math.round(n * 1024 * 1024 * 1024);
+    case 'mb':
+    case 'm':
+      return Math.round(n * 1024 * 1024);
+    case 'kb':
+    case 'k':
+      return Math.round(n * 1024);
+    default:
+      return Math.round(n);
   }
 }
 

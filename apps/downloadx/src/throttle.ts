@@ -13,13 +13,21 @@
 export class Throttle {
   private tokens: number;
   private lastRefillAt: number;
-  private readonly queue: Array<{ need: number; resolve: () => void; reject: (err: Error) => void; signal?: AbortSignal; onAbort?: () => void }> = [];
+  private readonly queue: Array<{
+    need: number;
+    resolve: () => void;
+    reject: (err: Error) => void;
+    signal?: AbortSignal;
+    onAbort?: () => void;
+  }> = [];
   private disposed = false;
 
   constructor(
     private capacity: number,
     private readonly now: () => number = Date.now,
-    private readonly schedule: (ms: number, cb: () => void) => void = (ms, cb) => { setTimeout(cb, ms); },
+    private readonly schedule: (ms: number, cb: () => void) => void = (ms, cb) => {
+      setTimeout(cb, ms);
+    },
   ) {
     if (capacity < 0) throw new Error(`Throttle: capacity must be >= 0 (got ${capacity})`);
     this.tokens = capacity;

@@ -2,18 +2,31 @@
   "name": "@downloadx/core",
   "version": "0.1.0",
   "description": "IDM-like download manager with dynamic chunking, resume support, and runtime-agnostic injected I/O primitives.",
-  "author": "myniqx",
-  "license": "MIT",
+  "keywords": [
+    "chunked-download",
+    "download",
+    "download-manager",
+    "idm",
+    "parallel-download",
+    "resume"
+  ],
   "homepage": "https://myniqx.dev/projects/downloadx",
+  "bugs": {
+    "url": "https://github.com/myniqx/downloadx/issues"
+  },
+  "license": "MIT",
+  "author": "myniqx",
   "repository": {
     "type": "git",
     "url": "https://github.com/myniqx/downloadx.git",
     "directory": "apps/downloadx"
   },
-  "bugs": {
-    "url": "https://github.com/myniqx/downloadx/issues"
-  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -24,25 +37,9 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "keywords": [
-    "download",
-    "download-manager",
-    "chunked-download",
-    "resume",
-    "idm",
-    "parallel-download"
-  ],
   "publishConfig": {
     "access": "public"
   },
-  "engines": {
-    "node": ">=18"
-  },
-  "sideEffects": false,
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -56,5 +53,8 @@
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

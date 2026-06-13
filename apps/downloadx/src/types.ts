@@ -10,10 +10,7 @@
 // ---------------------------------------------------------------------------
 
 /** Minimal fetch signature, compatible with WHATWG fetch. */
-export type FetchFn = (
-  input: string | URL,
-  init?: FetchInit,
-) => Promise<FetchResponse>;
+export type FetchFn = (input: string | URL, init?: FetchInit) => Promise<FetchResponse>;
 
 export interface FetchInit {
   method?: string;
@@ -41,11 +38,7 @@ export interface FetchHeaders {
 }
 
 /** Random access write — writes `buffer` to `path` starting at `offset`. */
-export type WriteChunkFn = (
-  path: string,
-  offset: number,
-  buffer: Uint8Array,
-) => Promise<void>;
+export type WriteChunkFn = (path: string, offset: number, buffer: Uint8Array) => Promise<void>;
 
 /** Read a file fully (used for meta JSON). */
 export type ReadFileFn = (path: string) => Promise<Uint8Array>;

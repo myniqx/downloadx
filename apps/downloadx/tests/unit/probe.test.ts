@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { filenameFromDisposition, filenameFromUrl, probeUrl } from '../../src/probe.js';
 import { makeBytes } from '../helpers/fixtures.js';
 import { MockFetch } from '../helpers/mockFetch.js';
@@ -78,9 +79,7 @@ describe('probeUrl', () => {
 describe('filenameFromDisposition', () => {
   it('prefers RFC 5987 filename* when present', () => {
     expect(
-      filenameFromDisposition(
-        "attachment; filename=\"ascii.bin\"; filename*=UTF-8''%E2%98%83.bin",
-      ),
+      filenameFromDisposition('attachment; filename="ascii.bin"; filename*=UTF-8\'\'%E2%98%83.bin'),
     ).toBe('☃.bin');
   });
 

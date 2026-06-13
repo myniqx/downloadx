@@ -96,10 +96,7 @@ export async function persistMeta(
   await io.rename(tmp, target);
 }
 
-export async function deleteMeta(
-  io: InjectedFunctions,
-  locator: MetaLocator,
-): Promise<void> {
+export async function deleteMeta(io: InjectedFunctions, locator: MetaLocator): Promise<void> {
   const target = metaPath(io, locator);
   await io.unlink(target);
 }
@@ -107,7 +104,9 @@ export async function deleteMeta(
 /** Updates an existing meta object in place and returns it for chaining. */
 export function updateMeta(
   meta: MetaFile,
-  patch: Partial<Pick<MetaFile, 'state' | 'chunks' | 'speedLimit' | 'targetChunkCount' | 'targetPath'>>,
+  patch: Partial<
+    Pick<MetaFile, 'state' | 'chunks' | 'speedLimit' | 'targetChunkCount' | 'targetPath'>
+  >,
 ): MetaFile {
   if (patch.state !== undefined) meta.state = patch.state;
   if (patch.chunks !== undefined) meta.chunks = patch.chunks;

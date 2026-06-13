@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { HttpStatusError, withRetry } from '../../src/retry.js';
 
 describe('withRetry', () => {
@@ -116,7 +117,12 @@ describe('withRetry', () => {
       throw err;
     });
     await expect(
-      withRetry(exec, { maxRetries: 5, retryDelay: 0, retryBackoff: 1, sleep: async () => undefined }),
+      withRetry(exec, {
+        maxRetries: 5,
+        retryDelay: 0,
+        retryBackoff: 1,
+        sleep: async () => undefined,
+      }),
     ).rejects.toThrow('abort');
     expect(exec).toHaveBeenCalledTimes(1);
   });

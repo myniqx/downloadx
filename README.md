@@ -11,10 +11,10 @@ edge runtimes, or against a custom storage backend such as S3.
 
 This repository is a Bun monorepo containing two packages:
 
-| Package | Path | Description |
-|---------|------|-------------|
-| [`@downloadx/core`](https://npmjs.com/package/@downloadx/core) | `apps/downloadx` | The core library (npm package). |
-| [`@downloadx/cli`](https://npmjs.com/package/@downloadx/cli) | `apps/cli` | A daemon-based CLI built on the library (Unix-socket IPC, live TUI, NDJSON streaming). |
+| Package                                                        | Path             | Description                                                                            |
+| -------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------- |
+| [`@downloadx/core`](https://npmjs.com/package/@downloadx/core) | `apps/downloadx` | The core library (npm package).                                                        |
+| [`@downloadx/cli`](https://npmjs.com/package/@downloadx/cli)   | `apps/cli`       | A daemon-based CLI built on the library (Unix-socket IPC, live TUI, NDJSON streaming). |
 
 ## Features
 
@@ -62,7 +62,16 @@ npm install -g @downloadx/cli
 ## Quick start (Node)
 
 ```ts
-import { appendFile, mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import {
+  appendFile,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { createDownloadX } from '@downloadx/core';
 
@@ -70,33 +79,62 @@ import { createDownloadX } from '@downloadx/core';
 // file to exist, 'wx' creates it atomically and fails (instead of
 // truncating) when a concurrent writer won the creation race.
 async function openRw(p: string) {
-  try { return await open(p, 'r+'); }
-  catch {
-    try { return await open(p, 'wx'); }
-    catch { return open(p, 'r+'); }
+  try {
+    return await open(p, 'r+');
+  } catch {
+    try {
+      return await open(p, 'wx');
+    } catch {
+      return open(p, 'r+');
+    }
   }
 }
 
 const manager = createDownloadX({
   io: {
     fetch: globalThis.fetch,
-    mkdir: async (p) => { await mkdir(p, { recursive: true }); },
-    exists: async (p) => { try { await stat(p); return true; } catch { return false; } },
+    mkdir: async (p) => {
+      await mkdir(p, { recursive: true });
+    },
+    exists: async (p) => {
+      try {
+        await stat(p);
+        return true;
+      } catch {
+        return false;
+      }
+    },
     readFile: async (p) => new Uint8Array(await readFile(p)),
-    writeFile: async (p, buf) => { await writeFile(p, buf); },
+    writeFile: async (p, buf) => {
+      await writeFile(p, buf);
+    },
     writeChunk: async (p, offset, buf) => {
       const fh = await openRw(p);
-      try { await fh.write(buf, 0, buf.length, offset); } finally { await fh.close(); }
+      try {
+        await fh.write(buf, 0, buf.length, offset);
+      } finally {
+        await fh.close();
+      }
     },
-    rename: async (from, to) => { await rename(from, to); },
-    unlink: async (p) => { await unlink(p).catch(() => undefined); },
+    rename: async (from, to) => {
+      await rename(from, to);
+    },
+    unlink: async (p) => {
+      await unlink(p).catch(() => undefined);
+    },
     joinPath: (...segs) => join(...segs),
     // Optional — each one unlocks a feature:
     truncate: async (p, size) => {
       const fh = await openRw(p);
-      try { await fh.truncate(size); } finally { await fh.close(); }
+      try {
+        await fh.truncate(size);
+      } finally {
+        await fh.close();
+      }
     },
-    appendFile: async (p, buf) => { await appendFile(p, buf); },
+    appendFile: async (p, buf) => {
+      await appendFile(p, buf);
+    },
     fileSize: async (p) => (await stat(p)).size,
   },
   targetPath: './downloads',
@@ -119,22 +157,22 @@ await dl.start();
 
 Create a manager. Config fields:
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `io` | required | Injected I/O primitives (see below). |
-| `targetPath` | required | Directory where finished files land. |
-| `cachePath` | `targetPath` | Directory for in-flight meta/part files. |
-| `maxParallel` | `3` | Max concurrent active downloads. |
-| `targetChunkCount` | `4` | Upper bound on live chunks per download. |
-| `minChunkSize` | `1 MiB` | Smaller ranges won't be split further. |
-| `maxRetries` | `5` | Per-chunk HTTP retries. |
-| `retryDelay` | `1000` | Base backoff delay (ms). |
-| `retryBackoff` | `2` | Exponential backoff multiplier. |
-| `speedSampleWindow` | `3000` | Moving-average window (ms) for quality. |
-| `speedLimit` | `0` | Bytes/sec per download. `0` = unlimited. |
-| `requestTimeout` | `30000` | Network **idle** timeout (ms): aborts and retries an attempt only when no bytes arrive for this long. Long downloads are unaffected while data flows. |
-| `headers` | `{}` | Default HTTP headers. |
-| `journal` | `false` | Write an NDJSON event journal (`{filename}.downloadx.log`) next to the meta file. Requires `io.appendFile`. |
+| Field               | Default      | Description                                                                                                                                           |
+| ------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `io`                | required     | Injected I/O primitives (see below).                                                                                                                  |
+| `targetPath`        | required     | Directory where finished files land.                                                                                                                  |
+| `cachePath`         | `targetPath` | Directory for in-flight meta/part files.                                                                                                              |
+| `maxParallel`       | `3`          | Max concurrent active downloads.                                                                                                                      |
+| `targetChunkCount`  | `4`          | Upper bound on live chunks per download.                                                                                                              |
+| `minChunkSize`      | `1 MiB`      | Smaller ranges won't be split further.                                                                                                                |
+| `maxRetries`        | `5`          | Per-chunk HTTP retries.                                                                                                                               |
+| `retryDelay`        | `1000`       | Base backoff delay (ms).                                                                                                                              |
+| `retryBackoff`      | `2`          | Exponential backoff multiplier.                                                                                                                       |
+| `speedSampleWindow` | `3000`       | Moving-average window (ms) for quality.                                                                                                               |
+| `speedLimit`        | `0`          | Bytes/sec per download. `0` = unlimited.                                                                                                              |
+| `requestTimeout`    | `30000`      | Network **idle** timeout (ms): aborts and retries an attempt only when no bytes arrive for this long. Long downloads are unaffected while data flows. |
+| `headers`           | `{}`         | Default HTTP headers.                                                                                                                                 |
+| `journal`           | `false`      | Write an NDJSON event journal (`{filename}.downloadx.log`) next to the meta file. Requires `io.appendFile`.                                           |
 
 ### Manager methods
 
@@ -172,9 +210,9 @@ interface InjectedFunctions {
   unlink: (path) => Promise<void>;
   joinPath: (...segments) => string;
   // Optional — enable extra features when provided:
-  truncate?: (path, size) => Promise<void>;    // disk pre-allocation
+  truncate?: (path, size) => Promise<void>; // disk pre-allocation
   appendFile?: (path, bytes) => Promise<void>; // NDJSON journal
-  fileSize?: (path) => Promise<number>;        // final size verification
+  fileSize?: (path) => Promise<number>; // final size verification
 }
 ```
 
@@ -189,17 +227,17 @@ All events are available on both `Download.emitter` and the parent
 `DownloadX.emitter` (payloads are the same object reference — manager
 listeners see exactly what the Download emitted).
 
-| Event | Payload |
-|-------|---------|
-| `progress` | Aggregate: `{ downloadId, totalBytes, downloadedBytes, totalSpeed, activeChunks, percent, etaMs }` |
-| `chunkProgress` | Per-chunk: `{ downloadId, chunkId, offset, length, downloadedBytes, instantSpeed, windowedSpeed, quality }` |
-| `chunkLifecycle` | `{ downloadId, chunkId, status }` — `pending`/`downloading`/`completed`/`failed`/`paused`/`reassigned` |
-| `chunkSplit` | `{ downloadId, sourceChunkId, newChunkId, splitOffset, reason }` |
-| `chunkQuality` | Same payload shape as `chunkProgress`; `quality ∈ 'good'\|'poor'\|'stalled'` |
-| `stateChange` | `{ downloadId, previous, current }` |
-| `error` | `{ downloadId, chunkId?, error, fatal }` |
-| `completed` | `{ downloadId, filename, totalBytes, durationMs }` |
-| `diagnostic` | `{ downloadId, chunkId?, level, code, message, timestamp, data? }` — retries, splits, timeouts, fallbacks; identical to the journal lines |
+| Event            | Payload                                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `progress`       | Aggregate: `{ downloadId, totalBytes, downloadedBytes, totalSpeed, activeChunks, percent, etaMs }`                                        |
+| `chunkProgress`  | Per-chunk: `{ downloadId, chunkId, offset, length, downloadedBytes, instantSpeed, windowedSpeed, quality }`                               |
+| `chunkLifecycle` | `{ downloadId, chunkId, status }` — `pending`/`downloading`/`completed`/`failed`/`paused`/`reassigned`                                    |
+| `chunkSplit`     | `{ downloadId, sourceChunkId, newChunkId, splitOffset, reason }`                                                                          |
+| `chunkQuality`   | Same payload shape as `chunkProgress`; `quality ∈ 'good'\|'poor'\|'stalled'`                                                              |
+| `stateChange`    | `{ downloadId, previous, current }`                                                                                                       |
+| `error`          | `{ downloadId, chunkId?, error, fatal }`                                                                                                  |
+| `completed`      | `{ downloadId, filename, totalBytes, durationMs }`                                                                                        |
+| `diagnostic`     | `{ downloadId, chunkId?, level, code, message, timestamp, data? }` — retries, splits, timeouts, fallbacks; identical to the journal lines |
 
 ### Resume semantics
 
@@ -284,15 +322,15 @@ LLM/agent consumers. `status --json` prints the full `describe()` report.
 
 Config is stored in `~/.local/share/downloadx/config.json` and applied live without restarting the daemon.
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `maxParallel` | `3` | Max concurrent active downloads |
-| `speedLimit` | `0` | Global speed cap shared by all downloads. `0` = unlimited. Accepts `500kb`, `3mb`, `1.5gb` or raw bytes |
-| `targetPath` | `~/.local/share/downloadx/downloads` | Default directory for completed files |
-| `cachePath` | `~/.local/share/downloadx/cache` | Directory for in-progress `.part` files |
-| `targetChunkCount` | `4` | Target number of parallel chunks per download. Takes effect on the next split decision for active downloads |
-| `minChunkSize` | `1mb` | Minimum chunk size before splitting stops. Accepts `500kb`, `1mb`, etc. Takes effect on the next split decision |
-| `journal` | `true` | Write an NDJSON diagnostic log (`.downloadx.log`) next to each download. Takes effect on the next diagnostic event |
+| Key                | Default                              | Description                                                                                                        |
+| ------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `maxParallel`      | `3`                                  | Max concurrent active downloads                                                                                    |
+| `speedLimit`       | `0`                                  | Global speed cap shared by all downloads. `0` = unlimited. Accepts `500kb`, `3mb`, `1.5gb` or raw bytes            |
+| `targetPath`       | `~/.local/share/downloadx/downloads` | Default directory for completed files                                                                              |
+| `cachePath`        | `~/.local/share/downloadx/cache`     | Directory for in-progress `.part` files                                                                            |
+| `targetChunkCount` | `4`                                  | Target number of parallel chunks per download. Takes effect on the next split decision for active downloads        |
+| `minChunkSize`     | `1mb`                                | Minimum chunk size before splitting stops. Accepts `500kb`, `1mb`, etc. Takes effect on the next split decision    |
+| `journal`          | `true`                               | Write an NDJSON diagnostic log (`.downloadx.log`) next to each download. Takes effect on the next diagnostic event |
 
 Per-download overrides (via `--id`): `speedLimit`, `targetPath`, `targetChunkCount`, `minChunkSize`, `journal`.
 

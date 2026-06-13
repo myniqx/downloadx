@@ -1,9 +1,4 @@
-import type {
-  FetchFn,
-  FetchHeaders,
-  FetchInit,
-  FetchResponse,
-} from '../../src/types.js';
+import type { FetchFn, FetchHeaders, FetchInit, FetchResponse } from '../../src/types.js';
 
 export interface MockRouteInit {
   /** Payload the route serves to full-body and range requests. */
@@ -80,7 +75,11 @@ export class MockFetch {
 
   private respondHead(route: RouteState): FetchResponse {
     if (route.head === 'missing') {
-      return makeResponse({ status: 405, statusText: 'Method Not Allowed', body: new Uint8Array() });
+      return makeResponse({
+        status: 405,
+        statusText: 'Method Not Allowed',
+        body: new Uint8Array(),
+      });
     }
     // If `failHeadTimes` is set, fail HEAD that many times before turning
     // cooperative. This lets tests model a "permanently 404" resource (set
@@ -109,17 +108,22 @@ export class MockFetch {
       });
     }
 
-    const range = init?.headers && init.headers['Range'] !== undefined
-      ? init.headers['Range']
-      : init?.headers && init.headers['range'] !== undefined
-        ? init.headers['range']
-        : undefined;
+    const range =
+      init?.headers && init.headers['Range'] !== undefined
+        ? init.headers['Range']
+        : init?.headers && init.headers['range'] !== undefined
+          ? init.headers['range']
+          : undefined;
 
     const full = route.body;
     if (range !== undefined && route.acceptsRanges !== false) {
       const parsed = parseRange(range, full.length);
       if (parsed === null) {
-        return makeResponse({ status: 416, statusText: 'Range Not Satisfiable', body: new Uint8Array() });
+        return makeResponse({
+          status: 416,
+          statusText: 'Range Not Satisfiable',
+          body: new Uint8Array(),
+        });
       }
       const slice = full.slice(parsed.start, parsed.end + 1);
       const headers = this.baseHeaders(route);
@@ -153,7 +157,8 @@ export class MockFetch {
     if (route.etag !== undefined) headers['etag'] = route.etag;
     if (route.lastModified !== undefined) headers['last-modified'] = route.lastModified;
     if (route.contentType !== undefined) headers['content-type'] = route.contentType;
-    if (route.contentDisposition !== undefined) headers['content-disposition'] = route.contentDisposition;
+    if (route.contentDisposition !== undefined)
+      headers['content-disposition'] = route.contentDisposition;
     if (route.extraHeaders !== undefined) {
       for (const [k, v] of Object.entries(route.extraHeaders)) headers[k.toLowerCase()] = v;
     }
@@ -180,9 +185,10 @@ function makeResponse(init: MakeResponseInit): FetchResponse {
       for (const [k, v] of headerMap.entries()) cb(v, k);
     },
   };
-  const body = init.status === 204 || init.body.length === 0
-    ? null
-    : buildStream(init.body, init.streamChunks);
+  const body =
+    init.status === 204 || init.body.length === 0
+      ? null
+      : buildStream(init.body, init.streamChunks);
 
   return {
     status: init.status,
@@ -235,9 +241,7 @@ function parseRange(header: string, totalSize: number): { start: number; end: nu
   const endRaw = match[2];
   if (startRaw === undefined) return null;
   const start = Number.parseInt(startRaw, 10);
-  const end = endRaw === undefined || endRaw === ''
-    ? totalSize - 1
-    : Number.parseInt(endRaw, 10);
+  const end = endRaw === undefined || endRaw === '' ? totalSize - 1 : Number.parseInt(endRaw, 10);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
   if (start < 0 || end < start || start >= totalSize) return null;
   return { start, end: Math.min(end, totalSize - 1) };

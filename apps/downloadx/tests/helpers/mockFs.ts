@@ -32,7 +32,7 @@ export class MockFs {
       .map((s, i) => (i === 0 ? s.replace(/\/+$/u, '') : s.replace(/^\/+|\/+$/gu, '')))
       .filter((s) => s.length > 0)
       .join('/');
-    return joined.length === 0 ? segments[0] ?? '' : joined;
+    return joined.length === 0 ? (segments[0] ?? '') : joined;
   };
 
   readonly mkdir: MkdirFn = async (path: string) => {
@@ -44,15 +44,13 @@ export class MockFs {
     }
   };
 
-  readonly exists: ExistsFn = async (path: string) =>
-    this.files.has(path) || this.dirs.has(path);
+  readonly exists: ExistsFn = async (path: string) => this.files.has(path) || this.dirs.has(path);
 
   readonly writeChunk: WriteChunkFn = async (path, offset, buffer) => {
     const existing = this.files.get(path);
     const requiredSize = offset + buffer.length;
-    const next = existing && existing.length >= requiredSize
-      ? existing
-      : growTo(existing, requiredSize);
+    const next =
+      existing && existing.length >= requiredSize ? existing : growTo(existing, requiredSize);
     next.set(buffer, offset);
     this.files.set(path, next);
   };

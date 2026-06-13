@@ -5,10 +5,11 @@ import type { TypedEventEmitter } from '../../src/events.js';
  * Tests prefer this over polling-based waits because it tolerates jittery
  * timing without hardcoding sleeps.
  */
-export function waitForEvent<
-  E extends object,
-  K extends keyof E,
->(emitter: TypedEventEmitter<E>, event: K, timeoutMs = 2_000): Promise<E[K]> {
+export function waitForEvent<E extends object, K extends keyof E>(
+  emitter: TypedEventEmitter<E>,
+  event: K,
+  timeoutMs = 2_000,
+): Promise<E[K]> {
   return new Promise<E[K]>((resolve, reject) => {
     const off = emitter.on(event, (payload) => {
       clearTimeout(timer);
@@ -22,10 +23,10 @@ export function waitForEvent<
   });
 }
 
-export function collectEvents<
-  E extends object,
-  K extends keyof E,
->(emitter: TypedEventEmitter<E>, event: K): { stop: () => E[K][]; all: () => E[K][] } {
+export function collectEvents<E extends object, K extends keyof E>(
+  emitter: TypedEventEmitter<E>,
+  event: K,
+): { stop: () => E[K][]; all: () => E[K][] } {
   const collected: E[K][] = [];
   const off = emitter.on(event, (payload) => {
     collected.push(payload);

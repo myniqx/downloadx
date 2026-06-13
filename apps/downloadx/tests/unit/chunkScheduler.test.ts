@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { findSplitCandidate, planChunks } from '../../src/chunkScheduler.js';
+
 import type { Chunk } from '../../src/chunk.js';
+import { findSplitCandidate, planChunks } from '../../src/chunkScheduler.js';
 
 describe('planChunks', () => {
   it('returns a single empty chunk for zero-size files', () => {

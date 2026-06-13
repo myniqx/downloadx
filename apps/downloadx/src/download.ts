@@ -86,7 +86,11 @@ export class Download {
     this.config = config;
     this.throttle = new Throttle(effectiveSpeedLimit(options, config));
     this.emitter.on('chunkLifecycle', (payload) => {
-      if (payload.status === 'completed' || payload.status === 'failed' || payload.status === 'reassigned') {
+      if (
+        payload.status === 'completed' ||
+        payload.status === 'failed' ||
+        payload.status === 'reassigned'
+      ) {
         this.aggregate.remove(payload.chunkId);
       }
     });
@@ -131,7 +135,7 @@ export class Download {
   }
 
   get filename(): string {
-    return this._probe?.filename ?? (this.options.filename ?? `download-${this.id}`);
+    return this._probe?.filename ?? this.options.filename ?? `download-${this.id}`;
   }
 
   get targetFilePath(): string {
@@ -195,29 +199,43 @@ export class Download {
     this.throttle.setCapacity(effective);
     if (this._meta !== null) this._meta.speedLimit = bytesPerSec;
   }
-  get speedLimitOverride(): number | null { return this._meta?.speedLimit ?? null; }
+  get speedLimitOverride(): number | null {
+    return this._meta?.speedLimit ?? null;
+  }
 
   /** Upper bound on live chunks; takes effect on the next split decision. */
   setTargetChunkCount(n: number | null): void {
     this.config.targetChunkCount = n ?? this.config.targetChunkCount;
     if (this._meta !== null) this._meta.targetChunkCount = n;
   }
-  get targetChunkCount(): number { return this.config.targetChunkCount; }
+  get targetChunkCount(): number {
+    return this.config.targetChunkCount;
+  }
 
   /** Override the target directory for this download's final file. null clears the override. */
   setTargetPath(path: string | null): void {
     if (path !== null) this.config.targetPath = path;
     if (this._meta !== null) this._meta.targetPath = path;
   }
-  get targetPathOverride(): string | null { return this._meta?.targetPath ?? null; }
+  get targetPathOverride(): string | null {
+    return this._meta?.targetPath ?? null;
+  }
 
   /** Minimum bytes remaining before a chunk can be split; takes effect on the next split decision. */
-  setMinChunkSize(bytes: number): void { this.config.minChunkSize = bytes; }
-  get minChunkSize(): number { return this.config.minChunkSize; }
+  setMinChunkSize(bytes: number): void {
+    this.config.minChunkSize = bytes;
+  }
+  get minChunkSize(): number {
+    return this.config.minChunkSize;
+  }
 
   /** Toggle NDJSON journal writing; takes effect on the next diagnostic event. */
-  setJournal(enabled: boolean): void { this.config.journal = enabled; }
-  get journal(): boolean { return this.config.journal === true; }
+  setJournal(enabled: boolean): void {
+    this.config.journal = enabled;
+  }
+  get journal(): boolean {
+    return this.config.journal === true;
+  }
 
   /**
    * Generic key/value setter for live-configurable fields. Returns false if the
@@ -226,12 +244,23 @@ export class Download {
    */
   set(key: string, value: unknown): boolean {
     switch (key) {
-      case 'speedLimit':       this.setSpeedLimit(value as number | null); return true;
-      case 'targetPath':       this.setTargetPath(value as string | null); return true;
-      case 'targetChunkCount': this.setTargetChunkCount(value as number | null); return true;
-      case 'minChunkSize':     this.setMinChunkSize(value as number); return true;
-      case 'journal':          this.setJournal(value as boolean); return true;
-      default:                 return false;
+      case 'speedLimit':
+        this.setSpeedLimit(value as number | null);
+        return true;
+      case 'targetPath':
+        this.setTargetPath(value as string | null);
+        return true;
+      case 'targetChunkCount':
+        this.setTargetChunkCount(value as number | null);
+        return true;
+      case 'minChunkSize':
+        this.setMinChunkSize(value as number);
+        return true;
+      case 'journal':
+        this.setJournal(value as boolean);
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -241,12 +270,18 @@ export class Download {
    */
   get<T>(key: string): T | undefined {
     switch (key) {
-      case 'speedLimit':       return this.speedLimitOverride as T;
-      case 'targetPath':       return this.targetPathOverride as T;
-      case 'targetChunkCount': return (this._meta?.targetChunkCount ?? null) as T;
-      case 'minChunkSize':     return this.minChunkSize as T;
-      case 'journal':          return this.journal as T;
-      default:                 return undefined;
+      case 'speedLimit':
+        return this.speedLimitOverride as T;
+      case 'targetPath':
+        return this.targetPathOverride as T;
+      case 'targetChunkCount':
+        return (this._meta?.targetChunkCount ?? null) as T;
+      case 'minChunkSize':
+        return this.minChunkSize as T;
+      case 'journal':
+        return this.journal as T;
+      default:
+        return undefined;
     }
   }
 
@@ -284,7 +319,11 @@ export class Download {
     try {
       await truncate(this.partFilePath, total);
     } catch (err) {
-      this.diag('warn', 'prealloc-failed', `disk pre-allocation failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.diag(
+        'warn',
+        'prealloc-failed',
+        `disk pre-allocation failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -298,9 +337,7 @@ export class Download {
     const downloaded = this.downloadedBytes;
     const speed = this.aggregate.totalSpeed;
     const snaps = this.getChunkSnapshots();
-    const live = snaps.filter(
-      (s) => s.status !== 'completed' && s.status !== 'reassigned',
-    );
+    const live = snaps.filter((s) => s.status !== 'completed' && s.status !== 'reassigned');
     return {
       id: this.id,
       url: this.url,
@@ -334,17 +371,23 @@ export class Download {
   describeText(): string {
     const d = this.describe();
     const lines: string[] = [];
-    const size = d.totalBytes === null ? 'unknown size' : `${formatBytes(d.downloadedBytes)} / ${formatBytes(d.totalBytes)}`;
+    const size =
+      d.totalBytes === null
+        ? 'unknown size'
+        : `${formatBytes(d.downloadedBytes)} / ${formatBytes(d.totalBytes)}`;
     const pct = d.percent === null ? '' : ` (${d.percent}%)`;
     lines.push(`${d.filename} [${d.state}] ${size}${pct}`);
     if (d.state === 'downloading') {
       const eta = d.etaMs === null ? 'unknown' : formatDuration(d.etaMs);
-      lines.push(`speed ${formatBytes(d.totalSpeedBps)}/s, ETA ${eta}, chunks ${d.activeChunks} active / ${d.totalChunks} total`);
+      lines.push(
+        `speed ${formatBytes(d.totalSpeedBps)}/s, ETA ${eta}, chunks ${d.activeChunks} active / ${d.totalChunks} total`,
+      );
     }
     for (const c of d.chunks) {
-      const chunkPct = c.length > 0 && c.length !== Number.MAX_SAFE_INTEGER
-        ? `${Math.round((c.downloadedBytes / c.length) * 100)}%`
-        : `${formatBytes(c.downloadedBytes)}`;
+      const chunkPct =
+        c.length > 0 && c.length !== Number.MAX_SAFE_INTEGER
+          ? `${Math.round((c.downloadedBytes / c.length) * 100)}%`
+          : `${formatBytes(c.downloadedBytes)}`;
       const retries = c.retries > 0 ? `, retries ${c.retries}` : '';
       lines.push(`  ${c.id}: ${c.status}/${c.quality} ${chunkPct}${retries}`);
     }
@@ -407,7 +450,11 @@ export class Download {
         );
         if (rangeNotHonored && !this.rangeFallbackDone && this._probe !== null) {
           this.rangeFallbackDone = true;
-          this.diag('warn', 'range-fallback', 'server ignored Range header — restarting as a single-chunk download');
+          this.diag(
+            'warn',
+            'range-fallback',
+            'server ignored Range header — restarting as a single-chunk download',
+          );
           this._probe = { ...this._probe, acceptsRanges: false };
           this.chunks = [];
           this._meta = null;
@@ -470,7 +517,8 @@ export class Download {
     if (existing !== null && canResumeAgainst(existing, this._probe)) {
       this._meta = existing;
       if (existing.speedLimit !== null) this.throttle.setCapacity(existing.speedLimit);
-      if (existing.targetChunkCount !== null) this.config.targetChunkCount = existing.targetChunkCount;
+      if (existing.targetChunkCount !== null)
+        this.config.targetChunkCount = existing.targetChunkCount;
       if (existing.targetPath !== null) this.config.targetPath = existing.targetPath;
       return;
     }
@@ -486,13 +534,14 @@ export class Download {
     // Unknown total size: a single open-ended chunk that streams until EOF.
     // The sentinel length keeps `downloadedBytes < length` true throughout, so
     // completion is decided by the stream ending rather than byte accounting.
-    const plans = this._probe.totalSize === null
-      ? [{ offset: 0, length: UNKNOWN_SIZE_LENGTH, downloadedBytes: 0 }]
-      : planChunks({
-          totalSize: this._probe.totalSize,
-          targetChunkCount: chunkCount,
-          minChunkSize: this.config.minChunkSize,
-        });
+    const plans =
+      this._probe.totalSize === null
+        ? [{ offset: 0, length: UNKNOWN_SIZE_LENGTH, downloadedBytes: 0 }]
+        : planChunks({
+            totalSize: this._probe.totalSize,
+            targetChunkCount: chunkCount,
+            minChunkSize: this.config.minChunkSize,
+          });
     const snapshots: ChunkSnapshot[] = plans.map((p, i) => ({
       id: `${this.id}-c${i}`,
       offset: p.offset,
@@ -584,7 +633,9 @@ export class Download {
         !this.chunks.some((c) => c.status === 'failed');
       const candidate = splitAllowed
         ? findSplitCandidate({
-            activeChunks: this.chunks.filter((c) => c.status !== 'completed' && c.status !== 'failed' && c.status !== 'reassigned'),
+            activeChunks: this.chunks.filter(
+              (c) => c.status !== 'completed' && c.status !== 'failed' && c.status !== 'reassigned',
+            ),
             maxChunks: this.options.targetChunkCount ?? this.config.targetChunkCount,
             minChunkSize: this.config.minChunkSize,
             trigger: 'completed-reassign',
@@ -610,7 +661,12 @@ export class Download {
           splitOffset: candidate.newRange.offset,
           reason: candidate.reason,
         });
-        this.diag('info', 'chunk-split', `${candidate.chunk.id} donated ${candidate.newRange.length} bytes at ${candidate.newRange.offset} to ${newChunk.id}`, newChunk.id);
+        this.diag(
+          'info',
+          'chunk-split',
+          `${candidate.chunk.id} donated ${candidate.newRange.length} bytes at ${candidate.newRange.offset} to ${newChunk.id}`,
+          newChunk.id,
+        );
         launch(newChunk);
       }
 
@@ -627,11 +683,17 @@ export class Download {
     if (expected !== null && expected > 0 && fileSize !== undefined) {
       const actual = await fileSize(this.partFilePath).catch(() => null);
       if (actual !== null && actual !== expected) {
-        this.diag('error', 'size-mismatch', `assembled file is ${actual} bytes, expected ${expected}`);
+        this.diag(
+          'error',
+          'size-mismatch',
+          `assembled file is ${actual} bytes, expected ${expected}`,
+        );
         this.setState('error');
         this.emitter.emit('error', {
           downloadId: this.id,
-          error: new Error(`size mismatch after download: expected ${expected} bytes, found ${actual}`),
+          error: new Error(
+            `size mismatch after download: expected ${expected} bytes, found ${actual}`,
+          ),
           fatal: true,
         });
         await this.persistCurrentMeta().catch(() => undefined);
@@ -693,7 +755,12 @@ export class Download {
           this.stalledSince.set(c.id, now);
         } else if (now - since >= STALL_RECOVERY_MS) {
           this.stalledSince.delete(c.id);
-          this.diag('warn', 'stall-recovery', `chunk stalled for ${now - since}ms — reissuing request`, c.id);
+          this.diag(
+            'warn',
+            'stall-recovery',
+            `chunk stalled for ${now - since}ms — reissuing request`,
+            c.id,
+          );
           c.restart('stalled');
         }
       } else {
@@ -721,9 +788,10 @@ export class Download {
       totalSpeed: speed,
       activeChunks: this.chunks.filter((c) => c.status === 'downloading').length,
       percent: total !== null && total > 0 ? (downloaded / total) * 100 : null,
-      etaMs: total !== null && speed > 0 && total >= downloaded
-        ? Math.round(((total - downloaded) / speed) * 1000)
-        : null,
+      etaMs:
+        total !== null && speed > 0 && total >= downloaded
+          ? Math.round(((total - downloaded) / speed) * 1000)
+          : null,
     });
   }
 
@@ -768,10 +836,14 @@ export class Download {
       state: dehydrateState(this._state),
       chunks: this.getChunkSnapshots(),
     });
-    await persistMeta(this.config.io, {
-      dir: this.config.cachePath,
-      filename: this._probe.filename,
-    }, this._meta);
+    await persistMeta(
+      this.config.io,
+      {
+        dir: this.config.cachePath,
+        filename: this._probe.filename,
+      },
+      this._meta,
+    );
   }
 
   private async safeUnlink(path: string): Promise<void> {
