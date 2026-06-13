@@ -9,16 +9,21 @@ const HELP = `
 downloadx — download manager CLI
 
 Usage:
-  downloadx add <url> [--path <dir>]        Add and start a download
-  downloadx list                             List all downloads
-  downloadx status <#|id> [--json]          Detailed status for a download
-  downloadx pause  <#|id|all>               Pause one or all downloads
-  downloadx resume <#|id|all>               Resume one or all downloads
-  downloadx cancel <#|id|all>               Cancel one or all downloads
-  downloadx clear  <#|id|all>               Remove one or all from list
-  downloadx watch [--simple|--json]         Live progress view
-  downloadx stop                            Shut down the daemon
+  downloadx add <url> [--path <dir>] [--speed <bytes>]   Add and start a download
+  downloadx list                                          List all downloads
+  downloadx status <#|id> [--json]                       Detailed status for a download
+  downloadx pause  <#|id|all>                            Pause one or all downloads
+  downloadx resume <#|id|all>                            Resume one or all downloads
+  downloadx cancel <#|id|all>                            Cancel one or all downloads
+  downloadx clear  <#|id|all>                            Remove one or all from list
+  downloadx watch [--simple|--json]                      Live progress view
+  downloadx stop                                         Shut down the daemon
 
+  downloadx set <key> <value> [--id <#|id>]              Set a config value
+  downloadx get [key]                                    Get one or all config values
+
+  Config keys: maxParallel, speedLimit, targetPath, cachePath
+  Per-download keys (--id): speedLimit, targetPath
   <#> refers to the index shown by 'list' (e.g. 1, 2, #1, #2)
 `.trim();
 
@@ -80,6 +85,34 @@ export async function runCli(argv: string[]): Promise<void> {
       const simple = args.includes('--simple');
       try { await cmdWatch(simple, args.includes('--json')); }
       catch (e) { cliError(`Watch failed: ${e instanceof Error ? e.message : e}`); }
+      break;
+    }
+    case 'set': {
+      const idIdx = args.indexOf('--id');
+      const id = idIdx !== -1 ? args[idIdx + 1] : undefined;
+      if (idIdx !== -1 && !id) cliError('--id requires a value');
+      const key = args.find((a) => !a.startsWith('--') && a !== id);
+      const value = args.filter((a) => !a.startsWith('--') && a !== id && a !== key)[0];
+      try {
+        await ensureDaemon();
+        const result = await sendRequest<string | null>({ cmd: 'set', key, value, ...(id ? { id } : {}) });
+        if (result) console.log(result);
+        else if (key && value) console.log(`Set ${key} = ${value}${id ? ` for download ${id}` : ''}`);
+      } catch (e) { cliError(`${e instanceof Error ? e.message : e}`); }
+      break;
+    }
+    case 'get': {
+      try {
+        await ensureDaemon();
+        const result = await sendRequest({ cmd: 'get', key: args[0] });
+        if (args[0]) {
+          console.log(`${args[0]} = ${result}`);
+        } else {
+          for (const [k, v] of Object.entries(result as Record<string, unknown>)) {
+            console.log(`${k} = ${v}`);
+          }
+        }
+      } catch (e) { cliError(`${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'stop': {

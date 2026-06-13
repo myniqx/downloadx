@@ -4,7 +4,9 @@ export interface DownloadEntry {
   id: string;
   url: string;
   filename: string | null;
-  targetPath: string;
+  targetPath: string | null;
+  cachePath: string;
+  speedLimit: number | null;
   status: DownloadStatus;
   addedAt: number;
   completedAt: number | null;
@@ -13,22 +15,31 @@ export interface DownloadEntry {
   errorMessage: string | null;
 }
 
+export interface DaemonConfig {
+  maxParallel: number;
+  speedLimit: number;
+  targetPath: string;
+  cachePath: string;
+}
+
 // Requests
 
-export interface AddRequest       { cmd: 'add';    url: string; targetPath?: string }
-export interface PauseRequest     { cmd: 'pause';  id: string }
-export interface ResumeRequest    { cmd: 'resume'; id: string }
-export interface CancelRequest    { cmd: 'cancel'; id: string }
-export interface ClearRequest     { cmd: 'clear';  id: string }
-export interface ListRequest      { cmd: 'list' }
-export interface StatusRequest    { cmd: 'status'; id: string }
-export interface WatchRequest     { cmd: 'watch' }
-export interface ShutdownRequest  { cmd: 'shutdown' }
+export interface AddRequest      { cmd: 'add';      url: string; targetPath?: string; speedLimit?: number }
+export interface PauseRequest    { cmd: 'pause';    id: string }
+export interface ResumeRequest   { cmd: 'resume';   id: string }
+export interface CancelRequest   { cmd: 'cancel';   id: string }
+export interface ClearRequest    { cmd: 'clear';    id: string }
+export interface ListRequest     { cmd: 'list' }
+export interface StatusRequest   { cmd: 'status';   id: string }
+export interface WatchRequest    { cmd: 'watch' }
+export interface ShutdownRequest { cmd: 'shutdown' }
+export interface SetRequest      { cmd: 'set';      key?: string; value?: string; id?: string }
+export interface GetRequest      { cmd: 'get';      key?: string }
 
 export type IpcRequest =
   | AddRequest | PauseRequest | ResumeRequest
   | CancelRequest | ClearRequest | ListRequest | StatusRequest
-  | WatchRequest | ShutdownRequest;
+  | WatchRequest | ShutdownRequest | SetRequest | GetRequest;
 
 // Responses
 

@@ -1,5 +1,17 @@
+import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { ensureDaemon, sendRequest } from '../client.ts';
-import type { DownloadDescription } from 'downloadx';
+import type { DownloadDescription } from '@downloadx/core';
+
+type StatusData = DownloadDescription & { targetPath: string };
+
+const GREEN = '\x1b[32m';
+const RED   = '\x1b[31m';
+const RESET = '\x1b[0m';
+
+async function fileExists(p: string): Promise<boolean> {
+  try { await stat(p); return true; } catch { return false; }
+}
 
 function fmtBytes(n: number | null): string {
   if (n === null) return '?';
@@ -20,7 +32,7 @@ function fmtMs(ms: number | null): string {
 
 export async function cmdStatus(id: string, json: boolean): Promise<void> {
   await ensureDaemon();
-  const desc = await sendRequest<DownloadDescription>({ cmd: 'describe', id });
+  const desc = await sendRequest<StatusData>({ cmd: 'status', id });
 
   if (json) {
     console.log(JSON.stringify(desc, null, 2));
@@ -29,6 +41,15 @@ export async function cmdStatus(id: string, json: boolean): Promise<void> {
 
   const pct = desc.percent === null ? '' : ` (${desc.percent}%)`;
   console.log(`${desc.filename} [${desc.state}] ${fmtBytes(desc.downloadedBytes)} / ${fmtBytes(desc.totalBytes)}${pct}`);
+
+  if (desc.state === 'completed' && desc.filename) {
+    const fullPath = join(desc.targetPath, desc.filename);
+    const exists = await fileExists(fullPath);
+    const icon = exists ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
+    const note = exists ? '' : '  (deleted)';
+    console.log(`File: ${icon} ${fullPath}${note}`);
+  }
+
   if (desc.state === 'downloading') {
     console.log(`speed ${fmtBytes(desc.totalSpeedBps)}/s  ETA ${fmtMs(desc.etaMs)}  chunks ${desc.activeChunks} active / ${desc.totalChunks} total`);
   }

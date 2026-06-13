@@ -12,8 +12,7 @@ import {
   type DiagnosticPayload,
 } from '@downloadx/core';
 import type { DownloadEntry, IpcEvent } from '../ipc.ts';
-import { DOWNLOADS_DIR } from '../constants.ts';
-import { upsertDownload, removeDownload, getDownload } from './store.ts';
+import { upsertDownload, removeDownload, getDownload, getConfig } from './store.ts';
 
 type EventSink = (event: IpcEvent) => void;
 type DownloadXInstance = ReturnType<typeof createDownloadX>;
@@ -47,9 +46,9 @@ async function openRw(p: string) {
   }
 }
 
-function makeIo(_targetPath: string) {
+function makeIo() {
   return {
-    fetch: globalThis.fetch,
+    fetch: (globalThis as unknown as { fetch: typeof fetch }).fetch,
     mkdir: async (p: string) => { await mkdir(p, { recursive: true }); },
     exists: async (p: string) => { try { await stat(p); return true; } catch { return false; } },
     readFile: async (p: string) => new Uint8Array(await readFile(p)),
@@ -70,14 +69,30 @@ function makeIo(_targetPath: string) {
   };
 }
 
-const managers = new Map<string, DownloadXInstance>();
+let manager: DownloadXInstance | null = null;
 
-function getOrCreateManager(targetPath: string): DownloadXInstance {
-  const existing = managers.get(targetPath);
-  if (existing) return existing;
-  const mgr = createDownloadX({ io: makeIo(targetPath), targetPath, maxParallel: 3, targetChunkCount: 4, journal: true });
-  managers.set(targetPath, mgr);
-  return mgr;
+function getManager(): DownloadXInstance {
+  if (manager) return manager;
+  const cfg = getConfig();
+  manager = createDownloadX({
+    io: makeIo(),
+    targetPath: cfg.targetPath,
+    cachePath: cfg.cachePath,
+    maxParallel: cfg.maxParallel,
+    targetChunkCount: 4,
+    journal: true,
+    ...(cfg.speedLimit > 0 ? { speedLimit: cfg.speedLimit } : {}),
+  });
+  return manager;
+}
+
+export function applyConfig(): void {
+  if (!manager) return;
+  const cfg = getConfig();
+  manager.setMaxParallel(cfg.maxParallel);
+  manager.setTargetPath(cfg.targetPath);
+  manager.setCachePath(cfg.cachePath);
+  manager.setSpeedLimit(cfg.speedLimit);
 }
 
 const dlRefs = new Map<string, Download>();
@@ -139,12 +154,14 @@ function attachListeners(id: string, dl: Download): void {
   dl.emitter.on('completed', (p: DownloadCompletedPayload) => {
     const stored = getDownload(id);
     if (stored) {
+      const finalTargetPath = stored.targetPath ?? getConfig().targetPath;
       void upsertDownload({
         ...stored,
         status: 'completed',
         filename: p.filename,
         totalBytes: p.totalBytes,
         completedAt: Date.now(),
+        targetPath: finalTargetPath,
       });
     }
     emit({ event: 'completed', id, filename: p.filename, totalBytes: p.totalBytes, durationMs: p.durationMs });
@@ -196,9 +213,9 @@ export function describeDownload(id: string): DownloadDescription {
   };
 }
 
-export async function addDownload(id: string, url: string, targetPath: string): Promise<DownloadEntry> {
-  const mgr = getOrCreateManager(targetPath);
-  const dl = mgr.addUrl(url, { id });
+export async function addDownload(id: string, url: string, targetPath: string | null, speedLimit: number | null): Promise<DownloadEntry> {
+  const mgr = getManager();
+  const dl = mgr.addUrl(url, { id, ...(speedLimit !== null && speedLimit > 0 ? { speedLimit } : {}) });
   dlRefs.set(id, dl);
   attachListeners(id, dl);
 
@@ -207,6 +224,8 @@ export async function addDownload(id: string, url: string, targetPath: string): 
     url,
     filename: null,
     targetPath,
+    cachePath: getConfig().cachePath,
+    speedLimit,
     status: 'queued',
     addedAt: Date.now(),
     completedAt: null,
@@ -230,7 +249,7 @@ export async function pauseDownload(id: string): Promise<void> {
 export async function resumeDownload(id: string): Promise<void> {
   const entry = getDownload(id);
   if (!entry) throw new Error(`Download ${id} not found`);
-  const mgr = getOrCreateManager(entry.targetPath);
+  const mgr = getManager();
   const existing = dlRefs.get(id);
   const dl = existing ?? mgr.addUrl(entry.url, { id });
   if (!existing) {
@@ -256,16 +275,18 @@ export async function clearDownload(id: string): Promise<void> {
 }
 
 export async function restoreDownloads(entries: DownloadEntry[]): Promise<void> {
+  const mgr = getManager();
   for (const entry of entries) {
+    if (!entry.cachePath) {
+      await upsertDownload({ ...entry, cachePath: getConfig().cachePath });
+    }
     if (entry.status === 'downloading' || entry.status === 'queued') {
-      const mgr = getOrCreateManager(entry.targetPath ?? DOWNLOADS_DIR);
       const dl = mgr.addUrl(entry.url, { id: entry.id });
       dlRefs.set(entry.id, dl);
       attachListeners(entry.id, dl);
       activeCount++;
       void dl.start();
     } else if (entry.status === 'paused') {
-      const mgr = getOrCreateManager(entry.targetPath ?? DOWNLOADS_DIR);
       const dl = mgr.addUrl(entry.url, { id: entry.id });
       dlRefs.set(entry.id, dl);
       attachListeners(entry.id, dl);
