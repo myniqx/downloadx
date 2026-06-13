@@ -13,7 +13,8 @@ import {
   type DiagnosticPayload,
 } from '@downloadx/core';
 import type { DownloadEntry, DaemonConfig, IpcEvent } from '../ipc.ts';
-import { upsertDownload, removeDownload, getDownload, saveConfig, parseSpeed } from './store.ts';
+import { upsertDownload, removeDownload, getDownload, saveConfig } from './store.ts';
+import { resolveConfigKey } from './config-keys.ts';
 
 type EventSink = (event: IpcEvent) => void;
 type DownloadXInstance = ReturnType<typeof createDownloadX>;
@@ -90,61 +91,41 @@ function getManager(): DownloadXInstance {
   return manager;
 }
 
-const GLOBAL_CONFIG_KEYS = ['maxParallel', 'speedLimit', 'targetPath', 'cachePath', 'targetChunkCount', 'minChunkSize', 'journal'] as const;
-type GlobalConfigKey = typeof GLOBAL_CONFIG_KEYS[number];
+type GlobalConfigKey = 'maxParallel' | 'speedLimit' | 'targetPath' | 'cachePath' | 'targetChunkCount' | 'minChunkSize' | 'journal';
 
-const GLOBAL_KEY_MAP: Record<string, GlobalConfigKey> = Object.fromEntries(
-  GLOBAL_CONFIG_KEYS.map((k) => [k.toLowerCase(), k])
-);
-
-export function setGlobalConfig(key: string, rawValue: string, override: boolean): void {
-  const canonical = GLOBAL_KEY_MAP[key.toLowerCase()];
-  if (!canonical) throw new Error(`Unknown config key '${key}'. Valid keys: ${GLOBAL_CONFIG_KEYS.join(', ')}`);
+export async function setGlobalConfig(key: string, rawValue: string, override: boolean): Promise<void> {
+  const def = resolveConfigKey(key, false);
+  const parsed = def.parse(rawValue);
+  const canonical = def.canonical as GlobalConfigKey;
   const mgr = getManager();
 
-  if (canonical === 'maxParallel') {
-    const n = Number(rawValue);
-    if (!Number.isInteger(n) || n < 1) throw new Error(`'maxParallel' must be a positive integer`);
-    mgr.setMaxParallel(n);
-  } else if (canonical === 'speedLimit') {
-    mgr.setSpeedLimit(rawValue === '0' ? 0 : parseSpeed(rawValue));
-  } else if (canonical === 'targetPath') {
-    mgr.setTargetPath(rawValue);
-  } else if (canonical === 'cachePath') {
-    mgr.setCachePath(rawValue);
-  } else if (canonical === 'targetChunkCount') {
-    const n = Number(rawValue);
-    if (!Number.isInteger(n) || n < 1) throw new Error(`'targetChunkCount' must be a positive integer`);
-    mgr.setTargetChunkCount(n, override);
-  } else if (canonical === 'minChunkSize') {
-    mgr.setMinChunkSize(parseSpeed(rawValue), override);
-  } else if (canonical === 'journal') {
-    if (rawValue !== 'true' && rawValue !== 'false') throw new Error(`'journal' must be 'true' or 'false'`);
-    mgr.setJournal(rawValue === 'true', override);
-  }
+  if (canonical === 'maxParallel') mgr.setMaxParallel(parsed as number);
+  else if (canonical === 'speedLimit') mgr.setSpeedLimit(parsed as number);
+  else if (canonical === 'targetPath') mgr.setTargetPath(parsed as string);
+  else if (canonical === 'cachePath') mgr.setCachePath(parsed as string);
+  else if (canonical === 'targetChunkCount') mgr.setTargetChunkCount(parsed as number, override);
+  else if (canonical === 'minChunkSize') mgr.setMinChunkSize(parsed as number, override);
+  else if (canonical === 'journal') mgr.setJournal(parsed as boolean, override);
+
+  const cfg = getGlobalConfig() as DaemonConfig;
+  await saveConfig(cfg);
 }
 
 export function getGlobalConfig(key?: string): DaemonConfig | unknown {
   const mgr = getManager();
   const cfg = mgr.getConfig();
   const snapshot: DaemonConfig = {
-    maxParallel:      cfg.maxParallel,
-    speedLimit:       cfg.speedLimit,
-    targetPath:       cfg.targetPath,
-    cachePath:        cfg.cachePath,
+    maxParallel: cfg.maxParallel,
+    speedLimit: cfg.speedLimit,
+    targetPath: cfg.targetPath,
+    cachePath: cfg.cachePath,
     targetChunkCount: cfg.targetChunkCount,
-    minChunkSize:     cfg.minChunkSize,
-    journal:          cfg.journal,
+    minChunkSize: cfg.minChunkSize,
+    journal: cfg.journal,
   };
   if (!key) return snapshot;
-  const canonical = GLOBAL_KEY_MAP[key.toLowerCase()];
-  if (!canonical) throw new Error(`Unknown config key '${key}'. Valid keys: ${GLOBAL_CONFIG_KEYS.join(', ')}`);
-  return snapshot[canonical];
-}
-
-export async function persistConfig(): Promise<void> {
-  const cfg = getGlobalConfig() as DaemonConfig;
-  await saveConfig(cfg);
+  const def = resolveConfigKey(key, false);
+  return snapshot[def.canonical as GlobalConfigKey];
 }
 
 const dlRefs = new Map<string, Download>();
