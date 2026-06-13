@@ -23,10 +23,10 @@ Usage:
   downloadx stop                                         Shut down the daemon
 
   downloadx set <key> <value> [--id <#|id>]              Set a config value
-  downloadx get [key]                                    Get one or all config values
+  downloadx get [key] [--id <#|id>]                      Get one or all config values
 
-  Config keys: maxParallel, speedLimit, targetPath, cachePath
-  Per-download keys (--id): speedLimit, targetPath
+  Config keys: maxParallel, speedLimit, targetPath, cachePath, targetChunkCount, minChunkSize, journal
+  Per-download keys (--id): speedLimit, targetPath, targetChunkCount, minChunkSize, journal
   <#> refers to the index shown by 'list' (e.g. 1, 2, #1, #2)
 `.trim();
 
@@ -124,11 +124,15 @@ export async function runCli(argv: string[]): Promise<void> {
       break;
     }
     case 'get': {
+      const idIdx = args.indexOf('--id');
+      const id = idIdx !== -1 ? args[idIdx + 1] : undefined;
+      if (idIdx !== -1 && !id) cliError('--id requires a value');
+      const key = args.find((a) => !a.startsWith('--') && a !== id);
       try {
         await ensureDaemon();
-        const result = await sendRequest({ cmd: 'get', key: args[0] });
-        if (args[0]) {
-          console.log(`${args[0]} = ${result}`);
+        const result = await sendRequest({ cmd: 'get', key, ...(id ? { id } : {}) });
+        if (key) {
+          console.log(`${key} = ${result}`);
         } else {
           for (const [k, v] of Object.entries(result as Record<string, unknown>)) {
             console.log(`${k} = ${v}`);

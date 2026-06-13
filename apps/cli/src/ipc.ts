@@ -17,8 +17,6 @@ export interface DownloadEntry {
   url: string;
   filename: string | null;
   targetPath: string | null;
-  cachePath: string;
-  speedLimit: number | null;
   status: DownloadStatus;
   addedAt: number;
   completedAt: number | null;
@@ -50,7 +48,7 @@ export interface StatusRequest   { cmd: 'status';   id: string }
 export interface WatchRequest    { cmd: 'watch' }
 export interface ShutdownRequest { cmd: 'shutdown' }
 export interface SetRequest      { cmd: 'set';      key?: string | undefined; value?: string | undefined; id?: string | undefined }
-export interface GetRequest      { cmd: 'get';      key?: string | undefined }
+export interface GetRequest      { cmd: 'get';      key?: string | undefined; id?: string | undefined }
 
 export type IpcRequest =
   | AddRequest | PauseRequest | ResumeRequest | RestartRequest

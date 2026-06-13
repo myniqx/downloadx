@@ -206,7 +206,7 @@ describe('Download integration — speedLimit', () => {
     }));
     const run = download.start();
     // Lift the cap immediately.
-    download.speedLimit(0);
+    download.setSpeedLimit(0);
     await run;
     expect(download.state).toBe('completed');
   });

@@ -173,6 +173,18 @@ function attachListeners(id: string, dl: Download): void {
   });
 }
 
+export function setDownloadConfig(id: string, key: string, value: unknown): boolean {
+  const dl = dlRefs.get(id);
+  if (!dl) throw new Error(`Download ${id} not active`);
+  return dl.set(key, value);
+}
+
+export function getDownloadConfig<T>(id: string, key: string): T | undefined {
+  const dl = dlRefs.get(id);
+  if (!dl) throw new Error(`Download ${id} not active`);
+  return dl.get<T>(key);
+}
+
 export function describeDownload(id: string): DownloadDescription {
   const dl = dlRefs.get(id);
   if (dl) return dl.describe();
@@ -207,8 +219,6 @@ export async function addDownload(id: string, url: string, targetPath: string | 
     url,
     filename: null,
     targetPath,
-    cachePath: getConfig().cachePath,
-    speedLimit,
     status: 'queued',
     addedAt: Date.now(),
     completedAt: null,
@@ -223,13 +233,6 @@ export async function addDownload(id: string, url: string, targetPath: string | 
   return entry;
 }
 
-function entryOptions(entry: DownloadEntry) {
-  return {
-    id: entry.id,
-    ...(entry.speedLimit !== null ? { speedLimit: entry.speedLimit } : {}),
-  };
-}
-
 export async function pauseDownload(id: string): Promise<void> {
   const dl = dlRefs.get(id);
   if (!dl) throw new Error(`Download ${id} not active`);
@@ -241,7 +244,7 @@ export async function resumeDownload(id: string): Promise<void> {
   if (!entry) throw new Error(`Download ${id} not found`);
   const mgr = getManager();
   const existing = dlRefs.get(id);
-  const dl = existing ?? mgr.addUrl(entry.url, entryOptions(entry));
+  const dl = existing ?? mgr.addUrl(entry.url, { id: entry.id });
   if (!existing) {
     dlRefs.set(id, dl);
     attachListeners(id, dl);
@@ -259,10 +262,7 @@ export async function restartDownload(id: string): Promise<void> {
     dlRefs.delete(id);
   }
   const mgr = getManager();
-  const dl = mgr.addUrl(entry.url, {
-    id,
-    ...(entry.speedLimit !== null && entry.speedLimit > 0 ? { speedLimit: entry.speedLimit } : {}),
-  });
+  const dl = mgr.addUrl(entry.url, { id });
   dlRefs.set(id, dl);
   attachListeners(id, dl);
   await upsertDownload({
@@ -295,17 +295,14 @@ export async function clearDownload(id: string): Promise<void> {
 export async function restoreDownloads(entries: DownloadEntry[]): Promise<void> {
   const mgr = getManager();
   for (const entry of entries) {
-    if (!entry.cachePath) {
-      await upsertDownload({ ...entry, cachePath: getConfig().cachePath });
-    }
     if (entry.status === 'downloading' || entry.status === 'queued') {
-      const dl = mgr.addUrl(entry.url, entryOptions(entry));
+      const dl = mgr.addUrl(entry.url, { id: entry.id });
       dlRefs.set(entry.id, dl);
       attachListeners(entry.id, dl);
       activeCount++;
       void dl.start();
     } else if (entry.status === 'paused') {
-      const dl = mgr.addUrl(entry.url, entryOptions(entry));
+      const dl = mgr.addUrl(entry.url, { id: entry.id });
       dlRefs.set(entry.id, dl);
       attachListeners(entry.id, dl);
     }

@@ -4,10 +4,11 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SOCKET_PATH, PID_FILE, LOG_FILE, IPC_DELIMITER, DATA_DIR } from '../constants.ts';
 import type { IpcRequest, IpcResponse, IpcEvent, DownloadEntry } from '../ipc.ts';
-import { loadState, loadConfig, getDownloads, resolveDownload, getAllIds, getConfigKey, setConfigKey, saveConfig, upsertDownload, parseSpeed } from './store.ts';
+import { loadState, loadConfig, getDownloads, resolveDownload, getAllIds, getConfigKey, setConfigKey, saveConfig, parseSpeed } from './store.ts';
 import {
   addDownload, pauseDownload, resumeDownload, restartDownload, cancelDownload, clearDownload,
   addEventSink, removeEventSink, restoreDownloads, onAutoShutdown, describeDownload, applyConfig,
+  setDownloadConfig, getDownloadConfig,
 } from './manager.ts';
 
 async function log(msg: string): Promise<void> {
@@ -35,7 +36,8 @@ const PER_DOWNLOAD_KEY_OVERRIDES: Record<string, string> = {
 };
 
 const PER_DOWNLOAD_KEYS = Object.fromEntries(
-  ['speedLimit', 'targetPath'].map((k) => [k, PER_DOWNLOAD_KEY_OVERRIDES[k] ?? CONFIG_KEY_DESCRIPTIONS[k]!])
+  ['speedLimit', 'targetPath', 'targetChunkCount', 'minChunkSize', 'journal']
+    .map((k) => [k, PER_DOWNLOAD_KEY_OVERRIDES[k] ?? CONFIG_KEY_DESCRIPTIONS[k]!])
 );
 
 function resolveId(raw: string): string {
@@ -128,17 +130,26 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
         const entry = resolveDownload(resolveId(req.id));
         if (!entry) throw new Error(`No download matching '${req.id}'`);
         const canonicalKey = Object.keys(PER_DOWNLOAD_KEYS).find((k) => k.toLowerCase() === key);
+        if (!canonicalKey) throw new Error(`Unknown per-download key '${key}'. Valid: ${Object.keys(PER_DOWNLOAD_KEYS).join(', ')}`);
+
+        let parsed: unknown;
         if (canonicalKey === 'speedLimit') {
-          const n = req.value === '0' ? 0 : parseSpeed(req.value);
-          await upsertDownload({ ...entry, speedLimit: n });
-        } else if (canonicalKey === 'targetPath') {
-          if (entry.status === 'completed') throw new Error(`Cannot change targetPath of a completed download`);
-          await upsertDownload({ ...entry, targetPath: req.value });
-        } else if (key === 'cachepath') {
-          throw new Error(`cachePath cannot be changed after a download is created`);
+          parsed = req.value === '0' ? 0 : parseSpeed(req.value);
+        } else if (canonicalKey === 'targetChunkCount') {
+          const n = Number(req.value);
+          if (!Number.isInteger(n) || n < 1) throw new Error(`'targetChunkCount' must be a positive integer`);
+          parsed = n;
+        } else if (canonicalKey === 'minChunkSize') {
+          parsed = parseSpeed(req.value);
+        } else if (canonicalKey === 'journal') {
+          if (req.value !== 'true' && req.value !== 'false') throw new Error(`'journal' must be 'true' or 'false'`);
+          parsed = req.value === 'true';
         } else {
-          throw new Error(`Unknown per-download key '${key}'. Valid: ${Object.keys(PER_DOWNLOAD_KEYS).join(', ')}`);
+          parsed = req.value;
         }
+
+        const ok = setDownloadConfig(entry.id, canonicalKey, parsed);
+        if (!ok) throw new Error(`Key '${canonicalKey}' is not settable on a download`);
       } else {
         setConfigKey(key, req.value);
         await saveConfig();
@@ -148,7 +159,22 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       break;
     }
     case 'get': {
-      send(socket, { ok: true, data: getConfigKey(req.key) });
+      if (req.id) {
+        const entry = resolveDownload(resolveId(req.id));
+        if (!entry) throw new Error(`No download matching '${req.id}'`);
+        if (!req.key) {
+          const all = Object.fromEntries(
+            Object.keys(PER_DOWNLOAD_KEYS).map((k) => [k, getDownloadConfig(entry.id, k)])
+          );
+          send(socket, { ok: true, data: all });
+        } else {
+          const canonicalKey = Object.keys(PER_DOWNLOAD_KEYS).find((k) => k.toLowerCase() === req.key!.toLowerCase());
+          if (!canonicalKey) throw new Error(`Unknown per-download key '${req.key}'. Valid: ${Object.keys(PER_DOWNLOAD_KEYS).join(', ')}`);
+          send(socket, { ok: true, data: getDownloadConfig(entry.id, canonicalKey) });
+        }
+      } else {
+        send(socket, { ok: true, data: getConfigKey(req.key) });
+      }
       break;
     }
     case 'shutdown': {
