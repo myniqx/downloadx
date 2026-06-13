@@ -20,24 +20,28 @@ export interface ListEntry {
   nameOrUrl: string;
 }
 
+export type ConfigValue = string | number | boolean | null;
+
 export interface TestEnv {
   workingDir: string;
   dx: (...args: string[]) => Promise<ExecResult>;
   assertGet: (key: string, expected: string | number | boolean) => Promise<void>;
-  assertConfig: (expected: Record<string, string | number | boolean>) => Promise<void>;
+  assertConfig: (expected: Record<string, ConfigValue>) => Promise<void>;
+  assertDownloadConfig: (id: string, expected: Record<string, ConfigValue>) => Promise<void>;
   assertList: (checks: { url?: string; status?: string }[]) => Promise<void>;
   cleanup: () => Promise<void>;
 }
 
-function parseValue(raw: string): string | number | boolean {
+function parseValue(raw: string): ConfigValue {
+  if (raw === 'null') return null;
   if (raw === 'true') return true;
   if (raw === 'false') return false;
   const n = Number(raw);
   return Number.isNaN(n) ? raw : n;
 }
 
-function parseConfigOutput(stdout: string): Record<string, string | number | boolean> {
-  const result: Record<string, string | number | boolean> = {};
+function parseConfigOutput(stdout: string): Record<string, ConfigValue> {
+  const result: Record<string, ConfigValue> = {};
   for (const line of stdout.split('\n')) {
     const eq = line.indexOf(' = ');
     if (eq === -1) continue;
@@ -66,13 +70,22 @@ export async function createTestEnv(): Promise<TestEnv> {
     expect(parsed[key]).toBe(expected);
   };
 
-  const assertConfig = async (
-    expected: Record<string, string | number | boolean>,
-  ): Promise<void> => {
+  const assertConfig = async (expected: Record<string, ConfigValue>): Promise<void> => {
     const { stdout } = await dx('get');
     const parsed = parseConfigOutput(stdout);
     for (const [key, val] of Object.entries(expected)) {
       expect(parsed[key], `config key '${key}'`).toBe(val);
+    }
+  };
+
+  const assertDownloadConfig = async (
+    id: string,
+    expected: Record<string, ConfigValue>,
+  ): Promise<void> => {
+    const { stdout } = await dx('get', '--id', id);
+    const parsed = parseConfigOutput(stdout);
+    for (const [key, val] of Object.entries(expected)) {
+      expect(parsed[key], `download config key '${key}'`).toBe(val);
     }
   };
 
@@ -109,6 +122,7 @@ export async function createTestEnv(): Promise<TestEnv> {
     dx,
     assertGet,
     assertConfig,
+    assertDownloadConfig,
     assertList,
     cleanup: () => rm(workingDir, { recursive: true, force: true }),
   };
