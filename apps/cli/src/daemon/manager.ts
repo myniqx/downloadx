@@ -208,9 +208,9 @@ export function describeDownload(id: string): DownloadDescription {
   };
 }
 
-export async function addDownload(id: string, url: string, targetPath: string | null, speedLimit: number | null): Promise<DownloadEntry> {
+export async function addDownload(id: string, url: string, targetPath: string | null): Promise<DownloadEntry> {
   const mgr = getManager();
-  const dl = mgr.addUrl(url, { id, ...(speedLimit !== null && speedLimit > 0 ? { speedLimit } : {}) });
+  const dl = mgr.addUrl(url, { id });
   dlRefs.set(id, dl);
   attachListeners(id, dl);
 

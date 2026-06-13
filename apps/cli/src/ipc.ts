@@ -37,7 +37,7 @@ export interface DaemonConfig {
 
 // Requests
 
-export interface AddRequest      { cmd: 'add';      url: string; targetPath?: string; speedLimit?: number }
+export interface AddRequest      { cmd: 'add';      url: string; targetPath?: string }
 export interface PauseRequest    { cmd: 'pause';    id: string }
 export interface ResumeRequest   { cmd: 'resume';   id: string }
 export interface RestartRequest  { cmd: 'restart';  id: string }

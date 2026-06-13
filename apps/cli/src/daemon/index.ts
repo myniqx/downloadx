@@ -55,7 +55,7 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
   switch (req.cmd) {
     case 'add': {
       const id = randomUUID();
-      const entry = await addDownload(id, req.url, req.targetPath ?? null, req.speedLimit ?? null);
+      const entry = await addDownload(id, req.url, req.targetPath ?? null);
       send(socket, { ok: true, data: entry } satisfies IpcResponse<DownloadEntry>);
       break;
     }

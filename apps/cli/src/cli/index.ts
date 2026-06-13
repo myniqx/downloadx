@@ -9,7 +9,7 @@ const HELP = `
 downloadx — download manager CLI
 
 Usage:
-  downloadx add --url <url> [--path <dir>] [--speed <bytes>]   Add and start a download
+  downloadx add --url <url> [--path <dir>]              Add and start a download
   downloadx list                                          List all downloads
   downloadx status --id <#|id> [--json]                  Detailed status for a download
   downloadx pause  --id <#|id> | --all                   Pause one or all downloads
