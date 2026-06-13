@@ -149,7 +149,7 @@ Create a manager. Config fields:
 ### `Download` methods
 
 - `start()` / `pause()` / `cancel()` / `clear()`
-- `speedLimit(bytesPerSec)` — 0 disables the cap live
+- `setSpeedLimit(bytesPerSec)` — 0 disables the cap live
 - `alloc()` — pre-allocate the part file to its final size (automatic at
   start when `io.truncate` is provided)
 - `getChunkSnapshots()` — the exact state persisted to disk
@@ -249,21 +249,21 @@ npm install -g @downloadx/cli
 Keeps downloads running in the background via a daemon that talks over a Unix socket:
 
 ```
-downloadx add <url> [--path <dir>]               Add and start a download
+downloadx add --url <url> [--path <dir>]          Add and start a download
 downloadx list                                    List all downloads
-downloadx status <#|id> [--json]                  Detailed status for a download
-downloadx pause  <#|id> [--all]                   Pause one or all downloads
-downloadx resume <#|id> [--all]                   Resume one or all downloads (works for errored downloads too)
-downloadx restart <#|id> [--force] [--all]        Restart from scratch, keeps list position
-downloadx cancel <#|id> [--all]                   Cancel one or all downloads
-downloadx clear  <#|id> [--force]                 Remove from list (confirms if incomplete)
+downloadx status --id <#|id> [--json]             Detailed status for a download
+downloadx pause  --id <#|id> | --all              Pause one or all downloads
+downloadx resume --id <#|id> | --all              Resume one or all downloads
+downloadx restart --id <#|id> [--force] | --all   Restart from scratch, keeps list position
+downloadx cancel --id <#|id> | --all              Cancel one or all downloads
+downloadx clear  --id <#|id> [--force]            Remove from list (confirms if incomplete)
 downloadx clear  --all [--force]                  Remove all (confirms incomplete ones)
 downloadx clear  --completed                      Remove only completed downloads
 downloadx watch [--simple|--json]                 Live progress view
 downloadx stop                                    Shut down the daemon
 
 downloadx set <key> <value> [--id <#|id>]         Set a config value
-downloadx get [key]                               Get one or all config values
+downloadx get [key] [--id <#|id>]                 Get one or all config values
 ```
 
 `<#>` refers to the index shown by `list` (e.g. `1`, `2`, `#1`, `#2`).
@@ -294,16 +294,16 @@ Config is stored in `~/.local/share/downloadx/config.json` and applied live with
 | `minChunkSize` | `1mb` | Minimum chunk size before splitting stops. Accepts `500kb`, `1mb`, etc. Takes effect on the next split decision |
 | `journal` | `true` | Write an NDJSON diagnostic log (`.downloadx.log`) next to each download. Takes effect on the next diagnostic event |
 
-Per-download overrides (via `--id`): `speedLimit`, `targetPath`.
-`cachePath` is fixed at download creation time and cannot be changed per-download.
+Per-download overrides (via `--id`): `speedLimit`, `targetPath`, `targetChunkCount`, `minChunkSize`, `journal`.
 
 ```bash
 downloadx set maxParallel 5
 downloadx set speedLimit 3mb
 downloadx set targetPath ~/Downloads
-downloadx set speedLimit 1mb --id 2   # limit only download #2
-downloadx get                          # show all config values
-downloadx get speedLimit               # show one value
+downloadx set speedLimit 1mb --id 2        # limit only download #2
+downloadx get                               # show all config values
+downloadx get speedLimit                    # show one value
+downloadx get speedLimit --id 2            # per-download override value
 ```
 
 ## Development

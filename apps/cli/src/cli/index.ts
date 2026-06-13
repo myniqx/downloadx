@@ -9,16 +9,16 @@ const HELP = `
 downloadx — download manager CLI
 
 Usage:
-  downloadx add <url> [--path <dir>] [--speed <bytes>]   Add and start a download
+  downloadx add --url <url> [--path <dir>] [--speed <bytes>]   Add and start a download
   downloadx list                                          List all downloads
-  downloadx status <#|id> [--json]                       Detailed status for a download
-  downloadx pause   <#|id> [--all]                       Pause one or all downloads
-  downloadx resume  <#|id> [--all]                       Resume one or all downloads
-  downloadx restart <#|id> [--force] | --all [--force]   Restart from scratch, confirms before deleting .part files
-  downloadx cancel  <#|id> [--all]                       Cancel one or all downloads
-  downloadx clear   <#|id> [--force]                     Remove from list (confirms if incomplete)
-  downloadx clear   --all [--force]                      Remove all (confirms incomplete ones)
-  downloadx clear   --completed                          Remove only completed downloads
+  downloadx status --id <#|id> [--json]                  Detailed status for a download
+  downloadx pause  --id <#|id> | --all                   Pause one or all downloads
+  downloadx resume --id <#|id> | --all                   Resume one or all downloads
+  downloadx restart --id <#|id> [--force] | --all        Restart from scratch
+  downloadx cancel --id <#|id> | --all                   Cancel one or all downloads
+  downloadx clear  --id <#|id> [--force]                 Remove from list (confirms if incomplete)
+  downloadx clear  --all [--force]                       Remove all (confirms incomplete ones)
+  downloadx clear  --completed                           Remove only completed downloads
   downloadx watch [--simple|--json]                      Live progress view
   downloadx stop                                         Shut down the daemon
 
@@ -35,15 +35,44 @@ function cliError(msg: string): never {
   process.exit(1);
 }
 
+function makeArgParser(args: string[]) {
+  function argBoolean(flag: string): boolean {
+    return args.includes(flag);
+  }
+
+  function argString(flag: string): string | undefined {
+    const idx = args.indexOf(flag);
+    if (idx === -1) return undefined;
+    const val = args[idx + 1];
+    if (!val || val.startsWith('--')) cliError(`${flag} requires a value`);
+    return val;
+  }
+
+  const positional = args.filter((a, i) => {
+    if (a.startsWith('--')) return false;
+    const prev = args[i - 1];
+    return !prev?.startsWith('--');
+  });
+
+  return { argBoolean, argString, positional };
+}
+
 export async function runCli(argv: string[]): Promise<void> {
   const [cmd, ...args] = argv;
+  const { argBoolean, argString, positional } = makeArgParser(args);
+
+  const all       = argBoolean('--all');
+  const force     = argBoolean('--force');
+  const completed = argBoolean('--completed');
+  const json      = argBoolean('--json');
+  const simple    = argBoolean('--simple');
+  const overlayId = argString('--id');
 
   switch (cmd) {
     case 'add': {
-      const url = args.find((a) => !a.startsWith('--'));
-      const pathIdx = args.indexOf('--path');
-      const targetPath = pathIdx !== -1 ? args[pathIdx + 1] : undefined;
-      if (!url) cliError('URL required. Usage: downloadx add <url> [--path <dir>]');
+      const url        = argString('--url');
+      const targetPath = argString('--path');
+      if (!url) cliError('Usage: downloadx add --url <url> [--path <dir>]');
       try { await cmdAdd(url, targetPath); }
       catch (e) { cliError(`Could not add download: ${e instanceof Error ? e.message : e}`); }
       break;
@@ -54,83 +83,62 @@ export async function runCli(argv: string[]): Promise<void> {
       break;
     }
     case 'pause': {
-      const all = args.includes('--all');
-      const id = args.find((a) => !a.startsWith('--'));
-      if (!all && !id) cliError('Usage: downloadx pause <#|id> [--all]');
-      try { await cmdPause(all ? 'all' : id!); }
+      if (!all && !overlayId) cliError('Usage: downloadx pause --id <#|id> | --all');
+      try { await cmdPause(all ? 'all' : overlayId!); }
       catch (e) { cliError(`Could not pause: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'resume': {
-      const all = args.includes('--all');
-      const id = args.find((a) => !a.startsWith('--'));
-      if (!all && !id) cliError('Usage: downloadx resume <#|id> [--all]');
-      try { await cmdResume(all ? 'all' : id!); }
+      if (!all && !overlayId) cliError('Usage: downloadx resume --id <#|id> | --all');
+      try { await cmdResume(all ? 'all' : overlayId!); }
       catch (e) { cliError(`Could not resume: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'restart': {
-      const all = args.includes('--all');
-      const force = args.includes('--force');
-      const id = args.find((a) => !a.startsWith('--'));
-      if (!all && !id) cliError('Usage: downloadx restart <#|id> [--force] | --all [--force]');
-      try { await cmdRestart(all ? '' : id!, { force, all }); }
+      if (!all && !overlayId) cliError('Usage: downloadx restart --id <#|id> [--force] | --all');
+      try { await cmdRestart(all ? '' : overlayId!, { force, all }); }
       catch (e) { cliError(`Could not restart: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'cancel': {
-      const all = args.includes('--all');
-      const id = args.find((a) => !a.startsWith('--'));
-      if (!all && !id) cliError('Usage: downloadx cancel <#|id> [--all]');
-      try { await cmdCancel(all ? 'all' : id!); }
+      if (!all && !overlayId) cliError('Usage: downloadx cancel --id <#|id> | --all');
+      try { await cmdCancel(all ? 'all' : overlayId!); }
       catch (e) { cliError(`Could not cancel: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'clear': {
-      const force = args.includes('--force');
-      const completed = args.includes('--completed');
-      const all = args.includes('--all') || args[0] === 'all';
-      const target = args.find((a) => !a.startsWith('--')) ?? '';
-      if (!all && !completed && !target) cliError('Usage: downloadx clear <#|id> [--force] | --all [--force] | --completed');
-      try { await cmdClear(target, { force, completed, all }); }
+      if (!all && !completed && !overlayId) cliError('Usage: downloadx clear --id <#|id> [--force] | --all [--force] | --completed');
+      try { await cmdClear(overlayId ?? '', { force, completed, all }); }
       catch (e) { cliError(`Could not clear: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'status': {
-      const id = args.find((a) => !a.startsWith('--'));
-      if (!id) cliError('Usage: downloadx status <#|id> [--json]');
-      try { await cmdStatus(id, args.includes('--json')); }
+      if (!overlayId) cliError('Usage: downloadx status --id <#|id> [--json]');
+      try { await cmdStatus(overlayId, json); }
       catch (e) { cliError(`Could not get status: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'watch': {
-      const simple = args.includes('--simple');
-      try { await cmdWatch(simple, args.includes('--json')); }
+      try { await cmdWatch(simple, json); }
       catch (e) { cliError(`Watch failed: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'set': {
-      const idIdx = args.indexOf('--id');
-      const id = idIdx !== -1 ? args[idIdx + 1] : undefined;
-      if (idIdx !== -1 && !id) cliError('--id requires a value');
-      const key = args.find((a) => !a.startsWith('--') && a !== id);
-      const value = args.filter((a) => !a.startsWith('--') && a !== id && a !== key)[0];
+      const key   = positional[0];
+      const value = positional[1];
       try {
         await ensureDaemon();
-        const result = await sendRequest<string | null>({ cmd: 'set', key, value, ...(id ? { id } : {}) });
+        const result = await sendRequest<string | null>({ cmd: 'set', key, value, ...(overlayId ? { id: overlayId } : {}) });
         if (result) console.log(result);
-        else if (key && value) console.log(`Set ${key} = ${value}${id ? ` for download ${id}` : ''}`);
+        else if (key && value) console.log(`Set ${key} = ${value}${overlayId ? ` for download ${overlayId}` : ''}`);
       } catch (e) { cliError(`${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'get': {
-      const idIdx = args.indexOf('--id');
-      const id = idIdx !== -1 ? args[idIdx + 1] : undefined;
-      if (idIdx !== -1 && !id) cliError('--id requires a value');
-      const key = args.find((a) => !a.startsWith('--') && a !== id);
+      const key = positional[0];
       try {
         await ensureDaemon();
-        const result = await sendRequest({ cmd: 'get', key, ...(id ? { id } : {}) });
+        const result = await sendRequest({ cmd: 'get', key, ...(overlayId ? { id: overlayId } : {}) });
         if (key) {
           console.log(`${key} = ${result}`);
         } else {
