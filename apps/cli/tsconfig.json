@@ -4,9 +4,6 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./src",
-
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -32,6 +29,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist"]
 }
