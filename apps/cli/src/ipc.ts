@@ -16,21 +16,19 @@ export interface DownloadEntry {
 // Requests
 
 export interface AddRequest       { cmd: 'add';    url: string; targetPath?: string }
-export interface StartRequest     { cmd: 'start';  id: string }
 export interface PauseRequest     { cmd: 'pause';  id: string }
 export interface ResumeRequest    { cmd: 'resume'; id: string }
 export interface CancelRequest    { cmd: 'cancel'; id: string }
 export interface ClearRequest     { cmd: 'clear';  id: string }
 export interface ListRequest      { cmd: 'list' }
-export interface DescribeRequest  { cmd: 'describe'; id: string }
+export interface StatusRequest    { cmd: 'status'; id: string }
 export interface WatchRequest     { cmd: 'watch' }
-export interface UnwatchRequest   { cmd: 'unwatch' }
 export interface ShutdownRequest  { cmd: 'shutdown' }
 
 export type IpcRequest =
-  | AddRequest | StartRequest | PauseRequest | ResumeRequest
-  | CancelRequest | ClearRequest | ListRequest | DescribeRequest
-  | WatchRequest | UnwatchRequest | ShutdownRequest;
+  | AddRequest | PauseRequest | ResumeRequest
+  | CancelRequest | ClearRequest | ListRequest | StatusRequest
+  | WatchRequest | ShutdownRequest;
 
 // Responses
 

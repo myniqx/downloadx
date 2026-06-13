@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SOCKET_PATH, PID_FILE, LOG_FILE, DOWNLOADS_DIR, IPC_DELIMITER, DATA_DIR } from '../constants.ts';
 import type { IpcRequest, IpcResponse, IpcEvent, DownloadEntry } from '../ipc.ts';
-import { loadState, getDownloads } from './store.ts';
+import { loadState, getDownloads, resolveDownload, getAllIds } from './store.ts';
 import {
   addDownload, pauseDownload, resumeDownload, cancelDownload, clearDownload,
   addEventSink, removeEventSink, restoreDownloads, onAutoShutdown, describeDownload,
@@ -20,6 +20,17 @@ function send(socket: Socket, msg: IpcResponse | IpcEvent): void {
   socket.write(JSON.stringify(msg) + IPC_DELIMITER);
 }
 
+function resolveId(raw: string): string {
+  if (raw === 'all') return raw;
+  const entry = resolveDownload(raw);
+  if (!entry) throw new Error(`No download matching '${raw}'`);
+  return entry.id;
+}
+
+async function runForIds(ids: string[], fn: (id: string) => Promise<void>): Promise<void> {
+  await Promise.all(ids.map(fn));
+}
+
 async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
   switch (req.cmd) {
     case 'add': {
@@ -33,27 +44,34 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       send(socket, { ok: true, data: getDownloads() } satisfies IpcResponse<DownloadEntry[]>);
       break;
     }
-    case 'describe': {
-      send(socket, { ok: true, data: describeDownload(req.id) });
+    case 'status': {
+      const resolved = resolveId(req.id);
+      const entry = resolveDownload(resolved);
+      const desc = describeDownload(resolved);
+      send(socket, { ok: true, data: { ...desc, targetPath: entry?.targetPath ?? '' } });
       break;
     }
     case 'pause': {
-      await pauseDownload(req.id);
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, pauseDownload);
       send(socket, { ok: true, data: null });
       break;
     }
     case 'resume': {
-      await resumeDownload(req.id);
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, resumeDownload);
       send(socket, { ok: true, data: null });
       break;
     }
     case 'cancel': {
-      await cancelDownload(req.id);
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, cancelDownload);
       send(socket, { ok: true, data: null });
       break;
     }
     case 'clear': {
-      await clearDownload(req.id);
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, clearDownload);
       send(socket, { ok: true, data: null });
       break;
     }
@@ -64,18 +82,14 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       send(socket, { ok: true, data: null });
       break;
     }
-    case 'unwatch': {
-      send(socket, { ok: true, data: null });
-      break;
-    }
     case 'shutdown': {
       send(socket, { ok: true, data: null });
       setTimeout(() => process.exit(0), 200);
       break;
     }
-    case 'start': {
-      await resumeDownload(req.id);
-      send(socket, { ok: true, data: null });
+    default: {
+      const cmd = (req as { cmd: string }).cmd;
+      send(socket, { ok: false, error: `Unknown command: ${cmd}` });
       break;
     }
   }

@@ -9,10 +9,15 @@ interface State {
 
 let state: State = { downloads: [] };
 
+function sortByAddedAt(): void {
+  state.downloads.sort((a, b) => a.addedAt - b.addedAt);
+}
+
 export async function loadState(): Promise<void> {
   try {
     const raw = await readFile(STATE_FILE, 'utf8');
     state = JSON.parse(raw) as State;
+    sortByAddedAt();
   } catch {
     state = { downloads: [] };
   }
@@ -31,10 +36,22 @@ export function getDownload(id: string): DownloadEntry | undefined {
   return state.downloads.find((d) => d.id === id);
 }
 
+// Resolves "#1", "1" (1-based index) or a full UUID to the stored entry.
+export function resolveDownload(idOrIndex: string): DownloadEntry | undefined {
+  const n = /^#?(\d+)$/.exec(idOrIndex);
+  if (n) return state.downloads[Number(n[1]) - 1];
+  return state.downloads.find((d) => d.id === idOrIndex || d.id.startsWith(idOrIndex));
+}
+
+export function getAllIds(): string[] {
+  return state.downloads.map((d) => d.id);
+}
+
 export async function upsertDownload(entry: DownloadEntry): Promise<void> {
   const idx = state.downloads.findIndex((d) => d.id === entry.id);
   if (idx === -1) {
     state.downloads.push(entry);
+    sortByAddedAt();
   } else {
     state.downloads[idx] = entry;
   }

@@ -13,3 +13,4 @@ export const DOWNLOADS_DIR = join(DATA_DIR, 'downloads');
 export const IPC_DELIMITER = '\n';
 export const DAEMON_STARTUP_TIMEOUT_MS = 5_000;
 export const DAEMON_STARTUP_POLL_MS = 100;
+export const IPC_REQUEST_TIMEOUT_MS = 10_000;

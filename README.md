@@ -13,8 +13,8 @@ This repository is a Bun monorepo containing two packages:
 
 | Package | Path | Description |
 |---------|------|-------------|
-| `downloadx` | `apps/downloadx` | The core library (npm package). |
-| `downloadx-cli` | `apps/cli` | A daemon-based CLI built on the library (Unix-socket IPC, live TUI, NDJSON streaming). |
+| [`@downloadx/core`](https://npmjs.com/package/@downloadx/core) | `apps/downloadx` | The core library (npm package). |
+| [`@downloadx/cli`](https://npmjs.com/package/@downloadx/cli) | `apps/cli` | A daemon-based CLI built on the library (Unix-socket IPC, live TUI, NDJSON streaming). |
 
 ## Features
 
@@ -52,7 +52,11 @@ This repository is a Bun monorepo containing two packages:
 ## Install
 
 ```bash
-npm install downloadx
+# Core library
+npm install @downloadx/core
+
+# CLI (global)
+npm install -g @downloadx/cli
 ```
 
 ## Quick start (Node)
@@ -60,7 +64,7 @@ npm install downloadx
 ```ts
 import { appendFile, mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createDownloadX } from 'downloadx';
+import { createDownloadX } from '@downloadx/core';
 
 // Open for random-access writing without ever truncating: 'r+' needs the
 // file to exist, 'wx' creates it atomically and fails (instead of
@@ -236,19 +240,26 @@ from the freed range, bounded by `targetChunkCount`.
 
 ## CLI
 
-`apps/cli` ships a daemon-based CLI (`downloadx`) that keeps downloads
-running in the background and talks to them over a Unix socket:
+Install once, then use the `downloadx` command anywhere:
+
+```bash
+npm install -g @downloadx/cli
+```
+
+Keeps downloads running in the background via a daemon that talks over a Unix socket:
 
 ```
-downloadx add <url> [--path <dir>]   Add and start a download
-downloadx list                        List all downloads
-downloadx status <id> [--json]        Detailed status report for a download
-downloadx pause <id>                  Pause a download
-downloadx resume <id>                 Resume a download
-downloadx cancel <id>                 Cancel a download
-downloadx clear <id>                  Remove a download from list
-downloadx watch [--simple|--json]     Live progress view (--json = NDJSON stream)
-downloadx stop                        Shut down the daemon
+downloadx add <url> [--path <dir>]        Add and start a download
+downloadx list                             List all downloads
+downloadx status <#|id> [--json]          Detailed status for a download
+downloadx pause  <#|id|all>               Pause one or all downloads
+downloadx resume <#|id|all>               Resume one or all downloads
+downloadx cancel <#|id|all>               Cancel one or all downloads
+downloadx clear  <#|id|all>               Remove one or all from list
+downloadx watch [--simple|--json]         Live progress view
+downloadx stop                            Shut down the daemon
+
+<#> refers to the index shown by 'list' (e.g. 1, 2, #1, #2)
 ```
 
 `watch --json` emits one self-contained JSON event per line (progress, chunk

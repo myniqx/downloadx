@@ -9,16 +9,23 @@ const HELP = `
 downloadx — download manager CLI
 
 Usage:
-  downloadx add <url> [--path <dir>]   Add and start a download
-  downloadx list                        List all downloads
-  downloadx status <id> [--json]        Detailed status report for a download
-  downloadx pause <id>                  Pause a download
-  downloadx resume <id>                 Resume a download
-  downloadx cancel <id>                 Cancel a download
-  downloadx clear <id>                  Remove a download from list
-  downloadx watch [--simple|--json]     Live progress view (--json = NDJSON stream)
-  downloadx stop                        Shut down the daemon
+  downloadx add <url> [--path <dir>]        Add and start a download
+  downloadx list                             List all downloads
+  downloadx status <#|id> [--json]          Detailed status for a download
+  downloadx pause  <#|id|all>               Pause one or all downloads
+  downloadx resume <#|id|all>               Resume one or all downloads
+  downloadx cancel <#|id|all>               Cancel one or all downloads
+  downloadx clear  <#|id|all>               Remove one or all from list
+  downloadx watch [--simple|--json]         Live progress view
+  downloadx stop                            Shut down the daemon
+
+  <#> refers to the index shown by 'list' (e.g. 1, 2, #1, #2)
 `.trim();
+
+function cliError(msg: string): never {
+  console.error(`error: ${msg}`);
+  process.exit(1);
+}
 
 export async function runCli(argv: string[]): Promise<void> {
   const [cmd, ...args] = argv;
@@ -28,49 +35,59 @@ export async function runCli(argv: string[]): Promise<void> {
       const url = args.find((a) => !a.startsWith('--'));
       const pathIdx = args.indexOf('--path');
       const targetPath = pathIdx !== -1 ? args[pathIdx + 1] : undefined;
-      if (!url) { console.error('Usage: downloadx add <url> [--path <dir>]'); process.exit(1); }
-      await cmdAdd(url, targetPath);
+      if (!url) cliError('URL required. Usage: downloadx add <url> [--path <dir>]');
+      try { await cmdAdd(url, targetPath); }
+      catch (e) { cliError(`Could not add download: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'list': {
-      await cmdList();
+      try { await cmdList(); }
+      catch (e) { cliError(`Could not list downloads: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'pause': {
-      if (!args[0]) { console.error('Usage: downloadx pause <id>'); process.exit(1); }
-      await cmdPause(args[0]);
+      if (!args[0]) cliError('Usage: downloadx pause <#|id|all>');
+      try { await cmdPause(args[0]); }
+      catch (e) { cliError(`Could not pause: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'resume': {
-      if (!args[0]) { console.error('Usage: downloadx resume <id>'); process.exit(1); }
-      await cmdResume(args[0]);
+      if (!args[0]) cliError('Usage: downloadx resume <#|id|all>');
+      try { await cmdResume(args[0]); }
+      catch (e) { cliError(`Could not resume: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'cancel': {
-      if (!args[0]) { console.error('Usage: downloadx cancel <id>'); process.exit(1); }
-      await cmdCancel(args[0]);
+      if (!args[0]) cliError('Usage: downloadx cancel <#|id|all>');
+      try { await cmdCancel(args[0]); }
+      catch (e) { cliError(`Could not cancel: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'clear': {
-      if (!args[0]) { console.error('Usage: downloadx clear <id>'); process.exit(1); }
-      await cmdClear(args[0]);
+      if (!args[0]) cliError('Usage: downloadx clear <#|id|all>');
+      try { await cmdClear(args[0]); }
+      catch (e) { cliError(`Could not clear: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'status': {
       const id = args.find((a) => !a.startsWith('--'));
-      if (!id) { console.error('Usage: downloadx status <id> [--json]'); process.exit(1); }
-      await cmdStatus(id, args.includes('--json'));
+      if (!id) cliError('Usage: downloadx status <#|id> [--json]');
+      try { await cmdStatus(id, args.includes('--json')); }
+      catch (e) { cliError(`Could not get status: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'watch': {
       const simple = args.includes('--simple');
-      await cmdWatch(simple, args.includes('--json'));
+      try { await cmdWatch(simple, args.includes('--json')); }
+      catch (e) { cliError(`Watch failed: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     case 'stop': {
-      await ensureDaemon();
-      await sendRequest({ cmd: 'shutdown' });
-      console.log('Daemon stopped.');
+      try {
+        await ensureDaemon();
+        await sendRequest({ cmd: 'shutdown' });
+        console.log('Daemon stopped.');
+      } catch (e) { cliError(`Could not stop daemon: ${e instanceof Error ? e.message : e}`); }
       break;
     }
     default: {

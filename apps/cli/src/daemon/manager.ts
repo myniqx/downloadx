@@ -10,7 +10,7 @@ import {
   type DownloadCompletedPayload,
   type DownloadErrorPayload,
   type DiagnosticPayload,
-} from 'downloadx';
+} from '@downloadx/core';
 import type { DownloadEntry, IpcEvent } from '../ipc.ts';
 import { DOWNLOADS_DIR } from '../constants.ts';
 import { upsertDownload, removeDownload, getDownload } from './store.ts';
@@ -175,8 +175,25 @@ function attachListeners(id: string, dl: Download): void {
 
 export function describeDownload(id: string): DownloadDescription {
   const dl = dlRefs.get(id);
-  if (!dl) throw new Error(`Download ${id} not active`);
-  return dl.describe();
+  if (dl) return dl.describe();
+  const entry = getDownload(id);
+  if (!entry) throw new Error(`Download ${id} not found`);
+  return {
+    id: entry.id,
+    url: entry.url,
+    filename: entry.filename ?? '',
+    state: entry.status as DownloadDescription['state'],
+    totalBytes: entry.totalBytes ?? null,
+    downloadedBytes: entry.downloadedBytes,
+    percent: entry.totalBytes ? Math.round((entry.downloadedBytes / entry.totalBytes) * 100) : null,
+    totalSpeedBps: 0,
+    etaMs: null,
+    elapsedMs: entry.completedAt ? entry.completedAt - entry.addedAt : Date.now() - entry.addedAt,
+    activeChunks: 0,
+    totalChunks: 0,
+    chunks: [],
+    recentDiagnostics: [],
+  };
 }
 
 export async function addDownload(id: string, url: string, targetPath: string): Promise<DownloadEntry> {
