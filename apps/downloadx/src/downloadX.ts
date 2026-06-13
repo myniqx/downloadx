@@ -160,6 +160,68 @@ export class DownloadX {
     return this._cachePath;
   }
 
+  /** Upper bound on live chunks per download; takes effect on the next split decision.
+   *  Only updates downloads that still carry the old global value; pass `override` to force all. */
+  setTargetChunkCount(n: number, override = false): void {
+    const old = this.baseConfig.targetChunkCount ?? DEFAULT_CONFIG.targetChunkCount;
+    this.baseConfig.targetChunkCount = n;
+    for (const dl of this.downloads.values()) {
+      if (override || dl.targetChunkCount === old) dl.setTargetChunkCount(n);
+    }
+  }
+
+  get targetChunkCount(): number {
+    return this.baseConfig.targetChunkCount ?? DEFAULT_CONFIG.targetChunkCount;
+  }
+
+  /** Minimum bytes remaining before a chunk can be split; takes effect on the next split decision.
+   *  Only updates downloads that still carry the old global value; pass `override` to force all. */
+  setMinChunkSize(bytes: number, override = false): void {
+    const old = this.baseConfig.minChunkSize ?? DEFAULT_CONFIG.minChunkSize;
+    this.baseConfig.minChunkSize = bytes;
+    for (const dl of this.downloads.values()) {
+      if (override || dl.minChunkSize === old) dl.setMinChunkSize(bytes);
+    }
+  }
+
+  get minChunkSize(): number {
+    return this.baseConfig.minChunkSize ?? DEFAULT_CONFIG.minChunkSize;
+  }
+
+  /** Toggle NDJSON journal writing; takes effect on the next diagnostic event.
+   *  Only updates downloads that still carry the old global value; pass `override` to force all. */
+  setJournal(enabled: boolean, override = false): void {
+    const old = this.baseConfig.journal ?? false;
+    this.baseConfig.journal = enabled;
+    for (const dl of this.downloads.values()) {
+      if (override || dl.journal === old) dl.setJournal(enabled);
+    }
+  }
+
+  get journal(): boolean {
+    return this.baseConfig.journal ?? false;
+  }
+
+  /** Returns the current effective global config — live values from setters, not the frozen constructor input. */
+  getConfig(): Required<Omit<DownloadXConfig, 'io' | 'headers'>> & { headers: Record<string, string> } {
+    return {
+      targetPath: this._targetPath,
+      cachePath: this._cachePath,
+      maxParallel: this._maxParallel,
+      speedLimit: this.sharedThrottle.capacityBytesPerSec,
+      targetChunkCount: this.baseConfig.targetChunkCount ?? DEFAULT_CONFIG.targetChunkCount,
+      minChunkSize: this.baseConfig.minChunkSize ?? DEFAULT_CONFIG.minChunkSize,
+      maxRetries: this.baseConfig.maxRetries ?? DEFAULT_CONFIG.maxRetries,
+      retryDelay: this.baseConfig.retryDelay ?? DEFAULT_CONFIG.retryDelay,
+      retryBackoff: this.baseConfig.retryBackoff ?? DEFAULT_CONFIG.retryBackoff,
+      speedSampleWindow: this.baseConfig.speedSampleWindow ?? DEFAULT_CONFIG.speedSampleWindow,
+      requestTimeout: this.baseConfig.requestTimeout ?? DEFAULT_CONFIG.requestTimeout,
+      chunkMode: this.baseConfig.chunkMode ?? DEFAULT_CONFIG.chunkMode,
+      journal: this.baseConfig.journal ?? false,
+      headers: this.baseConfig.headers ?? {},
+    };
+  }
+
   private enqueue(download: Download): void {
     if (download.state === 'completed' || download.state === 'downloading') return;
     if (this.queue.includes(download)) return;

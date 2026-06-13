@@ -141,6 +141,24 @@ completion.
 12. **Chunk ids come from `chunkSeq`** (monotonic), never from array length —
     array length reuses ids after restructuring.
 
+### Configuration mutability rule
+
+A config field must be either **constructor-only** or **fully live** — never
+in between:
+
+- **Constructor-only**: the value is consumed once (e.g. initial chunk
+  planning, sidecar paths) and cannot be meaningfully changed mid-download.
+  Accept it only in the constructor / `DownloadXConfig`. Do not add a setter.
+- **Fully live**: the value is read on every decision point (e.g. per-chunk
+  split logic, throttle capacity). It must be accepted in the constructor
+  **and** exposed via a `setX()` method on both `Download` and `DownloadX`.
+  The CLI `set` command must also support it.
+
+If you are unsure, grep for every read site of the field. If all reads happen
+after a single initialisation moment (probe, meta load, `planChunks`) it is
+constructor-only. If any read happens inside the drive loop or a recurring
+callback it is fully live and needs a setter.
+
 ### Code style and typing
 
 - TypeScript `strict` plus `noUncheckedIndexedAccess` and

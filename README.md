@@ -290,6 +290,9 @@ Config is stored in `~/.local/share/downloadx/config.json` and applied live with
 | `speedLimit` | `0` | Global speed cap shared by all downloads. `0` = unlimited. Accepts `500kb`, `3mb`, `1.5gb` or raw bytes |
 | `targetPath` | `~/.local/share/downloadx/downloads` | Default directory for completed files |
 | `cachePath` | `~/.local/share/downloadx/cache` | Directory for in-progress `.part` files |
+| `targetChunkCount` | `4` | Target number of parallel chunks per download. Takes effect on the next split decision for active downloads |
+| `minChunkSize` | `1mb` | Minimum chunk size before splitting stops. Accepts `500kb`, `1mb`, etc. Takes effect on the next split decision |
+| `journal` | `true` | Write an NDJSON diagnostic log (`.downloadx.log`) next to each download. Takes effect on the next diagnostic event |
 
 Per-download overrides (via `--id`): `speedLimit`, `targetPath`.
 `cachePath` is fixed at download creation time and cannot be changed per-download.

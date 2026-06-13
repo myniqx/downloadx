@@ -14,7 +14,7 @@ export const META_EXT = '.downloadx.json' as const;
 export const TEMP_EXT = '.downloadx.part' as const;
 
 /** Current meta-file schema version. Bump when breaking persisted shape. */
-export const META_SCHEMA_VERSION = 1 as const;
+export const META_SCHEMA_VERSION = 2 as const;
 
 /** Config defaults applied when a field is omitted by the consumer. */
 export const DEFAULT_CONFIG = {

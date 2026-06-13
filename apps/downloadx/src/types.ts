@@ -249,7 +249,7 @@ export interface ProbeResult {
 
 /** JSON shape persisted as `{filename}.downloadx.json`. */
 export interface MetaFile {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: number;
   readonly id: string;
   readonly url: string;
   readonly finalUrl: string;
@@ -263,6 +263,10 @@ export interface MetaFile {
   updatedAt: number;
   state: DownloadState;
   chunks: ChunkSnapshot[];
+  /** Per-download user preference overrides. null = use global config value. */
+  speedLimit: number | null;
+  targetChunkCount: number | null;
+  targetPath: string | null;
 }
 
 // ---------------------------------------------------------------------------

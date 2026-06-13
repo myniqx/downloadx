@@ -57,6 +57,9 @@ export function createMeta(input: CreateMetaInput): MetaFile {
     updatedAt: ts,
     state: 'idle',
     chunks: input.chunks,
+    speedLimit: null,
+    targetChunkCount: null,
+    targetPath: null,
   };
 }
 
@@ -104,10 +107,13 @@ export async function deleteMeta(
 /** Updates an existing meta object in place and returns it for chaining. */
 export function updateMeta(
   meta: MetaFile,
-  patch: Partial<Pick<MetaFile, 'state' | 'chunks'>>,
+  patch: Partial<Pick<MetaFile, 'state' | 'chunks' | 'speedLimit' | 'targetChunkCount' | 'targetPath'>>,
 ): MetaFile {
   if (patch.state !== undefined) meta.state = patch.state;
   if (patch.chunks !== undefined) meta.chunks = patch.chunks;
+  if ('speedLimit' in patch) meta.speedLimit = patch.speedLimit ?? null;
+  if ('targetChunkCount' in patch) meta.targetChunkCount = patch.targetChunkCount ?? null;
+  if ('targetPath' in patch) meta.targetPath = patch.targetPath ?? null;
   meta.updatedAt = Date.now();
   return meta;
 }
@@ -158,6 +164,9 @@ function validate(value: unknown): MetaFile {
   assertString(v, 'state');
   if (!Array.isArray(v['chunks'])) throw new Error('meta: chunks must be array');
   const chunks = v['chunks'].map((c, i) => validateChunk(c, i));
+  assertNullableNumber(v, 'speedLimit');
+  assertNullableNumber(v, 'targetChunkCount');
+  assertNullableString(v, 'targetPath');
   return { ...(v as unknown as MetaFile), chunks };
 }
 

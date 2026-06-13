@@ -21,10 +21,13 @@ function send(socket: Socket, msg: IpcResponse | IpcEvent): void {
 }
 
 const CONFIG_KEY_DESCRIPTIONS: Record<string, string> = {
-  maxParallel: 'Max concurrent downloads (number, e.g. 3)',
-  speedLimit:  'Speed limit, 0 = unlimited. Accepts: 500kb, 3mb, 1.5gb or raw bytes',
-  targetPath:  'Directory for completed files (e.g. /home/user/Downloads)',
-  cachePath:   'Directory for in-progress .part files (e.g. /tmp/downloadx-cache)',
+  maxParallel:      'Max concurrent downloads (number, e.g. 3)',
+  speedLimit:       'Speed limit, 0 = unlimited. Accepts: 500kb, 3mb, 1.5gb or raw bytes',
+  targetPath:       'Directory for completed files (e.g. /home/user/Downloads)',
+  cachePath:        'Directory for in-progress .part files (e.g. /tmp/downloadx-cache)',
+  targetChunkCount: 'Target number of parallel chunks per download (number, e.g. 4)',
+  minChunkSize:     'Minimum chunk size before splitting stops. Accepts: 500kb, 1mb (default: 1mb)',
+  journal:          'Write NDJSON diagnostic log next to each download (true or false)',
 };
 
 const PER_DOWNLOAD_KEY_OVERRIDES: Record<string, string> = {

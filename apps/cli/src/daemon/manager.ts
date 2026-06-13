@@ -80,8 +80,9 @@ function getManager(): DownloadXInstance {
     targetPath: cfg.targetPath,
     cachePath: cfg.cachePath,
     maxParallel: cfg.maxParallel,
-    targetChunkCount: 4,
-    journal: true,
+    targetChunkCount: cfg.targetChunkCount,
+    minChunkSize: cfg.minChunkSize,
+    journal: cfg.journal,
     ...(cfg.speedLimit > 0 ? { speedLimit: cfg.speedLimit } : {}),
   });
   return manager;
@@ -94,6 +95,9 @@ export function applyConfig(): void {
   manager.setTargetPath(cfg.targetPath);
   manager.setCachePath(cfg.cachePath);
   manager.setSpeedLimit(cfg.speedLimit);
+  manager.setTargetChunkCount(cfg.targetChunkCount);
+  manager.setMinChunkSize(cfg.minChunkSize);
+  manager.setJournal(cfg.journal);
 }
 
 const dlRefs = new Map<string, Download>();
@@ -219,6 +223,13 @@ export async function addDownload(id: string, url: string, targetPath: string | 
   return entry;
 }
 
+function entryOptions(entry: DownloadEntry) {
+  return {
+    id: entry.id,
+    ...(entry.speedLimit !== null ? { speedLimit: entry.speedLimit } : {}),
+  };
+}
+
 export async function pauseDownload(id: string): Promise<void> {
   const dl = dlRefs.get(id);
   if (!dl) throw new Error(`Download ${id} not active`);
@@ -230,7 +241,7 @@ export async function resumeDownload(id: string): Promise<void> {
   if (!entry) throw new Error(`Download ${id} not found`);
   const mgr = getManager();
   const existing = dlRefs.get(id);
-  const dl = existing ?? mgr.addUrl(entry.url, { id });
+  const dl = existing ?? mgr.addUrl(entry.url, entryOptions(entry));
   if (!existing) {
     dlRefs.set(id, dl);
     attachListeners(id, dl);
@@ -288,13 +299,13 @@ export async function restoreDownloads(entries: DownloadEntry[]): Promise<void> 
       await upsertDownload({ ...entry, cachePath: getConfig().cachePath });
     }
     if (entry.status === 'downloading' || entry.status === 'queued') {
-      const dl = mgr.addUrl(entry.url, { id: entry.id });
+      const dl = mgr.addUrl(entry.url, entryOptions(entry));
       dlRefs.set(entry.id, dl);
       attachListeners(entry.id, dl);
       activeCount++;
       void dl.start();
     } else if (entry.status === 'paused') {
-      const dl = mgr.addUrl(entry.url, { id: entry.id });
+      const dl = mgr.addUrl(entry.url, entryOptions(entry));
       dlRefs.set(entry.id, dl);
       attachListeners(entry.id, dl);
     }

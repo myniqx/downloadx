@@ -14,6 +14,9 @@ const DEFAULT_CONFIG: DaemonConfig = {
   speedLimit: 0,
   targetPath: DOWNLOADS_DIR,
   cachePath: CACHE_DIR,
+  targetChunkCount: 4,
+  minChunkSize: 1024 * 1024,
+  journal: true,
 };
 
 let config: DaemonConfig = { ...DEFAULT_CONFIG };
@@ -36,7 +39,7 @@ export async function saveConfig(): Promise<void> {
   await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
 }
 
-const VALID_KEYS = new Set<keyof DaemonConfig>(['maxParallel', 'speedLimit', 'targetPath', 'cachePath']);
+const VALID_KEYS = new Set<keyof DaemonConfig>(['maxParallel', 'speedLimit', 'targetPath', 'cachePath', 'targetChunkCount', 'minChunkSize', 'journal']);
 const KEY_MAP: Record<string, keyof DaemonConfig> = Object.fromEntries(
   [...VALID_KEYS].map((k) => [k.toLowerCase(), k])
 );
@@ -57,15 +60,24 @@ export function setConfigKey(key: string, value: string): void {
   const canonical = KEY_MAP[key.toLowerCase()];
   if (!canonical) throw new Error(`Unknown config key '${key}'. Valid keys: ${[...VALID_KEYS].join(', ')}`);
   key = canonical;
+  const c = config as unknown as Record<string, unknown>;
   if (key === 'maxParallel') {
     const n = Number(value);
     if (!Number.isInteger(n) || n < 1) throw new Error(`'maxParallel' must be a positive integer`);
-    (config as unknown as Record<string, unknown>)[key] = n;
+    c[key] = n;
   } else if (key === 'speedLimit') {
-    const n = value === '0' ? 0 : parseSpeed(value);
-    (config as unknown as Record<string, unknown>)[key] = n;
+    c[key] = value === '0' ? 0 : parseSpeed(value);
+  } else if (key === 'targetChunkCount') {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1) throw new Error(`'targetChunkCount' must be a positive integer`);
+    c[key] = n;
+  } else if (key === 'minChunkSize') {
+    c[key] = parseSpeed(value);
+  } else if (key === 'journal') {
+    if (value !== 'true' && value !== 'false') throw new Error(`'journal' must be 'true' or 'false'`);
+    c[key] = value === 'true';
   } else {
-    (config as unknown as Record<string, unknown>)[key] = value;
+    c[key] = value;
   }
 }
 

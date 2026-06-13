@@ -32,6 +32,9 @@ export interface DaemonConfig {
   speedLimit: number;
   targetPath: string;
   cachePath: string;
+  targetChunkCount: number;
+  minChunkSize: number;
+  journal: boolean;
 }
 
 // Requests

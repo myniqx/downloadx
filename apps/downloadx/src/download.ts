@@ -189,9 +189,56 @@ export class Download {
     }
   }
 
-  /** Change the speed limit mid-download. 0 = unlimited. */
-  speedLimit(bytesPerSec: number): void {
-    this.throttle.setCapacity(bytesPerSec);
+  /** Change the speed limit mid-download. 0 = unlimited. null clears the per-download override. */
+  setSpeedLimit(bytesPerSec: number | null): void {
+    const effective = bytesPerSec ?? 0;
+    this.throttle.setCapacity(effective);
+    if (this._meta !== null) this._meta.speedLimit = bytesPerSec;
+  }
+  get speedLimitOverride(): number | null { return this._meta?.speedLimit ?? null; }
+
+  /** Upper bound on live chunks; takes effect on the next split decision. */
+  setTargetChunkCount(n: number | null): void {
+    this.config.targetChunkCount = n ?? this.config.targetChunkCount;
+    if (this._meta !== null) this._meta.targetChunkCount = n;
+  }
+  get targetChunkCount(): number { return this.config.targetChunkCount; }
+
+  /** Override the target directory for this download's final file. null clears the override. */
+  setTargetPath(path: string | null): void {
+    if (path !== null) this.config.targetPath = path;
+    if (this._meta !== null) this._meta.targetPath = path;
+  }
+  get targetPathOverride(): string | null { return this._meta?.targetPath ?? null; }
+
+  /** Minimum bytes remaining before a chunk can be split; takes effect on the next split decision. */
+  setMinChunkSize(bytes: number): void { this.config.minChunkSize = bytes; }
+  get minChunkSize(): number { return this.config.minChunkSize; }
+
+  /** Toggle NDJSON journal writing; takes effect on the next diagnostic event. */
+  setJournal(enabled: boolean): void { this.config.journal = enabled; }
+  get journal(): boolean { return this.config.journal === true; }
+
+  /** Returns the current effective config for this download — overrides applied on top of global values. */
+  getConfig() {
+    return {
+      targetPath: this.config.targetPath,
+      targetChunkCount: this.config.targetChunkCount,
+      minChunkSize: this.config.minChunkSize,
+      maxRetries: this.config.maxRetries,
+      retryDelay: this.config.retryDelay,
+      retryBackoff: this.config.retryBackoff,
+      speedSampleWindow: this.config.speedSampleWindow,
+      requestTimeout: this.config.requestTimeout,
+      journal: this.config.journal === true,
+      speedLimit: this.throttle.capacityBytesPerSec,
+      /** null = no per-download override, global value is in effect */
+      overrides: {
+        speedLimit: this._meta?.speedLimit ?? null,
+        targetChunkCount: this._meta?.targetChunkCount ?? null,
+        targetPath: this._meta?.targetPath ?? null,
+      },
+    };
   }
 
   /**
@@ -391,6 +438,9 @@ export class Download {
     const existing = forceFresh ? null : await loadMeta(this.config.io, locator);
     if (existing !== null && canResumeAgainst(existing, this._probe)) {
       this._meta = existing;
+      if (existing.speedLimit !== null) this.throttle.setCapacity(existing.speedLimit);
+      if (existing.targetChunkCount !== null) this.config.targetChunkCount = existing.targetChunkCount;
+      if (existing.targetPath !== null) this.config.targetPath = existing.targetPath;
       return;
     }
     // Fresh meta — throw away any partial file, we can't trust it.
