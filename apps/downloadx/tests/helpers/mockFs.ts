@@ -1,9 +1,12 @@
 import type {
+  AppendFileFn,
   ExistsFn,
+  FileSizeFn,
   JoinPathFn,
   MkdirFn,
   ReadFileFn,
   RenameFn,
+  TruncateFn,
   UnlinkFn,
   WriteChunkFn,
   WriteFileFn,
@@ -76,6 +79,32 @@ export class MockFs {
     this.files.delete(path);
   };
 
+  readonly truncate: TruncateFn = async (path, size) => {
+    const existing = this.files.get(path);
+    if (existing !== undefined && existing.length === size) return;
+    const next = new Uint8Array(size);
+    if (existing !== undefined) next.set(existing.subarray(0, Math.min(existing.length, size)), 0);
+    this.files.set(path, next);
+  };
+
+  readonly appendFile: AppendFileFn = async (path, buffer) => {
+    const existing = this.files.get(path);
+    if (existing === undefined) {
+      this.files.set(path, new Uint8Array(buffer));
+      return;
+    }
+    const next = new Uint8Array(existing.length + buffer.length);
+    next.set(existing, 0);
+    next.set(buffer, existing.length);
+    this.files.set(path, next);
+  };
+
+  readonly fileSize: FileSizeFn = async (path) => {
+    const buf = this.files.get(path);
+    if (buf === undefined) throw new Error(`MockFs: not found: ${path}`);
+    return buf.length;
+  };
+
   // Test inspection helpers — not part of the InjectedFunctions surface.
   peek(path: string): Uint8Array | undefined {
     const b = this.files.get(path);
@@ -103,6 +132,9 @@ export class MockFs {
     rename: RenameFn;
     unlink: UnlinkFn;
     joinPath: JoinPathFn;
+    truncate: TruncateFn;
+    appendFile: AppendFileFn;
+    fileSize: FileSizeFn;
   } {
     return {
       mkdir: this.mkdir,
@@ -113,6 +145,9 @@ export class MockFs {
       rename: this.rename,
       unlink: this.unlink,
       joinPath: this.joinPath,
+      truncate: this.truncate,
+      appendFile: this.appendFile,
+      fileSize: this.fileSize,
     };
   }
 }

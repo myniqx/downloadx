@@ -1,6 +1,11 @@
-import { QUALITY_POOR_RATIO, QUALITY_STALLED_RATIO, QUALITY_WARMUP_MS } from './constants.js';
+import {
+  QUALITY_POOR_RATIO,
+  QUALITY_STALLED_RATIO,
+  QUALITY_WARMUP_MS,
+  UNKNOWN_SIZE_LENGTH,
+} from './constants.js';
 import { TypedEventEmitter } from './events.js';
-import { HttpStatusError, withRetry } from './retry.js';
+import { HttpStatusError, RangeNotHonoredError, withRetry } from './retry.js';
 import { SpeedTracker } from './speedTracker.js';
 import type {
   ChunkLifecyclePayload,
@@ -24,17 +29,21 @@ export interface ChunkParams {
   /** Bytes already written from a previous session (resume). */
   initialDownloadedBytes: number;
   acceptsRanges: boolean;
+  /** Validators sent as `If-Range` so a changed resource can't be spliced into stale bytes. */
+  etag?: string | null;
+  lastModified?: string | null;
   headers: Record<string, string>;
   maxRetries: number;
   retryDelay: number;
   retryBackoff: number;
   speedSampleWindow: number;
+  /** Network IDLE timeout (ms): aborts the attempt when no bytes arrive for this long. */
   requestTimeout?: number;
   fetch: FetchFn;
   writeChunk: WriteChunkFn;
   emitter: TypedEventEmitter<DownloadEventMap>;
   /** Optional throttle hook — called with bytes-just-read before write. */
-  throttle?: (bytes: number) => Promise<void>;
+  throttle?: (bytes: number, signal?: AbortSignal) => Promise<void>;
   /** Reference speed for quality classification (bytes/sec). */
   medianSpeedRef: () => number;
   /** Clock, overridable for deterministic tests. */
@@ -66,6 +75,8 @@ export class Chunk {
   private _quality: ChunkQuality = 'good';
   private _retries = 0;
   private _lastError: string | undefined;
+  /** Set when the failure carries scheduling meaning for the Download. */
+  private _failureCode: 'range-not-honored' | null = null;
 
   private readonly tracker: SpeedTracker;
   private abortController: AbortController | null = null;
@@ -105,6 +116,14 @@ export class Chunk {
 
   get speedTracker(): SpeedTracker {
     return this.tracker;
+  }
+
+  get failureCode(): 'range-not-honored' | null {
+    return this._failureCode;
+  }
+
+  get lastError(): string | undefined {
+    return this._lastError;
   }
 
   snapshot(): ChunkSnapshot {
@@ -159,6 +178,16 @@ export class Chunk {
   }
 
   /**
+   * Aborts the current attempt so the retry loop reissues the request from
+   * the bytes already written. Used for stall recovery — the abort reason is
+   * a plain Error (not AbortError), which the retry loop treats as transient.
+   */
+  restart(reason: string): void {
+    if (this._status !== 'downloading') return;
+    this.abortController?.abort(new Error(`restart: ${reason}`));
+  }
+
+  /**
    * Runs the download. Resolves when the chunk completes, fails permanently,
    * or is paused / reassigned (in which case status reflects the reason).
    */
@@ -173,8 +202,7 @@ export class Chunk {
 
     try {
       await withRetry(
-        async (attempt) => {
-          this._retries = attempt;
+        async () => {
           await this.executeOnce();
         },
         {
@@ -182,7 +210,17 @@ export class Chunk {
           retryDelay: this.params.retryDelay,
           retryBackoff: this.params.retryBackoff,
           onRetry: (info) => {
+            this._retries += 1;
             this._lastError = toMessage(info.error);
+            this.params.emitter.emit('diagnostic', {
+              downloadId: this.downloadId,
+              chunkId: this.id,
+              level: 'warn',
+              code: 'chunk-retry',
+              message: `retry #${this._retries} in ${info.delayMs}ms: ${this._lastError}`,
+              timestamp: this.now(),
+              data: { attempt: info.attempt, delayMs: info.delayMs },
+            });
           },
         },
       );
@@ -191,6 +229,7 @@ export class Chunk {
       }
     } catch (err) {
       if (this._status === 'paused' || this._status === 'reassigned') return;
+      if (err instanceof RangeNotHonoredError) this._failureCode = 'range-not-honored';
       this._lastError = toMessage(err);
       this.setStatus('failed');
       this.params.emitter.emit('error', {
@@ -205,56 +244,119 @@ export class Chunk {
   private async executeOnce(): Promise<void> {
     this.abortController = new AbortController();
     const controller = this.abortController;
-    const timeoutTimer = this.params.requestTimeout !== undefined
-      ? setTimeout(() => controller.abort(new Error('Request timeout')), this.params.requestTimeout)
-      : null;
+
+    // Servers without range support always send the body from byte zero, so
+    // partial progress cannot be resumed — discard it before re-requesting,
+    // otherwise start-of-file bytes get written into the middle of the file.
+    if (!this.params.acceptsRanges && this._downloadedBytes > 0) {
+      this.params.emitter.emit('diagnostic', {
+        downloadId: this.downloadId,
+        chunkId: this.id,
+        level: 'info',
+        code: 'no-range-restart',
+        message: `server lacks range support — restarting chunk from byte 0 (discarding ${this._downloadedBytes} bytes)`,
+        timestamp: this.now(),
+      });
+      this._downloadedBytes = 0;
+    }
+
+    // Idle timer: armed only while waiting on the network, so slow disks or
+    // throttle waits can't trip it, and long downloads run as long as data
+    // keeps arriving.
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearIdle = (): void => {
+      if (idleTimer !== null) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+    };
+    const armIdle = (): void => {
+      const ms = this.params.requestTimeout;
+      if (ms === undefined) return;
+      clearIdle();
+      idleTimer = setTimeout(
+        () => controller.abort(new Error(`idle timeout: no data received for ${ms}ms`)),
+        ms,
+      );
+    };
 
     try {
       const rangeStart = this.offset + this._downloadedBytes;
-      const rangeEnd = this.offset + this._length - 1;
       const headers: Record<string, string> = { ...this.params.headers };
+      let rangeSent = false;
+      const openEnded = this._length === UNKNOWN_SIZE_LENGTH;
       if (this.params.acceptsRanges) {
-        headers.Range = `bytes=${rangeStart}-${rangeEnd}`;
+        headers.Range = openEnded
+          ? `bytes=${rangeStart}-`
+          : `bytes=${rangeStart}-${this.offset + this._length - 1}`;
+        rangeSent = true;
+        const validator = this.params.etag ?? this.params.lastModified;
+        if (validator !== undefined && validator !== null) {
+          headers['If-Range'] = validator;
+        }
       }
+      armIdle();
       const res = await this.params.fetch(this.params.url, {
         method: 'GET',
         headers,
         signal: controller.signal,
       });
+      clearIdle();
       if (!res.ok) {
         throw new HttpStatusError(res.status, res.statusText);
       }
-      await this.consumeBody(res);
+      // A 200 on a ranged request means the server (or an If-Range mismatch)
+      // ignored the range — consuming it would write the whole file at this
+      // chunk's offset. The only safe 200 is an open-ended request from 0,
+      // where the full body is byte-identical to what we asked for.
+      if (rangeSent && res.status !== 206 && !(openEnded && rangeStart === 0)) {
+        throw new RangeNotHonoredError();
+      }
+      await this.consumeBody(res, controller.signal, armIdle, clearIdle);
     } finally {
-      if (timeoutTimer !== null) clearTimeout(timeoutTimer);
+      clearIdle();
     }
   }
 
-  private async consumeBody(res: FetchResponse): Promise<void> {
+  private async consumeBody(
+    res: FetchResponse,
+    signal: AbortSignal,
+    armIdle: () => void,
+    clearIdle: () => void,
+  ): Promise<void> {
     if (res.body === null) {
       // No stream — read whole body. Acceptable fallback for tiny chunks.
-      const buf = new Uint8Array(await res.arrayBuffer());
+      armIdle();
+      const buf = this.clampToRemaining(new Uint8Array(await res.arrayBuffer()));
+      clearIdle();
       if (buf.length > 0) await this.writeBytes(buf);
       return;
     }
     const reader = res.body.getReader();
     try {
       while (true) {
+        armIdle();
         const { done, value } = await reader.read();
+        clearIdle();
         if (done) break;
-        if (value && value.length > 0) {
-          if (this.params.throttle) await this.params.throttle(value.length);
-          await this.writeBytes(value);
-          // Status may have flipped during await (pause / reassign) — bail out
-          // so we don't keep writing a stale stream.
-          if (this._status !== 'downloading') {
-            try {
-              await reader.cancel();
-            } catch {
-              /* ignore */
-            }
-            return;
+        if (value === undefined || value.length === 0) continue;
+        // Never write past our end: a split may have shrunk `_length` while
+        // this stream was in flight, and a misbehaving server may send more
+        // than the requested range.
+        const slice = this.clampToRemaining(value);
+        if (slice.length > 0) {
+          if (this.params.throttle) await this.params.throttle(slice.length, signal);
+          await this.writeBytes(slice);
+        }
+        // Stop once our (possibly shrunk) range is fully written, or when
+        // status flipped during an await (pause / reassign).
+        if (this._downloadedBytes >= this._length || this._status !== 'downloading') {
+          try {
+            await reader.cancel();
+          } catch {
+            /* ignore */
           }
+          return;
         }
       }
     } finally {
@@ -264,6 +366,13 @@ export class Chunk {
         /* ignore */
       }
     }
+  }
+
+  /** Slice `buf` so the write cannot exceed this chunk's current length. */
+  private clampToRemaining(buf: Uint8Array): Uint8Array {
+    const remaining = this._length - this._downloadedBytes;
+    if (remaining <= 0) return buf.subarray(0, 0);
+    return buf.length > remaining ? buf.subarray(0, remaining) : buf;
   }
 
   private async writeBytes(buf: Uint8Array): Promise<void> {

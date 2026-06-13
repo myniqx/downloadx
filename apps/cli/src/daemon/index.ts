@@ -2,12 +2,12 @@ import { createServer, type Socket } from 'node:net';
 import { mkdir, unlink, writeFile, appendFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { SOCKET_PATH, PID_FILE, LOG_FILE, DOWNLOADS_DIR, IPC_DELIMITER, DATA_DIR } from '../constants.ts';
+import { SOCKET_PATH, PID_FILE, LOG_FILE, IPC_DELIMITER, DATA_DIR } from '../constants.ts';
 import type { IpcRequest, IpcResponse, IpcEvent, DownloadEntry } from '../ipc.ts';
-import { loadState, getDownloads } from './store.ts';
+import { loadState, loadConfig, getDownloads, resolveDownload, getAllIds, getConfigKey, setConfigKey, saveConfig, upsertDownload, parseSpeed } from './store.ts';
 import {
-  addDownload, pauseDownload, resumeDownload, cancelDownload, clearDownload,
-  addEventSink, removeEventSink, restoreDownloads, onAutoShutdown,
+  addDownload, pauseDownload, resumeDownload, restartDownload, cancelDownload, clearDownload,
+  addEventSink, removeEventSink, restoreDownloads, onAutoShutdown, describeDownload, applyConfig,
 } from './manager.ts';
 
 async function log(msg: string): Promise<void> {
@@ -20,12 +20,37 @@ function send(socket: Socket, msg: IpcResponse | IpcEvent): void {
   socket.write(JSON.stringify(msg) + IPC_DELIMITER);
 }
 
+const CONFIG_KEY_DESCRIPTIONS: Record<string, string> = {
+  maxParallel: 'Max concurrent downloads (number, e.g. 3)',
+  speedLimit:  'Speed limit, 0 = unlimited. Accepts: 500kb, 3mb, 1.5gb or raw bytes',
+  targetPath:  'Directory for completed files (e.g. /home/user/Downloads)',
+  cachePath:   'Directory for in-progress .part files (e.g. /tmp/downloadx-cache)',
+};
+
+const PER_DOWNLOAD_KEY_OVERRIDES: Record<string, string> = {
+  targetPath: 'Target directory for this download when it completes',
+};
+
+const PER_DOWNLOAD_KEYS = Object.fromEntries(
+  ['speedLimit', 'targetPath'].map((k) => [k, PER_DOWNLOAD_KEY_OVERRIDES[k] ?? CONFIG_KEY_DESCRIPTIONS[k]!])
+);
+
+function resolveId(raw: string): string {
+  if (raw === 'all') return raw;
+  const entry = resolveDownload(raw);
+  if (!entry) throw new Error(`No download matching '${raw}'`);
+  return entry.id;
+}
+
+async function runForIds(ids: string[], fn: (id: string) => Promise<void>): Promise<void> {
+  await Promise.all(ids.map(fn));
+}
+
 async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
   switch (req.cmd) {
     case 'add': {
       const id = randomUUID();
-      const targetPath = req.targetPath ?? DOWNLOADS_DIR;
-      const entry = await addDownload(id, req.url, targetPath);
+      const entry = await addDownload(id, req.url, req.targetPath ?? null, req.speedLimit ?? null);
       send(socket, { ok: true, data: entry } satisfies IpcResponse<DownloadEntry>);
       break;
     }
@@ -33,23 +58,40 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       send(socket, { ok: true, data: getDownloads() } satisfies IpcResponse<DownloadEntry[]>);
       break;
     }
+    case 'status': {
+      const resolved = resolveId(req.id);
+      const entry = resolveDownload(resolved);
+      const desc = describeDownload(resolved);
+      send(socket, { ok: true, data: { ...desc, targetPath: entry?.targetPath ?? '' } });
+      break;
+    }
     case 'pause': {
-      await pauseDownload(req.id);
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, pauseDownload);
       send(socket, { ok: true, data: null });
       break;
     }
     case 'resume': {
-      await resumeDownload(req.id);
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, resumeDownload);
+      send(socket, { ok: true, data: null });
+      break;
+    }
+    case 'restart': {
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, restartDownload);
       send(socket, { ok: true, data: null });
       break;
     }
     case 'cancel': {
-      await cancelDownload(req.id);
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, cancelDownload);
       send(socket, { ok: true, data: null });
       break;
     }
     case 'clear': {
-      await clearDownload(req.id);
+      const ids = req.id === 'all' ? getAllIds() : [resolveId(req.id)];
+      await runForIds(ids, clearDownload);
       send(socket, { ok: true, data: null });
       break;
     }
@@ -60,8 +102,50 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       send(socket, { ok: true, data: null });
       break;
     }
-    case 'unwatch': {
+    case 'set': {
+      const activeKeys = req.id ? PER_DOWNLOAD_KEYS : CONFIG_KEY_DESCRIPTIONS;
+      const key = req.key?.toLowerCase();
+
+      if (!key) {
+        const lines = Object.entries(activeKeys)
+          .map(([k, desc]) => `  ${k.padEnd(14)} ${desc}`)
+          .join('\n');
+        send(socket, { ok: true, data: lines });
+        break;
+      }
+
+      if (!req.value) {
+        const desc = activeKeys[key];
+        if (!desc) throw new Error(`Unknown key '${key}'`);
+        send(socket, { ok: true, data: `${key}: ${desc}` });
+        break;
+      }
+
+      if (req.id) {
+        const entry = resolveDownload(resolveId(req.id));
+        if (!entry) throw new Error(`No download matching '${req.id}'`);
+        const canonicalKey = Object.keys(PER_DOWNLOAD_KEYS).find((k) => k.toLowerCase() === key);
+        if (canonicalKey === 'speedLimit') {
+          const n = req.value === '0' ? 0 : parseSpeed(req.value);
+          await upsertDownload({ ...entry, speedLimit: n });
+        } else if (canonicalKey === 'targetPath') {
+          if (entry.status === 'completed') throw new Error(`Cannot change targetPath of a completed download`);
+          await upsertDownload({ ...entry, targetPath: req.value });
+        } else if (key === 'cachepath') {
+          throw new Error(`cachePath cannot be changed after a download is created`);
+        } else {
+          throw new Error(`Unknown per-download key '${key}'. Valid: ${Object.keys(PER_DOWNLOAD_KEYS).join(', ')}`);
+        }
+      } else {
+        setConfigKey(key, req.value);
+        await saveConfig();
+        applyConfig();
+      }
       send(socket, { ok: true, data: null });
+      break;
+    }
+    case 'get': {
+      send(socket, { ok: true, data: getConfigKey(req.key) });
       break;
     }
     case 'shutdown': {
@@ -69,9 +153,9 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       setTimeout(() => process.exit(0), 200);
       break;
     }
-    case 'start': {
-      await resumeDownload(req.id);
-      send(socket, { ok: true, data: null });
+    default: {
+      const cmd = (req as { cmd: string }).cmd;
+      send(socket, { ok: false, error: `Unknown command: ${cmd}` });
       break;
     }
   }
@@ -132,6 +216,7 @@ export async function runDaemon(): Promise<void> {
   process.on('SIGTERM', async () => { await cleanup(); process.exit(0); });
   process.on('SIGINT',  async () => { await cleanup(); process.exit(0); });
 
+  await loadConfig();
   await loadState();
   await writePid();
   await startServer();

@@ -1,10 +1,24 @@
-export type DownloadStatus = 'queued' | 'downloading' | 'paused' | 'completed' | 'failed' | 'cancelled';
+import type {
+  DownloadProgressPayload,
+  ChunkProgressPayload,
+  ChunkLifecyclePayload,
+  DownloadStatePayload,
+  DownloadCompletedPayload,
+  DownloadErrorPayload,
+  DiagnosticPayload,
+} from '@downloadx/core';
+
+import type { DownloadState } from '@downloadx/core';
+
+export type DownloadStatus = DownloadState | 'queued' | 'failed';
 
 export interface DownloadEntry {
   id: string;
   url: string;
   filename: string | null;
-  targetPath: string;
+  targetPath: string | null;
+  cachePath: string;
+  speedLimit: number | null;
   status: DownloadStatus;
   addedAt: number;
   completedAt: number | null;
@@ -13,23 +27,32 @@ export interface DownloadEntry {
   errorMessage: string | null;
 }
 
+export interface DaemonConfig {
+  maxParallel: number;
+  speedLimit: number;
+  targetPath: string;
+  cachePath: string;
+}
+
 // Requests
 
-export interface AddRequest       { cmd: 'add';    url: string; targetPath?: string }
-export interface StartRequest     { cmd: 'start';  id: string }
-export interface PauseRequest     { cmd: 'pause';  id: string }
-export interface ResumeRequest    { cmd: 'resume'; id: string }
-export interface CancelRequest    { cmd: 'cancel'; id: string }
-export interface ClearRequest     { cmd: 'clear';  id: string }
-export interface ListRequest      { cmd: 'list' }
-export interface WatchRequest     { cmd: 'watch' }
-export interface UnwatchRequest   { cmd: 'unwatch' }
-export interface ShutdownRequest  { cmd: 'shutdown' }
+export interface AddRequest      { cmd: 'add';      url: string; targetPath?: string; speedLimit?: number }
+export interface PauseRequest    { cmd: 'pause';    id: string }
+export interface ResumeRequest   { cmd: 'resume';   id: string }
+export interface RestartRequest  { cmd: 'restart';  id: string }
+export interface CancelRequest   { cmd: 'cancel';   id: string }
+export interface ClearRequest    { cmd: 'clear';    id: string }
+export interface ListRequest     { cmd: 'list' }
+export interface StatusRequest   { cmd: 'status';   id: string }
+export interface WatchRequest    { cmd: 'watch' }
+export interface ShutdownRequest { cmd: 'shutdown' }
+export interface SetRequest      { cmd: 'set';      key?: string | undefined; value?: string | undefined; id?: string | undefined }
+export interface GetRequest      { cmd: 'get';      key?: string | undefined }
 
 export type IpcRequest =
-  | AddRequest | StartRequest | PauseRequest | ResumeRequest
-  | CancelRequest | ClearRequest | ListRequest | WatchRequest
-  | UnwatchRequest | ShutdownRequest;
+  | AddRequest | PauseRequest | ResumeRequest | RestartRequest
+  | CancelRequest | ClearRequest | ListRequest | StatusRequest
+  | WatchRequest | ShutdownRequest | SetRequest | GetRequest;
 
 // Responses
 
@@ -39,54 +62,38 @@ export type IpcResponse<T = unknown> = OkResponse<T> | ErrorResponse;
 
 // Events (pushed to watch subscribers)
 
-export interface ProgressEvent {
+export interface ProgressEvent extends DownloadProgressPayload {
   event: 'progress';
-  id: string;
-  downloadedBytes: number;
-  totalBytes: number | null;
-  totalSpeed: number;
-  activeChunks: number;
-  percent: number | null;
 }
 
-export interface ChunkProgressEvent {
+export interface ChunkProgressEvent extends ChunkProgressPayload {
   event: 'chunkProgress';
-  id: string;
-  chunkId: string;
-  offset: number;
-  length: number;
-  downloadedBytes: number;
-  instantSpeed: number;
-  windowedSpeed: number;
-  quality: 'good' | 'poor' | 'stalled';
 }
 
-export interface StateChangeEvent {
+export interface ChunkLifecycleEvent extends ChunkLifecyclePayload {
+  event: 'chunkLifecycle';
+}
+
+export interface StateChangeEvent extends DownloadStatePayload {
   event: 'stateChange';
-  id: string;
-  previous: DownloadStatus;
-  current: DownloadStatus;
 }
 
-export interface CompletedEvent {
+export interface CompletedEvent extends DownloadCompletedPayload {
   event: 'completed';
-  id: string;
-  filename: string;
-  totalBytes: number;
-  durationMs: number;
 }
 
-export interface ErrorEvent {
+export interface ErrorEvent extends Omit<DownloadErrorPayload, 'error'> {
   event: 'error';
-  id: string;
-  chunkId: string | null;
   message: string;
-  fatal: boolean;
+}
+
+export interface DiagnosticEvent extends DiagnosticPayload {
+  event: 'diagnostic';
 }
 
 export type IpcEvent =
-  | ProgressEvent | ChunkProgressEvent | StateChangeEvent
-  | CompletedEvent | ErrorEvent;
+  | ProgressEvent | ChunkProgressEvent | ChunkLifecycleEvent | StateChangeEvent
+  | CompletedEvent | ErrorEvent | DiagnosticEvent;
 
 // Wire format: every line on the socket is one of these
 export type IpcMessage = IpcRequest | IpcResponse | IpcEvent;

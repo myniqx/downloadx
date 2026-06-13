@@ -37,6 +37,19 @@ export class HttpStatusError extends Error {
 }
 
 /**
+ * Thrown when a Range request came back `200 OK` instead of `206 Partial
+ * Content` — the server ignored the Range header. Retrying won't help; the
+ * download must fall back to a single full-body request. Status 200 is in
+ * neither retry set, so the retry loop fails fast.
+ */
+export class RangeNotHonoredError extends HttpStatusError {
+  constructor() {
+    super(200, 'OK', 'Server ignored Range header (HTTP 200 instead of 206)');
+    this.name = 'RangeNotHonoredError';
+  }
+}
+
+/**
  * Runs `execute` with retry-on-failure. Retries only transient errors:
  *
  *   - network errors (anything thrown that is NOT an {@link HttpStatusError})

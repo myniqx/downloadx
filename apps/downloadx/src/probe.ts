@@ -85,7 +85,7 @@ async function tryRangeGet(opts: ProbeOptions): Promise<ProbeRaw> {
   return raw;
 }
 
-function extract(url: string, res: { status: number; headers: { get(n: string): string | null } }): ProbeRaw {
+function extract(url: string, res: { status: number; headers: { get(n: string): string | null }; url?: string }): ProbeRaw {
   const contentLength = parseIntHeader(res.headers.get('content-length'));
   const contentRange = res.headers.get('content-range');
   const totalSize = contentRange ? parseContentRangeTotal(contentRange) : contentLength;
@@ -95,7 +95,9 @@ function extract(url: string, res: { status: number; headers: { get(n: string): 
 
   return {
     status: res.status,
-    finalUrl: url,
+    // Post-redirect URL when the fetch implementation exposes it — chunk
+    // requests then skip the redirect chain entirely.
+    finalUrl: typeof res.url === 'string' && res.url.length > 0 ? res.url : url,
     totalSize,
     acceptsRanges,
     etag: res.headers.get('etag'),

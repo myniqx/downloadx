@@ -1,3 +1,5 @@
+import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { ensureDaemon, sendRequest } from '../client.ts';
 import type { DownloadEntry } from '../../ipc.ts';
 
@@ -10,6 +12,8 @@ const STATUS_COLOR: Record<string, string> = {
   cancelled:   '\x1b[90m',
 };
 const RESET = '\x1b[0m';
+const GREEN = '\x1b[32m';
+const RED   = '\x1b[31m';
 
 function fmtBytes(n: number | null): string {
   if (n === null) return '?';
@@ -17,6 +21,10 @@ function fmtBytes(n: number | null): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)} KB`;
   return `${n} B`;
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try { await stat(p); return true; } catch { return false; }
 }
 
 export async function cmdList(): Promise<void> {
@@ -28,11 +36,23 @@ export async function cmdList(): Promise<void> {
     return;
   }
 
-  for (const d of downloads) {
+  const indexWidth = String(downloads.length).length;
+  for (let i = 0; i < downloads.length; i++) {
+    const d = downloads[i]!;
     const color = STATUS_COLOR[d.status] ?? '';
-    const pct = d.totalBytes ? `${((d.downloadedBytes / d.totalBytes) * 100).toFixed(1)}%` : '?%';
-    const size = `${fmtBytes(d.downloadedBytes)} / ${fmtBytes(d.totalBytes)}`;
-    const name = d.filename ?? d.url;
-    console.log(`${color}[${d.status.toUpperCase().padEnd(11)}]${RESET} ${d.id.slice(0, 8)}  ${pct.padStart(6)}  ${size.padStart(18)}  ${name}`);
+    const idx = `#${String(i + 1).padStart(indexWidth)}`;
+
+    if (d.status === 'completed' && d.filename && d.targetPath) {
+      const fullPath = join(d.targetPath, d.filename);
+      const exists = await fileExists(fullPath);
+      const icon = exists ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
+      const deleted = exists ? '' : '  (deleted)';
+      console.log(`${color}${idx} [${d.status.toUpperCase().padEnd(11)}]${RESET}  ${fmtBytes(d.totalBytes)}  ${icon} ${fullPath}${deleted}`);
+    } else {
+      const pct = d.totalBytes ? `${((d.downloadedBytes / d.totalBytes) * 100).toFixed(1)}%` : '?%';
+      const size = `${fmtBytes(d.downloadedBytes)} / ${fmtBytes(d.totalBytes)}`;
+      const name = d.filename ?? d.url;
+      console.log(`${color}${idx} [${d.status.toUpperCase().padEnd(11)}]${RESET}  ${pct.padStart(6)}  ${size.padStart(18)}  ${name}`);
+    }
   }
 }
