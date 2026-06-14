@@ -1,6 +1,6 @@
 {
   "name": "@downloadx/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Daemon-based CLI for downloadx — parallel chunked downloads via Unix socket IPC.",
   "keywords": [
     "cli",
