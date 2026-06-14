@@ -12,6 +12,9 @@ NDJSON stream suitable for scripts and LLM/agent consumers.
 > Need the library itself (to embed downloads in your own app)? See
 > [`@downloadx/core`](https://npmjs.com/package/@downloadx/core).
 
+> **Platform:** Linux and macOS only. The daemon relies on Unix domain sockets
+> and is not supported on Windows.
+
 ## Install
 
 ```bash

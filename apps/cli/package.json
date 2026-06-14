@@ -7,7 +7,17 @@
     "daemon",
     "download",
     "download-manager",
-    "parallel-download"
+    "parallel-download",
+    "chunked-download",
+    "resume",
+    "unix-socket",
+    "ipc",
+    "tui",
+    "ndjson",
+    "agent",
+    "background",
+    "speed-limit",
+    "node"
   ],
   "homepage": "https://myniqx.dev/projects/downloadx",
   "bugs": {
@@ -17,14 +27,15 @@
   "author": "myniqx",
   "repository": {
     "type": "git",
-    "url": "https://github.com/myniqx/downloadx.git",
+    "url": "git+https://github.com/myniqx/downloadx.git",
     "directory": "apps/cli"
   },
   "bin": {
-    "downloadx": "./dist/cli.js"
+    "downloadx": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist/cli.js",
+    "README.md"
   ],
   "type": "module",
   "publishConfig": {
