@@ -165,6 +165,9 @@ export interface DownloadOptions {
   /** Override filename. Defaults to one inferred from URL / Content-Disposition. */
   filename?: string;
 
+  /** Override target directory for this download's final file. Defaults to manager's targetPath. */
+  targetPath?: string;
+
   /** Override chunk mode for this download. */
   chunkMode?: ChunkMode;
 

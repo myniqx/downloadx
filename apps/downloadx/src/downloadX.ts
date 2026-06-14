@@ -185,10 +185,6 @@ export class DownloadX implements GlobalConfig {
     return this._targetPath;
   }
 
-  setCachePath(path: string): void {
-    this._cachePath = path;
-  }
-
   get cachePath(): string {
     return this._cachePath;
   }

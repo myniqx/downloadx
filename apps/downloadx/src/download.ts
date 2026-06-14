@@ -113,6 +113,7 @@ export class Download implements GlobalConfig {
       initialMeta.state = this._state;
     } else {
       this._meta = createEmptyMeta({ id, url });
+      if (options.targetPath !== undefined) this._meta.targetPath = options.targetPath;
     }
     this.emitter.on('chunkLifecycle', (payload) => {
       if (

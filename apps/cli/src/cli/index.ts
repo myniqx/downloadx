@@ -25,7 +25,7 @@ Usage:
   downloadx set <key> <value> [--id <#|id>] [--override]  Set a config value (--override forces all downloads)
   downloadx get [key] [--id <#|id>]                      Get one or all config values
 
-  Config keys: maxParallel, speedLimit, targetPath, cachePath, targetChunkCount, minChunkSize, journal
+  Config keys: maxParallel, speedLimit, targetPath, targetChunkCount, minChunkSize, journal
   Per-download keys (--id): speedLimit, targetPath, targetChunkCount, minChunkSize, journal
   <#> refers to the index shown by 'list' (e.g. 1, 2, #1, #2)
 `.trim();

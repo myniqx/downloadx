@@ -51,6 +51,8 @@ export function makeHarness(overrides: HarnessOverrides = {}): TestHarness {
     io,
     targetPath: overrides.targetPath ?? '/dl',
     cachePath: overrides.cachePath ?? '/dl',
+    maxParallel: overrides.maxParallel ?? 3,
+    speedLimit: overrides.speedLimit ?? 0,
     targetChunkCount: overrides.targetChunkCount ?? 4,
     minChunkSize: overrides.minChunkSize ?? 16,
     maxRetries: overrides.maxRetries ?? 2,

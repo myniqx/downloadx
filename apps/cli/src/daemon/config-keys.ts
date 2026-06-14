@@ -61,21 +61,6 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     },
   },
   {
-    canonical: 'cachePath',
-    description: 'Directory for in-progress .part files (e.g. /tmp/downloadx-cache)',
-    canLocal: false,
-    getValue: (cfg) => cfg.cachePath,
-    setGlobalValue(manager, raw) {
-      manager.setCachePath(raw);
-    },
-    setLocalValue() {
-      throw new Error(`'cachePath' is not a per-download setting`);
-    },
-    parse(raw) {
-      return raw;
-    },
-  },
-  {
     canonical: 'targetChunkCount',
     description: 'Target number of parallel chunks per download (number, e.g. 4)',
     canLocal: true,
