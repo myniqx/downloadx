@@ -336,7 +336,11 @@ export class Download implements GlobalConfig {
     return {
       id: this.id,
       url: this.url,
-      filename: this.filename,
+      filename: this.meta.filename,
+      targetPath: this.meta.targetPath,
+      addedAt: this.meta.addedAt,
+      completedAt: this.meta.completedAt,
+      errorMessage: this.meta.errorMessage,
       state: this._state,
       totalBytes: total,
       downloadedBytes: downloaded,

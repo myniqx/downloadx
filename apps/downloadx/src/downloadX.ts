@@ -150,7 +150,7 @@ export class DownloadX implements GlobalConfig {
   }
 
   list(): Download[] {
-    return Array.from(this.downloads.values());
+    return Array.from(this.downloads.values()).sort((a, b) => a.meta.addedAt - b.meta.addedAt);
   }
 
   /** Compact status reports for every registered download. */

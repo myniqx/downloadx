@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 
-import type { DownloadEntry } from '../../ipc.ts';
+import type { DownloadDescription } from '@downloadx/core';
 import { ensureDaemon, sendRequest } from '../client.ts';
 
 async function confirm(question: string): Promise<boolean> {
@@ -36,11 +36,11 @@ export async function cmdClear(
   opts: { force?: boolean; completed?: boolean; all?: boolean },
 ): Promise<void> {
   await ensureDaemon();
-  const entries = await sendRequest<DownloadEntry[]>({ cmd: 'list' });
+  const entries = await sendRequest<DownloadDescription[]>({ cmd: 'list' });
 
   if (opts.all) {
-    const toDelete = opts.completed ? entries.filter((e) => e.status === 'completed') : entries;
-    const incomplete = toDelete.filter((e) => e.status !== 'completed');
+    const toDelete = opts.completed ? entries.filter((e) => e.state === 'completed') : entries;
+    const incomplete = toDelete.filter((e) => e.state !== 'completed');
 
     if (incomplete.length > 0 && !opts.force) {
       const ok = await confirm(
@@ -58,7 +58,7 @@ export async function cmdClear(
   }
 
   if (opts.completed) {
-    const done = entries.filter((e) => e.status === 'completed');
+    const done = entries.filter((e) => e.state === 'completed');
     await Promise.all(done.map((e) => sendRequest({ cmd: 'clear', id: e.id })));
     console.log(`Cleared ${done.length} completed download(s).`);
     return;
@@ -70,7 +70,7 @@ export async function cmdClear(
   });
   if (!entry) throw new Error(`No download matching '${target}'`);
 
-  if (entry.status !== 'completed' && !opts.force) {
+  if (entry.state !== 'completed' && !opts.force) {
     const ok = await confirm(
       `Download is not finished. Its .part files will be deleted. Continue?`,
     );
@@ -89,7 +89,7 @@ export async function cmdRestart(
   opts: { force?: boolean; all?: boolean },
 ): Promise<void> {
   await ensureDaemon();
-  const entries = await sendRequest<DownloadEntry[]>({ cmd: 'list' });
+  const entries = await sendRequest<DownloadDescription[]>({ cmd: 'list' });
 
   if (opts.all) {
     if (!opts.force) {

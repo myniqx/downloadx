@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { DownloadEntry } from '../../ipc.ts';
+import type { DownloadDescription } from '@downloadx/core';
 import { ensureDaemon, sendRequest } from '../client.ts';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -35,7 +35,7 @@ async function fileExists(p: string): Promise<boolean> {
 
 export async function cmdList(): Promise<void> {
   await ensureDaemon();
-  const downloads = await sendRequest<DownloadEntry[]>({ cmd: 'list' });
+  const downloads = await sendRequest<DownloadDescription[]>({ cmd: 'list' });
 
   if (downloads.length === 0) {
     console.log('No downloads.');
@@ -45,23 +45,23 @@ export async function cmdList(): Promise<void> {
   const indexWidth = String(downloads.length).length;
   for (let i = 0; i < downloads.length; i++) {
     const d = downloads[i]!;
-    const color = STATUS_COLOR[d.status] ?? '';
+    const color = STATUS_COLOR[d.state] ?? '';
     const idx = `#${String(i + 1).padStart(indexWidth)}`;
 
-    if (d.status === 'completed' && d.filename && d.targetPath) {
+    if (d.state === 'completed' && d.filename && d.targetPath) {
       const fullPath = join(d.targetPath, d.filename);
       const exists = await fileExists(fullPath);
       const icon = exists ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
       const deleted = exists ? '' : '  (deleted)';
       console.log(
-        `${color}${idx} [${d.status.toUpperCase().padEnd(11)}]${RESET}  ${fmtBytes(d.totalBytes)}  ${icon} ${fullPath}${deleted}`,
+        `${color}${idx} [${d.state.toUpperCase().padEnd(11)}]${RESET}  ${fmtBytes(d.totalBytes)}  ${icon} ${fullPath}${deleted}`,
       );
     } else {
-      const pct = d.totalBytes ? `${((d.downloadedBytes / d.totalBytes) * 100).toFixed(1)}%` : '?%';
+      const pct = d.percent !== null ? `${d.percent.toFixed(1)}%` : '?%';
       const size = `${fmtBytes(d.downloadedBytes)} / ${fmtBytes(d.totalBytes)}`;
       const name = d.filename ?? d.url;
       console.log(
-        `${color}${idx} [${d.status.toUpperCase().padEnd(11)}]${RESET}  ${pct.padStart(6)}  ${size.padStart(18)}  ${name}`,
+        `${color}${idx} [${d.state.toUpperCase().padEnd(11)}]${RESET}  ${pct.padStart(6)}  ${size.padStart(18)}  ${name}`,
       );
     }
   }

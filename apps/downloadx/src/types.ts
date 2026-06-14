@@ -343,7 +343,11 @@ export interface DiagnosticPayload {
 export interface DownloadDescription {
   id: string;
   url: string;
-  filename: string;
+  filename: string | null;
+  targetPath: string | null;
+  addedAt: number;
+  completedAt: number | null;
+  errorMessage: string | null;
   state: DownloadState;
   totalBytes: number | null;
   downloadedBytes: number;

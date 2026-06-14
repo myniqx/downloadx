@@ -7,21 +7,6 @@ import type {
   DownloadErrorPayload,
   DiagnosticPayload,
 } from '@downloadx/core';
-import type { DownloadState } from '@downloadx/core';
-
-export interface DownloadEntry {
-  id: string;
-  url: string;
-  filename: string | null;
-  targetPath: string | null;
-  status: DownloadState;
-  addedAt: number;
-  completedAt: number | null;
-  totalBytes: number | null;
-  downloadedBytes: number;
-  errorMessage: string | null;
-}
-
 export interface DaemonConfig {
   maxParallel: number;
   speedLimit: number;

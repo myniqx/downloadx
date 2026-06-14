@@ -1,3 +1,5 @@
+import type { GlobalConfig } from '@downloadx/core';
+
 /**
  * Parses a human-friendly size/speed string into bytes.
  * Accepts: `500kb`, `3mb`, `1.5gb`, or raw `1048576`. Case-insensitive.
@@ -26,6 +28,7 @@ export type ConfigKeyDef = {
   description: string;
   canLocal: boolean;
   localDescription?: string;
+  getValue: (cfg: GlobalConfig) => unknown;
   parse: (raw: string) => unknown;
 };
 
@@ -34,6 +37,7 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     canonical: 'maxParallel',
     description: 'Max concurrent downloads (number, e.g. 3)',
     canLocal: false,
+    getValue: (cfg) => cfg.maxParallel,
     parse(raw) {
       const n = Number(raw);
       if (!Number.isInteger(n) || n < 1)
@@ -45,6 +49,7 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     canonical: 'speedLimit',
     description: 'Speed limit, 0 = unlimited. Accepts: 500kb, 3mb, 1.5gb or raw bytes',
     canLocal: true,
+    getValue: (cfg) => cfg.speedLimit,
     parse(raw) {
       return raw === '0' ? 0 : parseSpeed(raw);
     },
@@ -54,6 +59,7 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     description: 'Directory for completed files (e.g. /home/user/Downloads)',
     canLocal: true,
     localDescription: 'Target directory for this download when it completes',
+    getValue: (cfg) => cfg.targetPath,
     parse(raw) {
       return raw;
     },
@@ -62,6 +68,7 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     canonical: 'cachePath',
     description: 'Directory for in-progress .part files (e.g. /tmp/downloadx-cache)',
     canLocal: false,
+    getValue: (cfg) => cfg.cachePath,
     parse(raw) {
       return raw;
     },
@@ -70,6 +77,7 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     canonical: 'targetChunkCount',
     description: 'Target number of parallel chunks per download (number, e.g. 4)',
     canLocal: true,
+    getValue: (cfg) => cfg.targetChunkCount,
     parse(raw) {
       const n = Number(raw);
       if (!Number.isInteger(n) || n < 1)
@@ -81,6 +89,7 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     canonical: 'minChunkSize',
     description: 'Minimum chunk size before splitting stops. Accepts: 500kb, 1mb (default: 1mb)',
     canLocal: true,
+    getValue: (cfg) => cfg.minChunkSize,
     parse(raw) {
       return parseSpeed(raw);
     },
@@ -89,6 +98,7 @@ export const CONFIG_KEYS: ConfigKeyDef[] = [
     canonical: 'journal',
     description: 'Write NDJSON diagnostic log next to each download (true or false)',
     canLocal: true,
+    getValue: (cfg) => cfg.journal,
     parse(raw) {
       if (raw !== 'true' && raw !== 'false') throw new Error(`'journal' must be 'true' or 'false'`);
       return raw === 'true';

@@ -3,7 +3,7 @@ import { createServer, type Socket } from 'node:net';
 import { dirname } from 'node:path';
 
 import { SOCKET_PATH, PID_FILE, LOG_FILE, IPC_DELIMITER, DATA_DIR } from '../constants.ts';
-import type { IpcRequest, IpcResponse, IpcEvent, DownloadEntry } from '../ipc.ts';
+import type { IpcRequest, IpcResponse, IpcEvent } from '../ipc.ts';
 import { CONFIG_KEYS, LOCAL_KEYS, resolveConfigKey } from './config-keys.ts';
 import { loadConfig } from './config.ts';
 import {
@@ -16,7 +16,6 @@ import {
   addEventSink,
   removeEventSink,
   onAutoShutdown,
-  describeDownload,
   setDownloadConfig,
   getDownloadConfig,
   initManager,
@@ -51,19 +50,19 @@ async function runForIds(ids: string[], fn: (id: string) => Promise<void>): Prom
 async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
   switch (req.cmd) {
     case 'add': {
-      const entry = await addDownload(req.url, req.targetPath ?? null);
-      send(socket, { ok: true, data: entry } satisfies IpcResponse<DownloadEntry>);
+      const desc = await addDownload(req.url, req.targetPath ?? null);
+      send(socket, { ok: true, data: desc });
       break;
     }
     case 'list': {
-      send(socket, { ok: true, data: getDownloads() } satisfies IpcResponse<DownloadEntry[]>);
+      send(socket, { ok: true, data: getDownloads() });
       break;
     }
     case 'status': {
       const resolved = resolveId(req.id);
-      const entry = resolveDownload(resolved);
-      const desc = describeDownload(resolved);
-      send(socket, { ok: true, data: { ...desc, targetPath: entry?.targetPath ?? '' } });
+      const desc = resolveDownload(resolved);
+      if (!desc) throw new Error(`Download ${resolved} not found`);
+      send(socket, { ok: true, data: desc });
       break;
     }
     case 'pause': {

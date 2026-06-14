@@ -24,8 +24,8 @@ import {
   type DiagnosticPayload,
 } from '@downloadx/core';
 
-import type { DaemonConfig, DownloadEntry, IpcEvent } from '../ipc.ts';
-import { resolveConfigKey } from './config-keys.ts';
+import type { DaemonConfig, IpcEvent } from '../ipc.ts';
+import { CONFIG_KEY_MAP, resolveConfigKey } from './config-keys.ts';
 import { saveConfig } from './config.ts';
 
 type EventSink = (event: IpcEvent) => void;
@@ -138,15 +138,6 @@ function getManager(): DownloadXInstance {
   return manager;
 }
 
-type GlobalConfigKey =
-  | 'maxParallel'
-  | 'speedLimit'
-  | 'targetPath'
-  | 'cachePath'
-  | 'targetChunkCount'
-  | 'minChunkSize'
-  | 'journal';
-
 export async function setGlobalConfig(
   key: string,
   rawValue: string,
@@ -154,7 +145,7 @@ export async function setGlobalConfig(
 ): Promise<void> {
   const def = resolveConfigKey(key, false);
   const parsed = def.parse(rawValue);
-  const canonical = def.canonical as GlobalConfigKey;
+  const canonical = def.canonical;
   const mgr = getManager();
 
   if (canonical === 'maxParallel') mgr.setMaxParallel(parsed as number);
@@ -165,65 +156,32 @@ export async function setGlobalConfig(
   else if (canonical === 'minChunkSize') mgr.setMinChunkSize(parsed as number, override);
   else if (canonical === 'journal') mgr.setJournal(parsed as boolean, override);
 
-  const cfg = getGlobalConfig() as DaemonConfig;
-  await saveConfig(cfg);
+  await saveConfig(getGlobalConfig() as DaemonConfig);
 }
 
 export function getGlobalConfig(key?: string): DaemonConfig | unknown {
-  const mgr = getManager();
-  const cfg = mgr.getConfig();
-  const snapshot: DaemonConfig = {
-    maxParallel: cfg.maxParallel,
-    speedLimit: cfg.speedLimit,
-    targetPath: cfg.targetPath,
-    cachePath: cfg.cachePath,
-    targetChunkCount: cfg.targetChunkCount,
-    minChunkSize: cfg.minChunkSize,
-    journal: cfg.journal,
-  };
-  if (!key) return snapshot;
+  const manager = getManager()
+  if (!key) {
+    return Object.fromEntries(
+      [...CONFIG_KEY_MAP.values()].map((def) => [def.canonical, def.getValue(manager)]),
+    ) as unknown as DaemonConfig;
+  }
   const def = resolveConfigKey(key, false);
-  return snapshot[def.canonical as GlobalConfigKey];
+  return def.getValue(manager);
 }
 
-function toEntry(dl: Download): DownloadEntry {
-  const meta = dl.meta;
-  const total = dl.totalBytes;
-  return {
-    id: dl.id,
-    url: dl.url,
-    filename: meta.filename,
-    targetPath: meta.targetPath,
-    status: dl.state,
-    addedAt: meta.addedAt,
-    completedAt: meta.completedAt,
-    totalBytes: total,
-    downloadedBytes: dl.downloadedBytes,
-    errorMessage: meta.errorMessage,
-  };
-}
-
-export function getDownload(id: string): DownloadEntry | undefined {
-  const dl = getManager().get(id);
-  return dl ? toEntry(dl) : undefined;
-}
-
-export function getDownloads(): DownloadEntry[] {
-  return getManager()
-    .list()
-    .map(toEntry)
-    .sort((a, b) => a.addedAt - b.addedAt);
+export function getDownloads(): DownloadDescription[] {
+  return getManager().list().map((dl) => dl.describe());
 }
 
 export function getAllIds(): string[] {
   return getManager()
     .list()
-    .sort((a, b) => a.meta.addedAt - b.meta.addedAt)
     .map((d) => d.id);
 }
 
-/** Resolves "#1", "1" (1-based index), a prefix or a full id to a stored entry. */
-export function resolveDownload(idOrIndex: string): DownloadEntry | undefined {
+/** Resolves "#1", "1" (1-based index), a prefix or a full id to a download. */
+export function resolveDownload(idOrIndex: string): DownloadDescription | undefined {
   const entries = getDownloads();
   const n = /^#?(\d+)$/.exec(idOrIndex);
   if (n) return entries[Number(n[1]) - 1];
@@ -287,23 +245,17 @@ export function getDownloadConfig<T>(id: string, key: string): T | undefined {
   return dl.get<T>(key);
 }
 
-export function describeDownload(id: string): DownloadDescription {
-  const dl = getManager().get(id);
-  if (!dl) throw new Error(`Download ${id} not found`);
-  return dl.describe();
-}
-
 export async function addDownload(
   url: string,
   targetPath: string | null,
-): Promise<DownloadEntry> {
+): Promise<DownloadDescription> {
   const mgr = getManager();
   const dl = await mgr.addUrl(url);
   if (targetPath !== null) dl.setTargetPath(targetPath);
   attachListeners(dl);
   activeCount++;
   void dl.start();
-  return toEntry(dl);
+  return dl.describe();
 }
 
 export async function pauseDownload(id: string): Promise<void> {

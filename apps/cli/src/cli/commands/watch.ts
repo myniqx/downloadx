@@ -1,5 +1,5 @@
+import type { DownloadDescription } from '@downloadx/core';
 import type {
-  DownloadEntry,
   IpcEvent,
   ProgressEvent,
   ChunkProgressEvent,
@@ -47,7 +47,7 @@ interface ChunkState {
 }
 
 interface DownloadState {
-  entry: DownloadEntry;
+  entry: DownloadDescription;
   totalBytes: number | null;
   downloadedBytes: number;
   totalSpeed: number;
@@ -140,13 +140,13 @@ function render(): void {
   for (const [, ds] of state) {
     const { entry } = ds;
     const name = entry.filename ?? entry.url.split('/').pop() ?? entry.url;
-    const statusColor = STATUS_COLOR[entry.status] ?? '';
+    const statusColor = STATUS_COLOR[entry.state] ?? '';
     const pct = ds.percent !== null ? `${ds.percent.toFixed(1)}%` : '?%';
     const speed = ds.totalSpeed > 0 ? `↓ ${fmtSpeed(ds.totalSpeed)}` : '';
     const eta = fmtEta(ds.downloadedBytes, ds.totalBytes, ds.totalSpeed);
     const size = `${fmtBytes(ds.downloadedBytes)} / ${fmtBytes(ds.totalBytes)}`;
 
-    const header = `${statusColor}${entry.id.slice(0, 8)}${RESET}  ${BOLD}${name}${RESET}`;
+    const header = `${statusColor}${entry.id.slice(0, 8)}${RESET}  ${BOLD}${name}${RESET}  [${entry.state}]`;
     const meta = `${pct.padStart(6)}  ${size}  ${speed}  ETA ${eta}`;
     lines.push(header);
     lines.push(meta);
@@ -185,14 +185,14 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
     return;
   }
 
-  const downloads = await sendRequest<DownloadEntry[]>({ cmd: 'list' });
+  const downloads = await sendRequest<DownloadDescription[]>({ cmd: 'list' });
   for (const entry of downloads) {
     state.set(entry.id, {
       entry,
       totalBytes: entry.totalBytes,
       downloadedBytes: entry.downloadedBytes,
-      totalSpeed: 0,
-      percent: entry.totalBytes ? (entry.downloadedBytes / entry.totalBytes) * 100 : null,
+      totalSpeed: entry.totalSpeedBps,
+      percent: entry.percent,
       chunks: new Map(),
       chunkColorCounter: 0,
     });
@@ -281,14 +281,14 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
         case 'stateChange': {
           const e = event as StateChangeEvent;
           const ds = state.get(e.downloadId);
-          if (ds) ds.entry.status = e.current;
+          if (ds) ds.entry.state = e.current;
           break;
         }
         case 'completed': {
           const e = event as CompletedEvent;
           const ds = state.get(e.downloadId);
           if (ds) {
-            ds.entry.status = 'completed';
+            ds.entry.state = 'completed';
             ds.entry.filename = e.filename;
             ds.totalBytes = e.totalBytes;
             ds.downloadedBytes = e.totalBytes;
