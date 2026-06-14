@@ -137,10 +137,12 @@ const manager = await createDownloadX({
 });
 
 const dl = await manager.addUrl('https://example.com/big.iso');
+
 dl.emitter.on('progress', (p) => {
   const eta = p.etaMs === null ? '?' : `${Math.round(p.etaMs / 1000)}s`;
   console.log(`${p.percent?.toFixed(1)}% @ ${(p.totalSpeed / 1e6).toFixed(2)} MB/s, ETA ${eta}`);
 });
+
 await dl.start();
 ```
 

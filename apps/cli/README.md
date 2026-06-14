@@ -29,14 +29,14 @@ automatically on the first command and shuts down with `downloadx stop`.
 ```
 downloadx add --url <url> [--path <dir>]              Add and start a download
 downloadx list                                        List all downloads
-downloadx status --id <#|id> [--json]                 Detailed status for a download
-downloadx pause  --id <#|id> | --all                  Pause one or all downloads
-downloadx resume --id <#|id> | --all                  Resume one or all downloads
+downloadx status  --id <#|id> [--json]                Detailed status for a download
+downloadx pause   --id <#|id> | --all                 Pause one or all downloads
+downloadx resume  --id <#|id> | --all                 Resume one or all downloads
 downloadx restart --id <#|id> [--force] | --all       Restart from scratch, keeps list position
-downloadx cancel --id <#|id> | --all                  Cancel one or all downloads
-downloadx clear  --id <#|id> [--force]                Remove from list (confirms if incomplete)
-downloadx clear  --all [--force]                      Remove all (confirms incomplete ones)
-downloadx clear  --completed                          Remove only completed downloads
+downloadx cancel  --id <#|id> | --all                 Cancel one or all downloads
+downloadx clear   --id <#|id> [--force]               Remove from list (confirms if incomplete)
+downloadx clear   --all [--force]                     Remove all (confirms incomplete ones)
+downloadx clear   --completed                         Remove only completed downloads
 downloadx watch [--simple|--json]                     Live progress view
 downloadx stop                                        Shut down the daemon
 
