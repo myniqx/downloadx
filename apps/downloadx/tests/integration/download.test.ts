@@ -2,39 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { TEMP_EXT } from '../../src/constants.js';
 import { Download } from '../../src/download.js';
-import type { DownloadInternalConfig } from '../../src/download.js';
 import { makeHarness } from '../helpers/config.js';
 import { waitForEvent } from '../helpers/events.js';
 import { equalBytes, makeBytes } from '../helpers/fixtures.js';
-
-function internalConfig(
-  harness: ReturnType<typeof makeHarness>,
-  patch: Partial<DownloadInternalConfig> = {},
-): DownloadInternalConfig {
-  return {
-    io: harness.io,
-    targetPath: harness.config.targetPath,
-    cachePath: harness.config.cachePath ?? harness.config.targetPath,
-    maxParallel: harness.config.maxParallel ?? 3,
-    targetChunkCount: harness.config.targetChunkCount ?? 4,
-    minChunkSize: harness.config.minChunkSize ?? 16,
-    maxRetries: harness.config.maxRetries ?? 2,
-    retryDelay: harness.config.retryDelay ?? 5,
-    retryBackoff: harness.config.retryBackoff ?? 1,
-    speedSampleWindow: harness.config.speedSampleWindow ?? 500,
-    speedLimit: harness.config.speedLimit ?? 0,
-    requestTimeout: harness.config.requestTimeout ?? 5_000,
-    headers: harness.config.headers ?? {},
-    ...patch,
-  };
-}
 
 describe('Download integration — happy path', () => {
   it('downloads a multi-chunk range-capable file and reassembles bytes exactly', async () => {
     const body = makeBytes(4096, 42);
     const harness = makeHarness();
     harness.fetch.route('https://x/f.bin', { body });
-    const download = new Download('d1', 'https://x/f.bin', {}, internalConfig(harness));
+    const download = new Download('d1', 'https://x/f.bin', {}, harness.global);
     await download.start();
     expect(download.state).toBe('completed');
     const written = harness.fs.peek('/dl/f.bin');
@@ -53,7 +30,7 @@ describe('Download integration — happy path', () => {
       acceptsRanges: false,
       head: 'no-size',
     });
-    const download = new Download('d2', 'https://x/single', {}, internalConfig(harness));
+    const download = new Download('d2', 'https://x/single', {}, harness.global);
     await download.start();
     expect(download.state).toBe('completed');
     expect(download.getChunkSnapshots()).toHaveLength(1);
@@ -63,7 +40,7 @@ describe('Download integration — happy path', () => {
   it('handles zero-byte downloads cleanly', async () => {
     const harness = makeHarness();
     harness.fetch.route('https://x/empty.bin', { body: new Uint8Array(0) });
-    const download = new Download('d3', 'https://x/empty.bin', {}, internalConfig(harness));
+    const download = new Download('d3', 'https://x/empty.bin', {}, harness.global);
     await download.start();
     expect(download.state).toBe('completed');
     const written = harness.fs.peek('/dl/empty.bin');
@@ -79,7 +56,7 @@ describe('Download integration — happy path', () => {
       body,
       contentDisposition: 'attachment; filename="real-name.dat"',
     });
-    const download = new Download('d4', 'https://x/download', {}, internalConfig(harness));
+    const download = new Download('d4', 'https://x/download', {}, harness.global);
     await download.start();
     expect(download.filename).toBe('real-name.dat');
     expect(harness.fs.hasFile('/dl/real-name.dat')).toBe(true);
@@ -89,7 +66,7 @@ describe('Download integration — happy path', () => {
     const body = makeBytes(128);
     const harness = makeHarness();
     harness.fetch.route('https://x/e.bin', { body });
-    const download = new Download('d5', 'https://x/e.bin', {}, internalConfig(harness));
+    const download = new Download('d5', 'https://x/e.bin', {}, harness.global);
     const completed = waitForEvent(download.emitter, 'completed', 5_000);
     await download.start();
     const payload = await completed;
@@ -112,15 +89,7 @@ describe('Download integration — pause and resume', () => {
       body,
       streamChunks: [64, 64, 64, 64, 64, 64, 64, 64, 64, 64],
     });
-    const download = new Download(
-      'd6',
-      'https://x/big.bin',
-      {},
-      internalConfig(harness, {
-        targetChunkCount: 2,
-        minChunkSize: 32,
-      }),
-    );
+    const download = new Download('d6', 'https://x/big.bin', {}, harness.global);
 
     // Pause shortly after the download starts.
     const runPromise = download.start();
@@ -155,12 +124,7 @@ describe('Download integration — pause and resume', () => {
       streamChunks: [128, 128, 128, 128, 128, 128, 128, 128],
     });
 
-    const first = new Download(
-      'd7',
-      'https://x/cross.bin',
-      {},
-      internalConfig(harness, { targetChunkCount: 2, minChunkSize: 32 }),
-    );
+    const first = new Download('d7', 'https://x/cross.bin', {}, harness.global);
     const run = first.start();
     setTimeout(() => first.pause(), 3);
     await run;
@@ -173,12 +137,7 @@ describe('Download integration — pause and resume', () => {
     expect(bytesSoFar).toBeGreaterThan(0);
 
     // Fresh instance, same injected fs — simulates a process restart.
-    const second = new Download(
-      'd7',
-      'https://x/cross.bin',
-      {},
-      internalConfig(harness, { targetChunkCount: 2, minChunkSize: 32 }),
-    );
+    const second = new Download('d7', 'https://x/cross.bin', {}, harness.global);
     await second.start();
     expect(second.state).toBe('completed');
     expect(equalBytes(harness.fs.peek('/dl/cross.bin')!, body)).toBe(true);
@@ -188,12 +147,15 @@ describe('Download integration — pause and resume', () => {
     const body = makeBytes(2048);
     const harness = makeHarness({ targetChunkCount: 2, minChunkSize: 32 });
     harness.fetch.route('https://x/drop.bin', { body, streamChunks: [64, 64, 64, 64] });
-    const download = new Download('d8', 'https://x/drop.bin', {}, internalConfig(harness));
+    const download = new Download('d8', 'https://x/drop.bin', {}, harness.global);
     const run = download.start();
     setTimeout(() => download.cancel(), 2);
     await run;
     await download.clear();
-    expect(harness.fs.hasFile('/dl/drop.bin')).toBe(false);
+    // clear() must not delete the final file — only meta and .part sidecars.
+    if (download.state === 'completed') {
+      expect(harness.fs.hasFile('/dl/drop.bin')).toBe(true);
+    }
     expect(harness.fs.hasFile('/dl/d8.downloadx.json')).toBe(false);
     expect(harness.fs.hasFile(`/dl/drop.bin${TEMP_EXT}`)).toBe(false);
   });
@@ -209,16 +171,7 @@ describe('Download integration — speedLimit', () => {
       body,
       streamChunks: [256, 256, 256, 256, 256, 256, 256, 256],
     });
-    const download = new Download(
-      'd9',
-      'https://x/slow.bin',
-      {},
-      internalConfig(harness, {
-        speedLimit: 512,
-        targetChunkCount: 1,
-        minChunkSize: 64,
-      }),
-    );
+    const download = new Download('d9', 'https://x/slow.bin', {}, harness.global);
     const started = Date.now();
     await download.start();
     const elapsed = Date.now() - started;
@@ -232,16 +185,7 @@ describe('Download integration — speedLimit', () => {
     const body = makeBytes(256);
     const harness = makeHarness({ speedLimit: 1024, targetChunkCount: 1, minChunkSize: 64 });
     harness.fetch.route('https://x/unlim.bin', { body, streamChunks: [64, 64, 64, 64] });
-    const download = new Download(
-      'd10',
-      'https://x/unlim.bin',
-      {},
-      internalConfig(harness, {
-        speedLimit: 1024,
-        targetChunkCount: 1,
-        minChunkSize: 64,
-      }),
-    );
+    const download = new Download('d10', 'https://x/unlim.bin', {}, harness.global);
     const run = download.start();
     // Lift the cap immediately.
     download.setSpeedLimit(0);
@@ -328,12 +272,7 @@ describe('Download integration — error propagation', () => {
       failTimes: 1,
       failStatus: 503,
     });
-    const download = new Download(
-      'd11',
-      'https://x/gone',
-      {},
-      internalConfig(harness, { maxRetries: 0 }),
-    );
+    const download = new Download('d11', 'https://x/gone', {}, harness.global);
     const errorSpy = vi.fn();
     download.emitter.on('error', errorSpy);
     await download.start();

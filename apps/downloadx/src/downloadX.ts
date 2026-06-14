@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG } from './constants.js';
-import { Download, type DownloadInternalConfig } from './download.js';
+import { Download } from './download.js';
 import { TypedEventEmitter } from './events.js';
-import { deleteMeta, listMetaFiles, persistMeta } from './meta.js';
+import { listMetaFiles, persistMeta } from './meta.js';
 import { Throttle } from './throttle.js';
 import type {
   DownloadDescription,
@@ -9,6 +9,7 @@ import type {
   DownloadEventName,
   DownloadOptions,
   DownloadXConfig,
+  GlobalConfig,
 } from './types.js';
 
 const RELAYED_EVENTS: readonly DownloadEventName[] = [
@@ -23,7 +24,7 @@ const RELAYED_EVENTS: readonly DownloadEventName[] = [
   'diagnostic',
 ];
 
-export class DownloadX {
+export class DownloadX implements GlobalConfig {
   readonly emitter = new TypedEventEmitter<DownloadEventMap>();
 
   private readonly downloads = new Map<string, Download>();
@@ -37,7 +38,7 @@ export class DownloadX {
    * Manager-wide bandwidth cap shared by ALL downloads (capacity 0 =
    * unlimited). Per-download `speedLimit` still applies on top.
    */
-  private readonly sharedThrottle = new Throttle(0);
+  private readonly _sharedThrottle = new Throttle(0);
 
   constructor(config: DownloadXConfig) {
     this.baseConfig = config;
@@ -55,7 +56,7 @@ export class DownloadX {
     const metas = await listMetaFiles(this.baseConfig.io, this._cachePath);
     for (const meta of metas) {
       if (this.downloads.has(meta.id)) continue;
-      const download = Download.fromMeta(meta, this.internalConfigFor({}));
+      const download = Download.fromMeta(meta, this);
       const unrelay = download.emitter.pipeTo(this.emitter, RELAYED_EVENTS);
       this.downloads.set(meta.id, download);
       this.unrelay.set(meta.id, unrelay);
@@ -74,7 +75,7 @@ export class DownloadX {
     const id = options.id ?? hashUrl(url);
     const existing = this.downloads.get(id);
     if (existing) return existing;
-    const download = new Download(id, url, options, this.internalConfigFor(options));
+    const download = new Download(id, url, options, this);
     const unrelay = download.emitter.pipeTo(this.emitter, RELAYED_EVENTS);
     this.downloads.set(id, download);
     this.unrelay.set(id, unrelay);
@@ -159,11 +160,11 @@ export class DownloadX {
 
   /** Manager-wide bandwidth cap in bytes/sec shared by all downloads. 0 = unlimited. */
   setSpeedLimit(bytesPerSec: number): void {
-    this.sharedThrottle.setCapacity(bytesPerSec);
+    this._sharedThrottle.setCapacity(bytesPerSec);
   }
 
   get speedLimit(): number {
-    return this.sharedThrottle.capacityBytesPerSec;
+    return this._sharedThrottle.capacityBytesPerSec;
   }
 
   setMaxParallel(n: number): void {
@@ -234,6 +235,39 @@ export class DownloadX {
     return this.baseConfig.journal ?? false;
   }
 
+  get io() {
+    return this.baseConfig.io;
+  }
+
+  get headers(): Record<string, string> {
+    return this.baseConfig.headers ?? {};
+  }
+
+  get maxRetries(): number {
+    return this.baseConfig.maxRetries ?? DEFAULT_CONFIG.maxRetries;
+  }
+
+  get retryDelay(): number {
+    return this.baseConfig.retryDelay ?? DEFAULT_CONFIG.retryDelay;
+  }
+
+  get retryBackoff(): number {
+    return this.baseConfig.retryBackoff ?? DEFAULT_CONFIG.retryBackoff;
+  }
+
+  get speedSampleWindow(): number {
+    return this.baseConfig.speedSampleWindow ?? DEFAULT_CONFIG.speedSampleWindow;
+  }
+
+  get requestTimeout(): number {
+    return this.baseConfig.requestTimeout ?? DEFAULT_CONFIG.requestTimeout;
+  }
+
+  /** Returns the shared throttle instance used by all downloads. */
+  get sharedThrottle() {
+    return this._sharedThrottle;
+  }
+
   /** Returns the current effective global config — live values from setters, not the frozen constructor input. */
   getConfig(): Required<Omit<DownloadXConfig, 'io' | 'headers'>> & {
     headers: Record<string, string>;
@@ -278,31 +312,6 @@ export class DownloadX {
     }
   }
 
-  private internalConfigFor(options: DownloadOptions): DownloadInternalConfig {
-    const cfg = this.baseConfig;
-    const headers: Record<string, string> = {
-      ...(cfg.headers ?? {}),
-      ...(options.headers ?? {}),
-    };
-    return {
-      io: cfg.io,
-      targetPath: this._targetPath,
-      cachePath: this._cachePath,
-      maxParallel: this._maxParallel,
-      targetChunkCount:
-        options.targetChunkCount ?? cfg.targetChunkCount ?? DEFAULT_CONFIG.targetChunkCount,
-      minChunkSize: cfg.minChunkSize ?? DEFAULT_CONFIG.minChunkSize,
-      maxRetries: options.maxRetries ?? cfg.maxRetries ?? DEFAULT_CONFIG.maxRetries,
-      retryDelay: options.retryDelay ?? cfg.retryDelay ?? DEFAULT_CONFIG.retryDelay,
-      retryBackoff: options.retryBackoff ?? cfg.retryBackoff ?? DEFAULT_CONFIG.retryBackoff,
-      speedSampleWindow: cfg.speedSampleWindow ?? DEFAULT_CONFIG.speedSampleWindow,
-      speedLimit: options.speedLimit ?? cfg.speedLimit ?? DEFAULT_CONFIG.speedLimit,
-      requestTimeout: cfg.requestTimeout ?? DEFAULT_CONFIG.requestTimeout,
-      headers,
-      sharedThrottle: this.sharedThrottle,
-      ...(cfg.journal !== undefined ? { journal: cfg.journal } : {}),
-    };
-  }
 }
 
 /**

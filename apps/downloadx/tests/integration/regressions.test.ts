@@ -2,33 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { Chunk } from '../../src/chunk.js';
 import { UNKNOWN_SIZE_LENGTH } from '../../src/constants.js';
-import { Download, type DownloadInternalConfig } from '../../src/download.js';
+import { Download } from '../../src/download.js';
 import { TypedEventEmitter } from '../../src/events.js';
 import type { DownloadEventMap, FetchFn, FetchResponse } from '../../src/types.js';
 import { makeHarness } from '../helpers/config.js';
 import { equalBytes, makeBytes } from '../helpers/fixtures.js';
-
-function internal(
-  h: ReturnType<typeof makeHarness>,
-  patch: Partial<DownloadInternalConfig> = {},
-): DownloadInternalConfig {
-  return {
-    io: h.io,
-    targetPath: h.config.targetPath,
-    cachePath: h.config.cachePath ?? h.config.targetPath,
-    maxParallel: h.config.maxParallel ?? 3,
-    targetChunkCount: h.config.targetChunkCount ?? 4,
-    minChunkSize: h.config.minChunkSize ?? 16,
-    maxRetries: h.config.maxRetries ?? 2,
-    retryDelay: h.config.retryDelay ?? 5,
-    retryBackoff: h.config.retryBackoff ?? 1,
-    speedSampleWindow: h.config.speedSampleWindow ?? 500,
-    speedLimit: h.config.speedLimit ?? 0,
-    requestTimeout: h.config.requestTimeout ?? 5_000,
-    headers: h.config.headers ?? {},
-    ...patch,
-  };
-}
 
 function makeStreamResponse(pieces: Uint8Array[], status = 206): FetchResponse {
   let i = 0;
@@ -58,6 +36,7 @@ function makeStreamResponse(pieces: Uint8Array[], status = 206): FetchResponse {
 function chunkParams(
   overrides: Partial<ConstructorParameters<typeof Chunk>[0]>,
 ): ConstructorParameters<typeof Chunk>[0] {
+  const harness = makeHarness();
   return {
     id: 'c0',
     downloadId: 'd0',
@@ -67,11 +46,7 @@ function chunkParams(
     length: 100,
     initialDownloadedBytes: 0,
     acceptsRanges: true,
-    headers: {},
-    maxRetries: 2,
-    retryDelay: 1,
-    retryBackoff: 1,
-    speedSampleWindow: 500,
+    global: harness.global,
     fetch: async () => makeStreamResponse([]),
     writeChunk: async () => undefined,
     emitter: new TypedEventEmitter<DownloadEventMap>(),
@@ -132,12 +107,7 @@ describe('regression — server advertises ranges but answers 200', () => {
       acceptsRanges: false,
       extraHeaders: { 'Accept-Ranges': 'bytes' },
     });
-    const d = new Download(
-      'r2',
-      'https://x/liar.bin',
-      {},
-      internal(harness, { maxRetries: 1, retryDelay: 1 }),
-    );
+    const d = new Download('r2', 'https://x/liar.bin', {}, harness.global);
     await d.start();
     expect(d.state).toBe('completed');
     expect(equalBytes(harness.fs.peek('/dl/liar.bin')!, body)).toBe(true);
@@ -188,10 +158,11 @@ describe('regression — idle timeout retries instead of killing long downloads'
       }
       return makeStreamResponse([body]);
     };
+    const harness = makeHarness({ requestTimeout: 30 });
     const chunk = new Chunk(
       chunkParams({
         length: 64,
-        requestTimeout: 30, // idle timeout in ms
+        global: harness.global,
         fetch: silentFetch,
       }),
     );
@@ -226,16 +197,8 @@ describe('regression — unknown total size streams to EOF', () => {
         text: () => res.text(),
       };
     };
-    const d = new Download(
-      'r5',
-      'https://x/nosize.bin',
-      {},
-      internal(harness, {
-        io: { ...harness.io, fetch: stripSize },
-        maxRetries: 1,
-        retryDelay: 1,
-      }),
-    );
+    const strippedGlobal = { ...harness.global, io: { ...harness.io, fetch: stripSize } };
+    const d = new Download('r5', 'https://x/nosize.bin', {}, strippedGlobal);
     await d.start();
     expect(d.state).toBe('completed');
     expect(d.totalBytes).toBeNull();
@@ -249,9 +212,9 @@ describe('regression — unknown total size streams to EOF', () => {
 describe('features — journal, describe, preallocation', () => {
   it('writes an NDJSON journal when enabled and io.appendFile exists', async () => {
     const body = makeBytes(256, 8);
-    const harness = makeHarness();
+    const harness = makeHarness({ journal: true });
     harness.fetch.route('https://x/j.bin', { body });
-    const d = new Download('r6', 'https://x/j.bin', {}, internal(harness, { journal: true }));
+    const d = new Download('r6', 'https://x/j.bin', {}, harness.global);
     await d.start();
     expect(d.state).toBe('completed');
     const log = harness.fs.peek('/dl/r6.downloadx.log');
@@ -270,7 +233,7 @@ describe('features — journal, describe, preallocation', () => {
     const body = makeBytes(1024, 4);
     const harness = makeHarness();
     harness.fetch.route('https://x/desc.bin', { body });
-    const d = new Download('r7', 'https://x/desc.bin', {}, internal(harness));
+    const d = new Download('r7', 'https://x/desc.bin', {}, harness.global);
     await d.start();
     const desc = d.describe();
     expect(desc.id).toBe('r7');
@@ -287,12 +250,7 @@ describe('features — journal, describe, preallocation', () => {
     const body = makeBytes(2048, 12);
     const harness = makeHarness({ targetChunkCount: 2, minChunkSize: 32 });
     harness.fetch.route('https://x/pre.bin', { body, streamChunks: [64, 64, 64] });
-    const d = new Download(
-      'r8',
-      'https://x/pre.bin',
-      {},
-      internal(harness, { targetChunkCount: 2, minChunkSize: 32 }),
-    );
+    const d = new Download('r8', 'https://x/pre.bin', {}, harness.global);
     const run = d.start();
     // Shortly after start the part file should already be full-size.
     await new Promise((r) => setTimeout(r, 10));
@@ -313,12 +271,7 @@ describe('features — journal, describe, preallocation', () => {
       streamChunks: Array(16).fill(256),
       delayMs: 5,
     });
-    const d = new Download(
-      'r9',
-      'https://x/eta.bin',
-      {},
-      internal(harness, { targetChunkCount: 2, minChunkSize: 32 }),
-    );
+    const d = new Download('r9', 'https://x/eta.bin', {}, harness.global);
     const etas: Array<number | null> = [];
     d.emitter.on('progress', (p) => etas.push(p.etaMs));
     await d.start();

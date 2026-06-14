@@ -103,6 +103,30 @@ export interface InjectedFunctions {
 }
 
 // ---------------------------------------------------------------------------
+// Global config interface — implemented by DownloadX, injected into Download
+// to avoid snapshot copies and circular imports.
+// ---------------------------------------------------------------------------
+
+export interface DownloadConfig {
+  readonly maxRetries: number;
+  readonly retryDelay: number;
+  readonly retryBackoff: number;
+  readonly speedSampleWindow: number;
+  readonly requestTimeout: number;
+  readonly headers: Record<string, string>;
+}
+
+export interface GlobalConfig extends DownloadConfig {
+  readonly io: InjectedFunctions;
+  readonly targetPath: string;
+  readonly cachePath: string;
+  readonly targetChunkCount: number;
+  readonly minChunkSize: number;
+  readonly journal: boolean;
+  readonly sharedThrottle: { consume: (bytes: number, signal?: AbortSignal) => Promise<void> };
+}
+
+// ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
@@ -272,6 +296,8 @@ export interface MetaFile {
   speedLimit: number | null;
   targetChunkCount: number | null;
   targetPath: string | null;
+  minChunkSize: number | null;
+  journal: boolean | null;
 }
 
 // ---------------------------------------------------------------------------

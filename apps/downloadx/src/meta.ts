@@ -71,6 +71,8 @@ export function createEmptyMeta(input: CreateEmptyMetaInput): MetaFile {
     speedLimit: null,
     targetChunkCount: null,
     targetPath: null,
+    minChunkSize: null,
+    journal: null,
   };
 }
 
@@ -246,7 +248,14 @@ function validate(value: unknown): MetaFile {
   assertNullableNumber(v, 'speedLimit');
   assertNullableNumber(v, 'targetChunkCount');
   assertNullableString(v, 'targetPath');
-  return { ...(v as unknown as MetaFile), chunks };
+  const minChunkSize = 'minChunkSize' in v ? v['minChunkSize'] : null;
+  const journal = 'journal' in v ? v['journal'] : null;
+  return {
+    ...(v as unknown as MetaFile),
+    chunks,
+    minChunkSize: typeof minChunkSize === 'number' ? minChunkSize : null,
+    journal: typeof journal === 'boolean' ? journal : null,
+  };
 }
 
 function validateChunk(value: unknown, index: number): ChunkSnapshot {

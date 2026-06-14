@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Download, type DownloadInternalConfig } from '../../src/download.js';
+import { Download } from '../../src/download.js';
 import { createDownloadX } from '../../src/downloadX.js';
 import type {
   ChunkLifecyclePayload,
@@ -14,34 +14,12 @@ import { makeHarness } from '../helpers/config.js';
 import { collectEvents } from '../helpers/events.js';
 import { makeBytes } from '../helpers/fixtures.js';
 
-function internal(
-  h: ReturnType<typeof makeHarness>,
-  patch: Partial<DownloadInternalConfig> = {},
-): DownloadInternalConfig {
-  return {
-    io: h.io,
-    targetPath: h.config.targetPath,
-    cachePath: h.config.cachePath ?? h.config.targetPath,
-    maxParallel: h.config.maxParallel ?? 3,
-    targetChunkCount: h.config.targetChunkCount ?? 4,
-    minChunkSize: h.config.minChunkSize ?? 16,
-    maxRetries: h.config.maxRetries ?? 2,
-    retryDelay: h.config.retryDelay ?? 5,
-    retryBackoff: h.config.retryBackoff ?? 1,
-    speedSampleWindow: h.config.speedSampleWindow ?? 500,
-    speedLimit: h.config.speedLimit ?? 0,
-    requestTimeout: h.config.requestTimeout ?? 5_000,
-    headers: h.config.headers ?? {},
-    ...patch,
-  };
-}
-
 describe('event payloads — Download', () => {
   it('stateChange fires with previous→current pairs in the right order', async () => {
     const body = makeBytes(128);
     const harness = makeHarness();
     harness.fetch.route('https://x/s.bin', { body });
-    const d = new Download('ev1', 'https://x/s.bin', {}, internal(harness));
+    const d = new Download('ev1', 'https://x/s.bin', {}, harness.global);
     const state = collectEvents(d.emitter, 'stateChange');
     await d.start();
     const all = state.stop() as DownloadStatePayload[];
@@ -59,7 +37,7 @@ describe('event payloads — Download', () => {
     const body = makeBytes(256);
     const harness = makeHarness();
     harness.fetch.route('https://x/lf.bin', { body });
-    const d = new Download('ev2', 'https://x/lf.bin', {}, internal(harness));
+    const d = new Download('ev2', 'https://x/lf.bin', {}, harness.global);
     const lifecycle = collectEvents(d.emitter, 'chunkLifecycle');
     await d.start();
     const payloads = lifecycle.stop() as ChunkLifecyclePayload[];
@@ -81,12 +59,7 @@ describe('event payloads — Download', () => {
     const body = makeBytes(2048);
     const harness = makeHarness({ targetChunkCount: 2, minChunkSize: 32 });
     harness.fetch.route('https://x/p.bin', { body, streamChunks: Array(8).fill(256) });
-    const d = new Download(
-      'ev3',
-      'https://x/p.bin',
-      {},
-      internal(harness, { targetChunkCount: 2, minChunkSize: 32 }),
-    );
+    const d = new Download('ev3', 'https://x/p.bin', {}, harness.global);
     const progress = collectEvents(d.emitter, 'chunkProgress');
     await d.start();
     const all = progress.stop() as ChunkProgressPayload[];
@@ -111,7 +84,7 @@ describe('event payloads — Download', () => {
     const body = makeBytes(1024);
     const harness = makeHarness();
     harness.fetch.route('https://x/c.bin', { body });
-    const d = new Download('ev4', 'https://x/c.bin', {}, internal(harness));
+    const d = new Download('ev4', 'https://x/c.bin', {}, harness.global);
     const completed = collectEvents(d.emitter, 'completed');
     await d.start();
     const payloads = completed.stop() as DownloadCompletedPayload[];
@@ -125,7 +98,7 @@ describe('event payloads — Download', () => {
     const body = makeBytes(512);
     const harness = makeHarness();
     harness.fetch.route('https://x/agg.bin', { body });
-    const d = new Download('ev5', 'https://x/agg.bin', {}, internal(harness));
+    const d = new Download('ev5', 'https://x/agg.bin', {}, harness.global);
     const progress = collectEvents(d.emitter, 'progress');
     await d.start();
     const all = progress.stop() as DownloadProgressPayload[];

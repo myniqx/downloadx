@@ -13,6 +13,7 @@ import type {
   ChunkQuality,
   ChunkSnapshot,
   ChunkStatus,
+  DownloadConfig,
   DownloadEventMap,
   FetchFn,
   FetchResponse,
@@ -32,13 +33,8 @@ export interface ChunkParams {
   /** Validators sent as `If-Range` so a changed resource can't be spliced into stale bytes. */
   etag?: string | null;
   lastModified?: string | null;
-  headers: Record<string, string>;
-  maxRetries: number;
-  retryDelay: number;
-  retryBackoff: number;
-  speedSampleWindow: number;
-  /** Network IDLE timeout (ms): aborts the attempt when no bytes arrive for this long. */
-  requestTimeout?: number;
+  /** Live reference to download config — values read per-retry, not snapshotted. */
+  global: DownloadConfig;
   fetch: FetchFn;
   writeChunk: WriteChunkFn;
   emitter: TypedEventEmitter<DownloadEventMap>;
@@ -91,7 +87,7 @@ export class Chunk {
     this._length = params.length;
     this._downloadedBytes = params.initialDownloadedBytes;
     this.now = params.now ?? Date.now;
-    this.tracker = new SpeedTracker(params.speedSampleWindow, this.now);
+    this.tracker = new SpeedTracker(params.global.speedSampleWindow, this.now);
   }
 
   get length(): number {
@@ -206,9 +202,9 @@ export class Chunk {
           await this.executeOnce();
         },
         {
-          maxRetries: this.params.maxRetries,
-          retryDelay: this.params.retryDelay,
-          retryBackoff: this.params.retryBackoff,
+          maxRetries: this.params.global.maxRetries,
+          retryDelay: this.params.global.retryDelay,
+          retryBackoff: this.params.global.retryBackoff,
           onRetry: (info) => {
             this._retries += 1;
             this._lastError = toMessage(info.error);
@@ -271,7 +267,7 @@ export class Chunk {
       }
     };
     const armIdle = (): void => {
-      const ms = this.params.requestTimeout;
+      const ms = this.params.global.requestTimeout;
       if (ms === undefined) return;
       clearIdle();
       idleTimer = setTimeout(
@@ -282,7 +278,7 @@ export class Chunk {
 
     try {
       const rangeStart = this.offset + this._downloadedBytes;
-      const headers: Record<string, string> = { ...this.params.headers };
+      const headers: Record<string, string> = { ...this.params.global.headers };
       let rangeSent = false;
       const openEnded = this._length === UNKNOWN_SIZE_LENGTH;
       if (this.params.acceptsRanges) {
