@@ -14,20 +14,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install
-        working-directory: apps/downloadx
-
-      - name: Build
-        run: bun run build
-        working-directory: apps/downloadx
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: apps/downloadx
+
+      - name: Build
+        run: npm run build
+        working-directory: apps/downloadx
 
       - name: Publish
         run: npm publish --access public
