@@ -4,7 +4,7 @@ import { Chunk } from '../../src/chunk.js';
 import { UNKNOWN_SIZE_LENGTH } from '../../src/constants.js';
 import { Download } from '../../src/download.js';
 import { TypedEventEmitter } from '../../src/events.js';
-import type { DownloadEventMap, FetchFn, FetchResponse } from '../../src/types.js';
+import type { DownloadEventMap, FetchResponse, InjectedFunctions } from '../../src/types.js';
 import { makeHarness } from '../helpers/config.js';
 import { equalBytes, makeBytes } from '../helpers/fixtures.js';
 
@@ -34,9 +34,26 @@ function makeStreamResponse(pieces: Uint8Array[], status = 206): FetchResponse {
 }
 
 function chunkParams(
-  overrides: Partial<ConstructorParameters<typeof Chunk>[0]>,
+  overrides: Partial<ConstructorParameters<typeof Chunk>[0]> & {
+    fetch?: InjectedFunctions['fetch'];
+    writeChunk?: InjectedFunctions['writeChunk'];
+  } = {},
 ): ConstructorParameters<typeof Chunk>[0] {
+  const { fetch: fetchOverride, writeChunk: writeChunkOverride, ...rest } = overrides;
   const harness = makeHarness();
+  const baseGlobal = rest.global ?? harness.global;
+  const global =
+    fetchOverride !== undefined || writeChunkOverride !== undefined
+      ? {
+          ...baseGlobal,
+          io: {
+            ...baseGlobal.io,
+            ...(fetchOverride !== undefined ? { fetch: fetchOverride } : {}),
+            ...(writeChunkOverride !== undefined ? { writeChunk: writeChunkOverride } : {}),
+          },
+        }
+      : baseGlobal;
+  const { global: _globalOverride, ...restWithoutGlobal } = rest;
   return {
     id: 'c0',
     downloadId: 'd0',
@@ -46,12 +63,10 @@ function chunkParams(
     length: 100,
     initialDownloadedBytes: 0,
     acceptsRanges: true,
-    global: harness.global,
-    fetch: async () => makeStreamResponse([]),
-    writeChunk: async () => undefined,
     emitter: new TypedEventEmitter<DownloadEventMap>(),
     medianSpeedRef: () => 0,
-    ...overrides,
+    ...restWithoutGlobal,
+    global,
   };
 }
 
@@ -141,7 +156,7 @@ describe('regression — idle timeout retries instead of killing long downloads'
   it('aborts a silent attempt, then succeeds on retry and completes', async () => {
     const body = makeBytes(64, 5);
     let attempt = 0;
-    const silentFetch: FetchFn = async (_url, init) => {
+    const silentFetch: InjectedFunctions['fetch'] = async (_url, init) => {
       attempt += 1;
       if (attempt === 1) {
         // First attempt: server goes silent — reject only when aborted, with
@@ -180,7 +195,7 @@ describe('regression — unknown total size streams to EOF', () => {
     harness.fetch.route('https://x/nosize.bin', { body, acceptsRanges: false, head: 'no-size' });
     // Strip size headers so the probe reports totalSize === null.
     const raw = harness.fetch.fetch;
-    const stripSize: FetchFn = async (input, init) => {
+    const stripSize: InjectedFunctions['fetch'] = async (input, init) => {
       const res = await raw(input, init);
       return {
         ...res,

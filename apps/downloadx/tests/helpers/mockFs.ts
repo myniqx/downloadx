@@ -1,17 +1,4 @@
-import type {
-  AppendFileFn,
-  ExistsFn,
-  FileSizeFn,
-  JoinPathFn,
-  ListDirFn,
-  MkdirFn,
-  ReadFileFn,
-  RenameFn,
-  TruncateFn,
-  UnlinkFn,
-  WriteChunkFn,
-  WriteFileFn,
-} from '../../src/types.js';
+import type { InjectedFunctions } from '../../src/types.js';
 
 /**
  * In-memory file system emulating the subset of POSIX semantics downloadx
@@ -23,11 +10,11 @@ import type {
  * Used by every test, including concurrent writers (the underlying JS event
  * loop guarantees `writeChunk` resolves atomically per call).
  */
-export class MockFs {
+export class MockFs implements Required<Omit<InjectedFunctions, 'fetch'>> {
   private readonly files = new Map<string, Uint8Array>();
   private readonly dirs = new Set<string>();
 
-  readonly joinPath: JoinPathFn = (...segments: string[]): string => {
+  readonly joinPath = (...segments: string[]): string => {
     if (segments.length === 0) return '';
     const joined = segments
       .map((s, i) => (i === 0 ? s.replace(/\/+$/u, '') : s.replace(/^\/+|\/+$/gu, '')))
@@ -36,7 +23,7 @@ export class MockFs {
     return joined.length === 0 ? (segments[0] ?? '') : joined;
   };
 
-  readonly mkdir: MkdirFn = async (path: string) => {
+  readonly mkdir = async (path: string) => {
     const parts = path.split('/').filter((p) => p.length > 0);
     let cursor = path.startsWith('/') ? '/' : '';
     for (const part of parts) {
@@ -45,9 +32,9 @@ export class MockFs {
     }
   };
 
-  readonly exists: ExistsFn = async (path: string) => this.files.has(path) || this.dirs.has(path);
+  readonly exists = async (path: string) => this.files.has(path) || this.dirs.has(path);
 
-  readonly writeChunk: WriteChunkFn = async (path, offset, buffer) => {
+  readonly writeChunk: InjectedFunctions['writeChunk'] = async (path, offset, buffer) => {
     const existing = this.files.get(path);
     const requiredSize = offset + buffer.length;
     const next =
@@ -56,29 +43,29 @@ export class MockFs {
     this.files.set(path, next);
   };
 
-  readonly readFile: ReadFileFn = async (path) => {
+  readonly readFile: InjectedFunctions['readFile'] = async (path) => {
     const buf = this.files.get(path);
     if (buf === undefined) throw new Error(`MockFs: not found: ${path}`);
     // Return a copy so callers can't mutate the stored file accidentally.
     return new Uint8Array(buf);
   };
 
-  readonly writeFile: WriteFileFn = async (path, buffer) => {
+  readonly writeFile: InjectedFunctions['writeFile'] = async (path, buffer) => {
     this.files.set(path, new Uint8Array(buffer));
   };
 
-  readonly rename: RenameFn = async (from, to) => {
+  readonly rename: InjectedFunctions['rename'] = async (from, to) => {
     const buf = this.files.get(from);
     if (buf === undefined) throw new Error(`MockFs: rename source missing: ${from}`);
     this.files.set(to, buf);
     this.files.delete(from);
   };
 
-  readonly unlink: UnlinkFn = async (path) => {
+  readonly unlink: InjectedFunctions['unlink'] = async (path) => {
     this.files.delete(path);
   };
 
-  readonly truncate: TruncateFn = async (path, size) => {
+  readonly truncate: NonNullable<InjectedFunctions['truncate']> = async (path, size) => {
     const existing = this.files.get(path);
     if (existing !== undefined && existing.length === size) return;
     const next = new Uint8Array(size);
@@ -86,7 +73,7 @@ export class MockFs {
     this.files.set(path, next);
   };
 
-  readonly appendFile: AppendFileFn = async (path, buffer) => {
+  readonly appendFile: NonNullable<InjectedFunctions['appendFile']> = async (path, buffer) => {
     const existing = this.files.get(path);
     if (existing === undefined) {
       this.files.set(path, new Uint8Array(buffer));
@@ -98,13 +85,13 @@ export class MockFs {
     this.files.set(path, next);
   };
 
-  readonly fileSize: FileSizeFn = async (path) => {
+  readonly fileSize: NonNullable<InjectedFunctions['fileSize']> = async (path) => {
     const buf = this.files.get(path);
     if (buf === undefined) throw new Error(`MockFs: not found: ${path}`);
     return buf.length;
   };
 
-  readonly listDir: ListDirFn = async (path: string) => {
+  readonly listDir: InjectedFunctions['listDir'] = async (path: string) => {
     const prefix = path.endsWith('/') ? path : `${path}/`;
     const out: string[] = [];
     for (const file of this.files.keys()) {
@@ -135,35 +122,7 @@ export class MockFs {
     return Array.from(this.files.keys()).sort();
   }
 
-  asIo(): {
-    mkdir: MkdirFn;
-    exists: ExistsFn;
-    writeChunk: WriteChunkFn;
-    readFile: ReadFileFn;
-    writeFile: WriteFileFn;
-    rename: RenameFn;
-    unlink: UnlinkFn;
-    joinPath: JoinPathFn;
-    listDir: ListDirFn;
-    truncate: TruncateFn;
-    appendFile: AppendFileFn;
-    fileSize: FileSizeFn;
-  } {
-    return {
-      mkdir: this.mkdir,
-      exists: this.exists,
-      writeChunk: this.writeChunk,
-      readFile: this.readFile,
-      writeFile: this.writeFile,
-      rename: this.rename,
-      unlink: this.unlink,
-      joinPath: this.joinPath,
-      listDir: this.listDir,
-      truncate: this.truncate,
-      appendFile: this.appendFile,
-      fileSize: this.fileSize,
-    };
-  }
+
 }
 
 function growTo(existing: Uint8Array | undefined, size: number): Uint8Array {

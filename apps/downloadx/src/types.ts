@@ -9,9 +9,6 @@
 // Injected I/O primitives
 // ---------------------------------------------------------------------------
 
-/** Minimal fetch signature, compatible with WHATWG fetch. */
-export type FetchFn = (input: string | URL, init?: FetchInit) => Promise<FetchResponse>;
-
 export interface FetchInit {
   method?: string;
   headers?: Record<string, string>;
@@ -37,45 +34,6 @@ export interface FetchHeaders {
   forEach(cb: (value: string, name: string) => void): void;
 }
 
-/** Random access write — writes `buffer` to `path` starting at `offset`. */
-export type WriteChunkFn = (path: string, offset: number, buffer: Uint8Array) => Promise<void>;
-
-/** Read a file fully (used for meta JSON). */
-export type ReadFileFn = (path: string) => Promise<Uint8Array>;
-
-/** Write a file fully (used for meta JSON, atomic write is caller's job). */
-export type WriteFileFn = (path: string, buffer: Uint8Array) => Promise<void>;
-
-/** Create directory recursively. Must not throw if directory already exists. */
-export type MkdirFn = (path: string) => Promise<void>;
-
-/** Check whether a file or directory exists. */
-export type ExistsFn = (path: string) => Promise<boolean>;
-
-/** Rename (move) a file from `from` to `to`. */
-export type RenameFn = (from: string, to: string) => Promise<void>;
-
-/** Delete a file. Must not throw if file does not exist. */
-export type UnlinkFn = (path: string) => Promise<void>;
-
-/** Join path segments using the target platform separator. */
-export type JoinPathFn = (...segments: string[]) => string;
-
-/** List entries inside a directory. Returns plain names, no paths. */
-export type ListDirFn = (path: string) => Promise<string[]>;
-
-/**
- * Set a file to exactly `size` bytes, creating it if missing (sparse/zero
- * filled). Used for disk pre-allocation before chunked writes begin.
- */
-export type TruncateFn = (path: string, size: number) => Promise<void>;
-
-/** Append `buffer` to `path`, creating the file if missing. Used by the journal. */
-export type AppendFileFn = (path: string, buffer: Uint8Array) => Promise<void>;
-
-/** Size of a file in bytes. Used to verify the assembled file before rename. */
-export type FileSizeFn = (path: string) => Promise<number>;
-
 /**
  * Full set of functions the package needs from the host environment.
  *
@@ -84,22 +42,31 @@ export type FileSizeFn = (path: string) => Promise<number>;
  * (S3, Postgres, etc.) — without any runtime dependency.
  */
 export interface InjectedFunctions {
-  fetch: FetchFn;
-  writeChunk: WriteChunkFn;
-  readFile: ReadFileFn;
-  writeFile: WriteFileFn;
-  mkdir: MkdirFn;
-  exists: ExistsFn;
-  rename: RenameFn;
-  unlink: UnlinkFn;
-  joinPath: JoinPathFn;
-  listDir: ListDirFn;
+  fetch: (input: string | URL, init?: FetchInit) => Promise<FetchResponse>;
+  /** Random access write — writes `buffer` to `path` starting at `offset`. */
+  writeChunk: (path: string, offset: number, buffer: Uint8Array) => Promise<void>;
+  /** Read a file fully (used for meta JSON). */
+  readFile: (path: string) => Promise<Uint8Array>;
+  /** Write a file fully (used for meta JSON, atomic write is caller's job). */
+  writeFile: (path: string, buffer: Uint8Array) => Promise<void>;
+  /** Create directory recursively. Must not throw if directory already exists. */
+  mkdir: (path: string) => Promise<void>;
+  /** Check whether a file or directory exists. */
+  exists: (path: string) => Promise<boolean>;
+  /** Rename (move) a file from `from` to `to`. */
+  rename: (from: string, to: string) => Promise<void>;
+  /** Delete a file. Must not throw if file does not exist. */
+  unlink: (path: string) => Promise<void>;
+  /** Join path segments using the target platform separator. */
+  joinPath: (...segments: string[]) => string;
+  /** List entries inside a directory. Returns plain names, no paths. */
+  listDir: (path: string) => Promise<string[]>;
   /** Optional: enables disk pre-allocation (`Download.alloc`). */
-  truncate?: TruncateFn;
+  truncate?: (path: string, size: number) => Promise<void>;
   /** Optional: enables the NDJSON event journal sidecar. */
-  appendFile?: AppendFileFn;
+  appendFile?: (path: string, buffer: Uint8Array) => Promise<void>;
   /** Optional: enables final size verification before rename. */
-  fileSize?: FileSizeFn;
+  fileSize?: (path: string) => Promise<number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,10 +81,10 @@ export interface DownloadConfig {
   readonly speedSampleWindow: number;
   readonly requestTimeout: number;
   readonly headers: Record<string, string>;
+  readonly io: InjectedFunctions;
 }
 
 export interface GlobalConfig extends DownloadConfig {
-  readonly io: InjectedFunctions;
   readonly targetPath: string;
   readonly cachePath: string;
   readonly targetChunkCount: number;
@@ -273,9 +240,7 @@ export interface MetaFile {
   readonly schemaVersion: number;
   readonly id: string;
   readonly url: string;
-  /** Resolved URL after redirects; null until the first successful probe. */
   finalUrl: string | null;
-  /** Filename inferred from probe/Content-Disposition/URL; null until known. */
   filename: string | null;
   totalSize: number | null;
   acceptsRanges: boolean;
@@ -286,13 +251,9 @@ export interface MetaFile {
   updatedAt: number;
   state: DownloadState;
   chunks: ChunkSnapshot[];
-  /** When the download was first registered (addUrl). */
   readonly addedAt: number;
-  /** Set when the download transitions to `completed`. */
   completedAt: number | null;
-  /** Set when the download transitions to `error`. */
   errorMessage: string | null;
-  /** Per-download user preference overrides. null = use global config value. */
   speedLimit: number | null;
   targetChunkCount: number | null;
   targetPath: string | null;

@@ -28,16 +28,17 @@ import type {
   DownloadOptions,
   DownloadState,
   GlobalConfig,
+  InjectedFunctions,
   MetaFile,
   ProbeResult,
 } from './types.js';
 
-export class Download {
+export class Download implements GlobalConfig {
   readonly id: string;
   readonly url: string;
   readonly emitter = new TypedEventEmitter<DownloadEventMap>();
   readonly options: DownloadOptions;
-  readonly global: GlobalConfig;
+  private readonly _global: GlobalConfig;
 
   private _state: DownloadState = 'idle';
   private _probe: ProbeResult | null = null;
@@ -56,6 +57,37 @@ export class Download {
   private readonly stalledSince = new Map<string, number>();
   private readonly recentDiagnostics: DiagnosticPayload[] = [];
 
+  // ---------------------------------------------------------------------------
+  // GlobalConfig implementation — delegates to _global, with per-download
+  // meta overrides for fields that support them.
+  // ---------------------------------------------------------------------------
+
+  get io(): InjectedFunctions { return this._global.io; }
+  get cachePath(): string { return this._global.cachePath; }
+  get sharedThrottle(): GlobalConfig['sharedThrottle'] { return this._global.sharedThrottle; }
+
+  get maxRetries(): number { return this._global.maxRetries; }
+  get retryDelay(): number { return this._global.retryDelay; }
+  get retryBackoff(): number { return this._global.retryBackoff; }
+  get speedSampleWindow(): number { return this._global.speedSampleWindow; }
+  get requestTimeout(): number { return this._global.requestTimeout; }
+  get headers(): Record<string, string> { return this._global.headers; }
+
+  get targetChunkCount(): number {
+    return this._meta.targetChunkCount ?? this._global.targetChunkCount;
+  }
+  get targetPath(): string {
+    return this._meta.targetPath ?? this._global.targetPath;
+  }
+  get minChunkSize(): number {
+    return this._meta.minChunkSize ?? this._global.minChunkSize;
+  }
+  get journal(): boolean {
+    return this._meta.journal ?? this._global.journal;
+  }
+
+  // ---------------------------------------------------------------------------
+
   static fromMeta(meta: MetaFile, global: GlobalConfig): Download {
     return new Download(meta.id, meta.url, {}, global, meta);
   }
@@ -70,7 +102,7 @@ export class Download {
     this.id = id;
     this.url = url;
     this.options = options;
-    this.global = global;
+    this._global = global;
     this.throttle = new Throttle(options.speedLimit ?? 0);
     if (initialMeta !== undefined) {
       this._meta = initialMeta;
@@ -141,7 +173,7 @@ export class Download {
   }
 
   get targetFilePath(): string {
-    return this.global.io.joinPath(this.targetPath, this.filename);
+    return this.io.joinPath(this.targetPath, this.filename);
   }
 
   get partFilePath(): string {
@@ -187,8 +219,8 @@ export class Download {
       }
     }
     await this.safeUnlink(this.partFilePath);
-    await deleteMeta(this.global.io, {
-      dir: this.global.cachePath,
+    await deleteMeta(this.io, {
+      dir: this.cachePath,
       id: this.id,
     }).catch(() => undefined);
     await this.safeUnlink(this.journalPath());
@@ -200,43 +232,25 @@ export class Download {
     this.throttle.setCapacity(effective);
     this._meta.speedLimit = bytesPerSec;
   }
-  get speedLimitOverride(): number | null {
-    return this._meta.speedLimit;
-  }
 
   /** Upper bound on live chunks; takes effect on the next split decision. */
   setTargetChunkCount(n: number | null): void {
     this._meta.targetChunkCount = n;
-  }
-  get targetChunkCount(): number {
-    return this._meta.targetChunkCount ?? this.global.targetChunkCount;
   }
 
   /** Override the target directory for this download's final file. null clears the override. */
   setTargetPath(path: string | null): void {
     this._meta.targetPath = path;
   }
-  get targetPath(): string {
-    return this._meta.targetPath ?? this.global.targetPath;
-  }
-  get targetPathOverride(): string | null {
-    return this._meta.targetPath;
-  }
 
   /** Minimum bytes remaining before a chunk can be split; takes effect on the next split decision. */
   setMinChunkSize(bytes: number | null): void {
     this._meta.minChunkSize = bytes;
   }
-  get minChunkSize(): number {
-    return this._meta.minChunkSize ?? this.global.minChunkSize;
-  }
 
   /** Toggle NDJSON journal writing; takes effect on the next diagnostic event. */
   setJournal(enabled: boolean | null): void {
     this._meta.journal = enabled;
-  }
-  get journal(): boolean {
-    return this._meta.journal ?? this.global.journal;
   }
 
   /**
@@ -273,9 +287,9 @@ export class Download {
   get<T>(key: string): T | undefined {
     switch (key) {
       case 'speedLimit':
-        return this.speedLimitOverride as T;
+        return this._meta.speedLimit as T;
       case 'targetPath':
-        return this.targetPathOverride as T;
+        return this.targetPath as T;
       case 'targetChunkCount':
         return (this._meta.targetChunkCount ?? null) as T;
       case 'minChunkSize':
@@ -287,28 +301,6 @@ export class Download {
     }
   }
 
-  /** Returns the current effective config for this download — overrides applied on top of global values. */
-  getConfig() {
-    return {
-      targetPath: this.targetPath,
-      targetChunkCount: this.targetChunkCount,
-      minChunkSize: this.minChunkSize,
-      maxRetries: this.global.maxRetries,
-      retryDelay: this.global.retryDelay,
-      retryBackoff: this.global.retryBackoff,
-      speedSampleWindow: this.global.speedSampleWindow,
-      requestTimeout: this.global.requestTimeout,
-      journal: this.journal,
-      speedLimit: this.throttle.capacityBytesPerSec,
-      overrides: {
-        speedLimit: this._meta.speedLimit,
-        targetChunkCount: this._meta.targetChunkCount,
-        targetPath: this._meta.targetPath,
-        minChunkSize: this._meta.minChunkSize,
-        journal: this._meta.journal,
-      },
-    };
-  }
 
   /**
    * Pre-allocate the part file to its final size. Requires `io.truncate` and
@@ -316,7 +308,7 @@ export class Download {
    * download start, exposed for callers that want to allocate earlier.
    */
   async alloc(): Promise<void> {
-    const truncate = this.global.io.truncate;
+    const truncate = this.io.truncate;
     const total = this._probe?.totalSize ?? null;
     if (truncate === undefined || total === null || total <= 0) return;
     try {
@@ -405,9 +397,9 @@ export class Download {
       if (this._probe === null) {
         this.setState('probing');
         const probe = await probeUrl({
-          fetch: this.global.io.fetch,
+          fetch: this.io.fetch,
           url: this.url,
-          headers: this.global.headers,
+          headers: this.headers,
           ...(this.options.filename !== undefined ? { filenameHint: this.options.filename } : {}),
         });
         this._probe = probe;
@@ -425,7 +417,7 @@ export class Download {
       // Zero-byte downloads: ensure the .part file exists so rename() has
       // something to move on finalize, then short-circuit.
       if (this._probe?.totalSize === 0) {
-        await this.global.io.writeFile(this.partFilePath, new Uint8Array(0));
+        await this.io.writeFile(this.partFilePath, new Uint8Array(0));
         await this.finalize();
         return;
       }
@@ -437,7 +429,7 @@ export class Download {
       this.setState('downloading');
       this.startedAt = Date.now();
 
-      for (;;) {
+      for (; ;) {
         await this.alloc();
         this.startProgressTimer();
         await this.driveChunks();
@@ -508,9 +500,9 @@ export class Download {
   }
 
   private async ensureTargetDirs(): Promise<void> {
-    await this.global.io.mkdir(this.targetPath);
-    if (this.global.cachePath !== this.targetPath) {
-      await this.global.io.mkdir(this.global.cachePath);
+    await this.io.mkdir(this.targetPath);
+    if (this.cachePath !== this.targetPath) {
+      await this.io.mkdir(this.cachePath);
     }
   }
 
@@ -521,7 +513,7 @@ export class Download {
    */
   private async loadOrInitMeta(forceFresh = false): Promise<void> {
     if (this._probe === null) throw new Error('Probe missing — unreachable');
-    const locator = { dir: this.global.cachePath, id: this.id };
+    const locator = { dir: this.cachePath, id: this.id };
     const hasResumableChunks =
       !forceFresh &&
       this._meta.chunks.length > 0 &&
@@ -529,7 +521,7 @@ export class Download {
 
     if (hasResumableChunks) {
       applyProbeToMeta(this._meta, this._probe, this._meta.chunks);
-      await persistMeta(this.global.io, locator, this._meta);
+      await persistMeta(this.io, locator, this._meta);
       return;
     }
 
@@ -541,18 +533,16 @@ export class Download {
     const chunkCount =
       mode === 'single' || !this._probe.acceptsRanges || this._probe.totalSize === null
         ? 1
-        : (this.options.targetChunkCount ?? this.global.targetChunkCount);
+        : (this.options.targetChunkCount ?? this.targetChunkCount);
     // Unknown total size: a single open-ended chunk that streams until EOF.
-    // The sentinel length keeps `downloadedBytes < length` true throughout, so
-    // completion is decided by the stream ending rather than byte accounting.
     const plans =
       this._probe.totalSize === null
         ? [{ offset: 0, length: UNKNOWN_SIZE_LENGTH, downloadedBytes: 0 }]
         : planChunks({
-            totalSize: this._probe.totalSize,
-            targetChunkCount: chunkCount,
-            minChunkSize: this.global.minChunkSize,
-          });
+          totalSize: this._probe.totalSize,
+          targetChunkCount: chunkCount,
+          minChunkSize: this.minChunkSize,
+        });
     const snapshots: ChunkSnapshot[] = plans.map((p, i) => ({
       id: `${this.id}-c${i}`,
       offset: p.offset,
@@ -563,7 +553,7 @@ export class Download {
       retries: 0,
     }));
     applyProbeToMeta(this._meta, this._probe, snapshots);
-    await persistMeta(this.global.io, locator, this._meta);
+    await persistMeta(this.io, locator, this._meta);
   }
 
   private instantiateChunksFromMeta(): void {
@@ -585,12 +575,10 @@ export class Download {
       acceptsRanges,
       etag: this._probe?.etag ?? null,
       lastModified: this._probe?.lastModified ?? null,
-      global: this.global,
-      fetch: this.global.io.fetch,
-      writeChunk: this.global.io.writeChunk,
+      global: this,
       emitter: this.emitter,
       throttle: async (bytes, signal) => {
-        await this.global.sharedThrottle.consume(bytes, signal);
+        await this.sharedThrottle.consume(bytes, signal);
         await this.throttle.consume(bytes, signal);
       },
       medianSpeedRef: () => this.aggregate.medianWindowedSpeed(),
@@ -598,8 +586,6 @@ export class Download {
   }
 
   private async driveChunks(): Promise<void> {
-    // Launch initial batch — capped by targetChunkCount so a single Download
-    // can't saturate manager-level maxParallel on its own.
     const runners = new Map<string, Promise<void>>();
 
     const launch = (chunk: Chunk): void => {
@@ -614,35 +600,30 @@ export class Download {
     while (runners.size > 0) {
       const entries = Array.from(runners.entries());
       await Promise.race(entries.map(([id, p]) => p.then(() => id)));
-      // Collect everything that has settled this tick.
       for (const [id, p] of entries) {
         const settled = await raceSettled(p);
         if (settled) runners.delete(id);
       }
 
       if (this.pauseRequested || this.cancelRequested) {
-        // Wait for remaining runners to acknowledge abort before returning.
         await Promise.allSettled(runners.values());
         runners.clear();
         break;
       }
 
-      // After something settles, try to donate remaining range to a new chunk.
-      // Splits require range support and a known size, and are pointless once
-      // any chunk has failed permanently (the download cannot complete).
       const splitAllowed =
         (this._probe?.acceptsRanges ?? false) &&
         this._probe?.totalSize !== null &&
         !this.chunks.some((c) => c.status === 'failed');
       const candidate = splitAllowed
         ? findSplitCandidate({
-            activeChunks: this.chunks.filter(
-              (c) => c.status !== 'completed' && c.status !== 'failed' && c.status !== 'reassigned',
-            ),
-            maxChunks: this.options.targetChunkCount ?? this.global.targetChunkCount,
-            minChunkSize: this.global.minChunkSize,
-            trigger: 'completed-reassign',
-          })
+          activeChunks: this.chunks.filter(
+            (c) => c.status !== 'completed' && c.status !== 'failed' && c.status !== 'reassigned',
+          ),
+          maxChunks: this.options.targetChunkCount ?? this.targetChunkCount,
+          minChunkSize: this.minChunkSize,
+          trigger: 'completed-reassign',
+        })
         : null;
       if (candidate !== null) {
         const newSnap: ChunkSnapshot = {
@@ -673,16 +654,13 @@ export class Download {
         launch(newChunk);
       }
 
-      // Persist a snapshot so a crash here is recoverable.
       await this.persistCurrentMeta().catch(() => undefined);
     }
   }
 
   private async finalize(): Promise<void> {
-    // Verify the assembled size before committing the rename — catches silent
-    // corruption (bad server, truncated writes) instead of shipping it.
     const expected = this._probe?.totalSize ?? null;
-    const fileSize = this.global.io.fileSize;
+    const fileSize = this.io.fileSize;
     if (expected !== null && expected > 0 && fileSize !== undefined) {
       const actual = await fileSize(this.partFilePath).catch(() => null);
       if (actual !== null && actual !== expected) {
@@ -703,7 +681,7 @@ export class Download {
         return;
       }
     }
-    await this.global.io.rename(this.partFilePath, this.targetFilePath);
+    await this.io.rename(this.partFilePath, this.targetFilePath);
     this.setState('completed');
     this._meta.completedAt = Date.now();
     await this.persistCurrentMeta().catch(() => undefined);
@@ -740,11 +718,6 @@ export class Download {
     }, 500);
   }
 
-  /**
-   * Aborts and reissues requests for chunks that have been classified
-   * `stalled` continuously for {@link STALL_RECOVERY_MS}. The retry budget
-   * still applies, so a chunk can't loop forever.
-   */
   private recoverStalledChunks(): void {
     const now = Date.now();
     for (const c of this.chunks) {
@@ -814,13 +787,12 @@ export class Download {
   }
 
   private journalPath(): string {
-    return this.global.io.joinPath(this.global.cachePath, `${this.id}.downloadx.log`);
+    return this.io.joinPath(this.cachePath, `${this.id}.downloadx.log`);
   }
 
-  /** Fire-and-forget NDJSON append; journal problems never affect the download. */
   private journalWrite(payload: DiagnosticPayload): void {
-    if (this.global.journal !== true) return;
-    const append = this.global.io.appendFile;
+    if (this.journal !== true) return;
+    const append = this.io.appendFile;
     if (append === undefined) return;
     const line = new TextEncoder().encode(`${JSON.stringify(payload)}\n`);
     void append(this.journalPath(), line).catch(() => undefined);
@@ -832,9 +804,9 @@ export class Download {
       chunks: this.chunks.length > 0 ? this.getChunkSnapshots() : this._meta.chunks,
     });
     await persistMeta(
-      this.global.io,
+      this.io,
       {
-        dir: this.global.cachePath,
+        dir: this.cachePath,
         id: this.id,
       },
       this._meta,
@@ -843,7 +815,7 @@ export class Download {
 
   private async safeUnlink(path: string): Promise<void> {
     try {
-      if (await this.global.io.exists(path)) await this.global.io.unlink(path);
+      if (await this.io.exists(path)) await this.io.unlink(path);
     } catch {
       /* ignore */
     }

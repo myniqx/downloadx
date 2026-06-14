@@ -15,9 +15,7 @@ import type {
   ChunkStatus,
   DownloadConfig,
   DownloadEventMap,
-  FetchFn,
   FetchResponse,
-  WriteChunkFn,
 } from './types.js';
 
 export interface ChunkParams {
@@ -35,8 +33,6 @@ export interface ChunkParams {
   lastModified?: string | null;
   /** Live reference to download config — values read per-retry, not snapshotted. */
   global: DownloadConfig;
-  fetch: FetchFn;
-  writeChunk: WriteChunkFn;
   emitter: TypedEventEmitter<DownloadEventMap>;
   /** Optional throttle hook — called with bytes-just-read before write. */
   throttle?: (bytes: number, signal?: AbortSignal) => Promise<void>;
@@ -292,7 +288,7 @@ export class Chunk {
         }
       }
       armIdle();
-      const res = await this.params.fetch(this.params.url, {
+      const res = await this.params.global.io.fetch(this.params.url, {
         method: 'GET',
         headers,
         signal: controller.signal,
@@ -373,7 +369,7 @@ export class Chunk {
 
   private async writeBytes(buf: Uint8Array): Promise<void> {
     const writeOffset = this.offset + this._downloadedBytes;
-    await this.params.writeChunk(this.params.targetFilePath, writeOffset, buf);
+    await this.params.global.io.writeChunk(this.params.targetFilePath, writeOffset, buf);
     this._downloadedBytes += buf.length;
     this.tracker.record(buf.length);
     this.updateQuality();

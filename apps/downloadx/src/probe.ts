@@ -1,7 +1,7 @@
-import type { FetchFn, ProbeResult } from './types.js';
+import type { FetchInit, FetchResponse, ProbeResult } from './types.js';
 
 export interface ProbeOptions {
-  fetch: FetchFn;
+  fetch: (input: string | URL, init?: FetchInit) => Promise<FetchResponse>;
   url: string;
   headers?: Record<string, string>;
   signal?: AbortSignal;
@@ -43,7 +43,7 @@ interface ProbeRaw {
 async function tryHead(opts: ProbeOptions): Promise<ProbeRaw | null> {
   try {
     const headerInit: Record<string, string> = { ...(opts.headers ?? {}) };
-    const init: Parameters<FetchFn>[1] = {
+    const init: FetchInit = {
       method: 'HEAD',
       headers: headerInit,
     };
@@ -65,7 +65,7 @@ async function tryRangeGet(opts: ProbeOptions): Promise<ProbeRaw> {
     ...(opts.headers ?? {}),
     Range: 'bytes=0-0',
   };
-  const init: Parameters<FetchFn>[1] = { method: 'GET', headers: headerInit };
+  const init: FetchInit = { method: 'GET', headers: headerInit };
   if (opts.signal !== undefined) init.signal = opts.signal;
   const res = await opts.fetch(opts.url, init);
   // Drain body so connection can be reused — if the runtime returns a stream

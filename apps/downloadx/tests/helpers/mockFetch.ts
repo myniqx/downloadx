@@ -1,4 +1,4 @@
-import type { FetchFn, FetchHeaders, FetchInit, FetchResponse } from '../../src/types.js';
+import type { FetchHeaders, FetchInit, FetchResponse, InjectedFunctions } from '../../src/types.js';
 
 export interface MockRouteInit {
   /** Payload the route serves to full-body and range requests. */
@@ -54,7 +54,7 @@ export class MockFetch {
     Object.assign(cur, patch);
   }
 
-  fetch: FetchFn = async (input, init) => {
+  fetch: InjectedFunctions['fetch'] = async (input, init) => {
     const url = typeof input === 'string' ? input : input.toString();
     this.calls.push({ url, init });
     const route = this.routes.get(url);
