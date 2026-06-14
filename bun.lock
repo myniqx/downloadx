@@ -11,22 +11,23 @@
     },
     "apps/cli": {
       "name": "@downloadx/cli",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
-        "downloadx": "./dist/cli.js",
+        "downloadx": "dist/cli.js",
       },
       "dependencies": {
         "@downloadx/core": "^0.1.0",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
+        "tsup": "^8.3.0",
         "typescript": "^5.6.0",
         "vitest": "^2.1.0",
       },
     },
     "apps/downloadx": {
       "name": "@downloadx/core",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "@vitest/coverage-v8": "^2.1.0",
