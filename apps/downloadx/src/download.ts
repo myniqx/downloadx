@@ -64,6 +64,8 @@ export class Download implements GlobalConfig {
 
   get io(): InjectedFunctions { return this._global.io; }
   get cachePath(): string { return this._global.cachePath; }
+  get maxParallel(): number { return this._global.maxParallel; }
+  get speedLimit(): number { return this._global.speedLimit; }
   get sharedThrottle(): GlobalConfig['sharedThrottle'] { return this._global.sharedThrottle; }
 
   get maxRetries(): number { return this._global.maxRetries; }

@@ -133,7 +133,7 @@ export async function initManager(config: DaemonConfig): Promise<void> {
   for (const dl of manager.list()) attachListeners(dl);
 }
 
-function getManager(): DownloadXInstance {
+export function getManager(): DownloadXInstance {
   if (!manager) throw new Error('Manager not initialized');
   return manager;
 }
@@ -144,18 +144,7 @@ export async function setGlobalConfig(
   override: boolean,
 ): Promise<void> {
   const def = resolveConfigKey(key, false);
-  const parsed = def.parse(rawValue);
-  const canonical = def.canonical;
-  const mgr = getManager();
-
-  if (canonical === 'maxParallel') mgr.setMaxParallel(parsed as number);
-  else if (canonical === 'speedLimit') mgr.setSpeedLimit(parsed as number);
-  else if (canonical === 'targetPath') mgr.setTargetPath(parsed as string);
-  else if (canonical === 'cachePath') mgr.setCachePath(parsed as string);
-  else if (canonical === 'targetChunkCount') mgr.setTargetChunkCount(parsed as number, override);
-  else if (canonical === 'minChunkSize') mgr.setMinChunkSize(parsed as number, override);
-  else if (canonical === 'journal') mgr.setJournal(parsed as boolean, override);
-
+  def.setGlobalValue(getManager(), rawValue, override);
   await saveConfig(getGlobalConfig() as DaemonConfig);
 }
 
@@ -170,8 +159,8 @@ export function getGlobalConfig(key?: string): DaemonConfig | unknown {
   return def.getValue(manager);
 }
 
-export function getDownloads(): DownloadDescription[] {
-  return getManager().list().map((dl) => dl.describe());
+export function getDownloads(): Download[] {
+  return getManager().list()
 }
 
 export function getAllIds(): string[] {
@@ -181,7 +170,7 @@ export function getAllIds(): string[] {
 }
 
 /** Resolves "#1", "1" (1-based index), a prefix or a full id to a download. */
-export function resolveDownload(idOrIndex: string): DownloadDescription | undefined {
+export function resolveDownload(idOrIndex: string): Download | undefined {
   const entries = getDownloads();
   const n = /^#?(\d+)$/.exec(idOrIndex);
   if (n) return entries[Number(n[1]) - 1];
@@ -233,18 +222,21 @@ function attachListeners(dl: Download): void {
   });
 }
 
-export function setDownloadConfig(id: string, key: string, value: unknown): boolean {
+/*
+export function setDownloadConfig(id: string, key: string, rawValue: string): void {
   const dl = getManager().get(id);
   if (!dl) throw new Error(`Download ${id} not active`);
-  return dl.set(key, value);
+  const def = resolveConfigKey(key, true);
+  def.setLocalValue(dl, def.parse(rawValue));
 }
 
-export function getDownloadConfig<T>(id: string, key: string): T | undefined {
+export function getDownloadConfig(id: string, key: string): unknown {
   const dl = getManager().get(id);
   if (!dl) throw new Error(`Download ${id} not active`);
-  return dl.get<T>(key);
+  const def = resolveConfigKey(key, true);
+  return def.getValue(dl);
 }
-
+*/
 export async function addDownload(
   url: string,
   targetPath: string | null,
@@ -276,8 +268,7 @@ export async function restartDownload(id: string): Promise<void> {
   const existing = mgr.get(id);
   if (!existing) throw new Error(`Download ${id} not found`);
   const url = existing.url;
-  await existing.clear();
-  await mgr.remove(id);
+  await mgr.clear(id);
   const dl = await mgr.addUrl(url, { id });
   attachListeners(dl);
   activeCount++;

@@ -87,6 +87,8 @@ export interface DownloadConfig {
 export interface GlobalConfig extends DownloadConfig {
   readonly targetPath: string;
   readonly cachePath: string;
+  readonly maxParallel: number;
+  readonly speedLimit: number;
   readonly targetChunkCount: number;
   readonly minChunkSize: number;
   readonly journal: boolean;

@@ -16,8 +16,6 @@ import {
   addEventSink,
   removeEventSink,
   onAutoShutdown,
-  setDownloadConfig,
-  getDownloadConfig,
   initManager,
   setGlobalConfig,
   getGlobalConfig,
@@ -55,14 +53,14 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       break;
     }
     case 'list': {
-      send(socket, { ok: true, data: getDownloads() });
+      send(socket, { ok: true, data: getDownloads().map((d) => d.describe()) });
       break;
     }
     case 'status': {
       const resolved = resolveId(req.id);
-      const desc = resolveDownload(resolved);
-      if (!desc) throw new Error(`Download ${resolved} not found`);
-      send(socket, { ok: true, data: desc });
+      const dl = resolveDownload(resolved);
+      if (!dl) throw new Error(`Download ${resolved} not found`);
+      send(socket, { ok: true, data: dl.describe() });
       break;
     }
     case 'pause': {
@@ -127,11 +125,9 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       }
 
       if (isLocal) {
-        const entry = resolveDownload(resolveId(req.id!));
-        if (!entry) throw new Error(`No download matching '${req.id}'`);
-        const parsed = def.parse(req.value);
-        const ok = setDownloadConfig(entry.id, def.canonical, parsed);
-        if (!ok) throw new Error(`Key '${def.canonical}' is not settable on a download`);
+        const dl = resolveDownload(resolveId(req.id!));
+        if (!dl) throw new Error(`No download matching '${req.id}'`);
+        def.setLocalValue(dl, req.value);
       } else {
         await setGlobalConfig(req.key, req.value, req.override === true);
       }
@@ -140,16 +136,16 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
     }
     case 'get': {
       if (req.id) {
-        const entry = resolveDownload(resolveId(req.id));
-        if (!entry) throw new Error(`No download matching '${req.id}'`);
+        const dl = resolveDownload(resolveId(req.id));
+        if (!dl) throw new Error(`No download matching '${req.id}'`);
         if (!req.key) {
           const all = Object.fromEntries(
-            LOCAL_KEYS.map((d) => [d.canonical, getDownloadConfig(entry.id, d.canonical)]),
+            LOCAL_KEYS.map((d) => [d.canonical, d.getValue(dl)]),
           );
           send(socket, { ok: true, data: all });
         } else {
           const def = resolveConfigKey(req.key, true);
-          send(socket, { ok: true, data: getDownloadConfig(entry.id, def.canonical) });
+          send(socket, { ok: true, data: def.getValue(dl) });
         }
       } else {
         send(socket, { ok: true, data: getGlobalConfig(req.key) });
