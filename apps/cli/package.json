@@ -42,7 +42,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun build src/cli.ts --outdir dist --target node --banner '#!/usr/bin/env node'",
+    "build": "tsup",
     "dx": "node ./dist/cli.js",
     "dev": "bun run src/cli.ts",
     "test": "vitest run",
@@ -54,6 +54,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   },
