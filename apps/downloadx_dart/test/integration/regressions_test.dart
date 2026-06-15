@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:downloadx/downloadx.dart';
 import 'package:test/test.dart';
 
@@ -6,8 +8,103 @@ import '../helpers/mock_io.dart';
 
 const _url = 'https://h/file.bin';
 
+/// Minimal [DownloadConfig] for building a [Chunk] in isolation.
+class _Cfg implements DownloadConfig {
+  @override
+  final DownloadxIo io;
+  _Cfg(this.io);
+  @override
+  int get maxRetries => 1;
+  @override
+  int get retryDelay => 1;
+  @override
+  num get retryBackoff => 1;
+  @override
+  int get speedSampleWindow => 500;
+  @override
+  int get requestTimeout => 5000;
+  @override
+  Map<String, String> get headers => const {};
+}
+
 void main() {
   group('regressions', () {
+    test(
+        'in-flight split clamping: shrinking length mid-stream stops writes at the new boundary',
+        () async {
+      final io = MockIo();
+      final body = deterministicBytes(1000);
+      io.fetcher
+          .route(_url, MockRoute(body: body, etag: 'E1', streamChunkSize: 16));
+
+      final emitter = EventEmitter();
+      final chunk = Chunk(ChunkParams(
+        id: 'c0',
+        downloadId: 'd',
+        url: _url,
+        targetFilePath: '/p.part',
+        offset: 0,
+        length: 1000,
+        initialDownloadedBytes: 0,
+        acceptsRanges: true,
+        global: _Cfg(io),
+        emitter: emitter,
+        medianSpeedRef: () => 0,
+      ));
+
+      int? newLen;
+      // Once ~100 bytes are in, donate the tail — exactly the in-flight split
+      // the Download performs. Writes must clamp to the new (shorter) length.
+      emitter.onType<ChunkProgressEvent>((e) {
+        if (newLen == null && e.downloadedBytes >= 100) {
+          chunk.truncateTail(64);
+          newLen = chunk.length;
+        }
+      });
+
+      await chunk.run();
+
+      expect(newLen, isNotNull);
+      expect(newLen, lessThan(1000));
+      expect(chunk.status, ChunkStatus.completed);
+      // Stopped exactly at the shrunk boundary — never wrote past it.
+      expect(chunk.downloadedBytes, newLen);
+      final written = io.files['/p.part']!;
+      expect(written.length, newLen);
+      expect(written, equals(Uint8List.sublistView(body, 0, newLen!)));
+    });
+
+    test(
+        'no range support: a mid-stream break restarts the chunk from byte zero',
+        () async {
+      final body = deterministicBytes(400);
+      final h = await Harness.create(maxRetries: 3);
+      // No range support; the first GET streams 100 bytes then breaks, the
+      // retry must restart the body from 0 (not splice at the partial offset).
+      h.io.fetcher.route(
+        _url,
+        MockRoute(
+          body: body,
+          acceptsRanges: false,
+          failStreamTimes: 1,
+          failStreamAfterBytes: 100,
+          streamChunkSize: 16,
+        ),
+      );
+
+      var restart = false;
+      final dl = await h.manager.addUrl(_url);
+      dl.emitter.onType<DiagnosticEvent>((e) {
+        if (e.payload.code == 'no-range-restart') restart = true;
+      });
+
+      await dl.start();
+
+      expect(dl.state, DownloadState.completed);
+      expect(h.io.files['/downloads/file.bin'], equals(body));
+      expect(restart, isTrue, reason: 'should have restarted from byte 0');
+    });
+
     test(
         'network idle timeout aborts and retries, then errors when budget runs out',
         () async {

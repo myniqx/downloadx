@@ -47,6 +47,12 @@ class MockRoute {
   /// emitting more or closing — exercises the network idle-timeout path.
   bool stallForever;
 
+  /// The first [failStreamTimes] GET attempts stream [failStreamAfterBytes]
+  /// bytes then error mid-stream (a transient network break). Exercises retry
+  /// and — for a no-range resource — the restart-from-zero path.
+  int failStreamTimes;
+  int failStreamAfterBytes;
+
   MockRoute({
     this.body,
     this.acceptsRanges = true,
@@ -64,6 +70,8 @@ class MockRoute {
     this.advertisedLength,
     this.streaming = true,
     this.stallForever = false,
+    this.failStreamTimes = 0,
+    this.failStreamAfterBytes = 0,
   });
 }
 
@@ -128,6 +136,8 @@ class MockFetch {
 
     final rangeHeader = headers['Range'] ?? headers['range'];
     final body = r.body ?? Uint8List(0);
+    final erroring = r.failStreamTimes > 0 && attempts <= r.failStreamTimes;
+    final errorAfter = erroring ? r.failStreamAfterBytes : null;
 
     // Unknown size: stream the body with no Content-Length / Accept-Ranges, 200.
     if (r.unknownSize) {
@@ -142,6 +152,7 @@ class MockFetch {
         streaming: r.streaming,
         streamChunkSize: r.streamChunkSize,
         stall: r.stallForever,
+        errorAfter: errorAfter,
       );
     }
 
@@ -165,6 +176,7 @@ class MockFetch {
         streaming: r.streaming,
         streamChunkSize: r.streamChunkSize,
         stall: r.stallForever,
+        errorAfter: errorAfter,
       );
     }
 
@@ -183,6 +195,7 @@ class MockFetch {
       streaming: r.streaming,
       streamChunkSize: r.streamChunkSize,
       stall: r.stallForever,
+      errorAfter: errorAfter,
     );
   }
 
@@ -210,6 +223,7 @@ class MockResponse implements FetchResponse {
   final bool _streaming;
   final int _streamChunkSize;
   final bool _stall;
+  final int? _errorAfter;
 
   MockResponse({
     required this.status,
@@ -220,10 +234,12 @@ class MockResponse implements FetchResponse {
     bool streaming = true,
     int streamChunkSize = 16,
     bool stall = false,
+    int? errorAfter,
   })  : _bodyBytes = bodyBytes,
         _streaming = streaming,
         _streamChunkSize = streamChunkSize,
-        _stall = stall;
+        _stall = stall,
+        _errorAfter = errorAfter;
 
   @override
   bool get ok => status >= 200 && status < 300;
@@ -244,6 +260,10 @@ class MockResponse implements FetchResponse {
       offset = end;
       // Yield to the event loop so cancellation can interleave.
       await Future<void>.delayed(Duration.zero);
+      // Transient mid-stream break: emit up to the threshold, then error.
+      if (_errorAfter != null && offset >= _errorAfter) {
+        throw Exception('mock stream error after $offset bytes');
+      }
     }
   }
 

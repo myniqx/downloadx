@@ -135,6 +135,24 @@ void main() {
   });
 
   group('robustness', () {
+    test('cancel stops the download and leaves no final file', () async {
+      final h = await Harness.create(targetChunkCount: 2);
+      // Stalling stream so the download cannot race to completion before cancel.
+      h.io.fetcher.route(
+        _url,
+        MockRoute(
+            body: deterministicBytes(2000), etag: 'E1', stallForever: true),
+      );
+      final dl = await h.manager.addUrl(_url);
+      final run = dl.start();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      dl.cancel();
+      await run.timeout(const Duration(seconds: 10));
+
+      expect(dl.state, DownloadState.cancelled);
+      expect(h.io.files.containsKey('/downloads/file.bin'), isFalse);
+    });
+
     test('404 propagates as error state and fatal error event', () async {
       final h = await Harness.create();
       // No route registered for this URL → 404.
