@@ -217,3 +217,36 @@ callback it is fully live and needs a setter.
 | **quality**          | `good` / `poor` / `stalled` — chunk speed relative to the median of active chunks.                   |
 | **idle timeout**     | Abort-and-retry when no bytes arrive for `requestTimeout` ms; not a total-duration cap.              |
 | **sentinel length**  | `UNKNOWN_SIZE_LENGTH` (`Number.MAX_SAFE_INTEGER`) — marks an unknown-size chunk that streams to EOF. |
+
+## Dart / Flutter port — `apps/downloadx_dart/`
+
+A standalone Dart package mirroring the core 1:1. It is **not** part of the Bun
+workspace and has its own toolchain (`dart pub get`, `dart analyze`,
+`dart test`). The module layout maps directly onto the TypeScript source:
+
+| Dart file                  | Mirrors                  | Notes                                                                                       |
+| -------------------------- | ------------------------ | ------------------------------------------------------------------------------------------- |
+| `lib/src/types.dart`       | `types.ts`               | Enums, config, snapshots, `MetaFile` (+ `toJson`/`fromJson`), event/description payloads.   |
+| `lib/src/io.dart`          | `InjectedFunctions`      | `DownloadxIo` abstract interface + `FetchResponse`/`CancelToken` (AbortSignal analogue).    |
+| `lib/src/native_io.dart`   | (new — README quickstart)| Default `dart:io` backend: `HttpClient` + non-truncating `FileMode.append` random writes.   |
+| `lib/src/events.dart`      | `events.ts`              | Sealed `DownloadEvent` hierarchy + synchronous, error-contained `EventEmitter`.             |
+| `lib/src/{retry,throttle,speed_tracker,chunk_scheduler,probe,meta,chunk,download,download_x}.dart` | same basenames | Same responsibilities and invariants. |
+
+Key porting decisions:
+
+- **I/O is still pluggable but no longer mandatory.** A Flutter/Dart consumer
+  just passes `targetPath`; `io` defaults to `NativeIo`. Tests inject an
+  in-memory `DownloadxIo`.
+- **Abort semantics** map onto `CancelToken`: `AbortError` = user intent (never
+  retried), `TransientAbort` = idle-timeout / stall-restart (retried) — same
+  classification as invariant 9.
+- **Random-access writes** use `FileMode.append` (which, despite the name, is
+  seekable on every Dart target and never truncates) — the Dart equivalent of
+  the README's `r+ → wx` `openRw`. Pre-allocation uses `truncate()` on an
+  append handle so it preserves a resumed part file (invariant 3).
+- The meta sidecar (`schemaVersion 3`, field names, the unknown-size sentinel
+  `9007199254740991` = `2^53 - 1`, the FNV-1a URL→id hash) is byte-compatible,
+  so a download is interchangeable between the TS and Dart implementations.
+
+The same invariants in this document apply. Run `dart analyze && dart test`
+(from `apps/downloadx_dart`) before pushing.
