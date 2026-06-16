@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../services/download_service.dart';
@@ -20,6 +21,16 @@ class DownloadListScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('dlx'),
         actions: [
+          if (kDebugMode)
+            ListenableBuilder(
+              listenable: service,
+              builder: (context, _) => IconButton(
+                tooltip: service.demoActive ? 'Clear demo downloads' : 'Inject demo downloads',
+                icon: Icon(service.demoActive ? Icons.science : Icons.science_outlined),
+                color: service.demoActive ? Theme.of(context).colorScheme.primary : null,
+                onPressed: service.toggleDemo,
+              ),
+            ),
           IconButton(
             tooltip: 'Start all',
             icon: const Icon(Icons.play_arrow),

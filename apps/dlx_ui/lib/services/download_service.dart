@@ -5,6 +5,7 @@ import 'package:downloadx/downloadx.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../dev/demo_io.dart';
 import '../models/download_vm.dart';
 import 'settings_store.dart';
 import 'speed_history.dart';
@@ -100,6 +101,68 @@ class DownloadService extends ChangeNotifier {
     downloads.remove(vm);
     vm.dispose();
     notifyListeners();
+  }
+
+  // ---- dev demo -----------------------------------------------------------
+
+  static const _demoPrefix = 'demo-';
+  DownloadX? _demoManager;
+
+  /// True while the injected demo downloads are present.
+  bool get demoActive => downloads.any((vm) => vm.id.startsWith(_demoPrefix));
+
+  /// Toggle: inject two synthetic, slowly-streaming downloads (real engine,
+  /// fake I/O) when clean; clear them when present. Dev/debug only.
+  Future<void> toggleDemo() async {
+    if (demoActive) {
+      await _clearDemo();
+    } else {
+      await _startDemo();
+    }
+  }
+
+  Future<void> _startDemo() async {
+    final m = _demoManager ??= await _createDemoManager();
+    final specs = [
+      ('https://demo.local/alpha-24mb.bin', '${_demoPrefix}alpha'),
+      ('https://demo.local/beta-40mb.bin', '${_demoPrefix}beta'),
+    ];
+    for (final (url, id) in specs) {
+      final d = await m.addUrl(url, DownloadOptions(id: id));
+      if (_byId[id] == null) _track(d);
+    }
+    notifyListeners();
+    for (final (_, id) in specs) {
+      await m.start(id);
+    }
+  }
+
+  Future<void> _clearDemo() async {
+    final m = _demoManager;
+    if (m == null) return;
+    final demos = downloads.where((vm) => vm.id.startsWith(_demoPrefix)).toList();
+    for (final vm in demos) {
+      await m.clear(vm.id);
+      _byId.remove(vm.id);
+      downloads.remove(vm);
+      vm.dispose();
+    }
+    notifyListeners();
+  }
+
+  Future<DownloadX> _createDemoManager() async {
+    final m = await createDownloadX(DownloadXConfig(
+      io: DemoIo(),
+      targetPath: '/demo/downloads',
+      cachePath: '/demo/cache',
+      maxParallel: 2,
+      targetChunkCount: 4,
+      minChunkSize: 256 * 1024,
+    ));
+    // Route the demo manager's events through the same handler; demo VMs live
+    // in the same registry, so tiles/charts update identically.
+    m.emitter.on(_onEvent);
+    return m;
   }
 
   Future<void> applySettings(GlobalSettings s) async {
