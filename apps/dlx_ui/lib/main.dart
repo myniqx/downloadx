@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'services/download_service.dart';
-import 'ui/download_list_screen.dart';
+import 'ui/shell.dart';
+import 'util/palette.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,14 +20,8 @@ class DlxApp extends StatelessWidget {
     return MaterialApp(
       title: 'dlx',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF4FC3F7),
-          brightness: Brightness.dark,
-        ),
-      ),
-      home: DownloadListScreen(service: service),
+      theme: AppTheme.dark,
+      home: AppShell(service: service),
     );
   }
 }

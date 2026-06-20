@@ -89,14 +89,26 @@ class DownloadService extends ChangeNotifier {
     return vm;
   }
 
-  Future<void> start(DownloadVm vm) => manager.start(vm.id);
-  void pause(DownloadVm vm) => manager.pause(vm.id);
+  DownloadX _managerFor(DownloadVm vm) =>
+      vm.id.startsWith(_demoPrefix) && _demoManager != null
+          ? _demoManager!
+          : manager;
 
-  Future<void> startAll() => manager.start();
-  void pauseAll() => manager.pause();
+  Future<void> start(DownloadVm vm) => _managerFor(vm).start(vm.id);
+  void pause(DownloadVm vm) => _managerFor(vm).pause(vm.id);
+
+  Future<void> startAll() async {
+    await manager.start();
+    await _demoManager?.start();
+  }
+
+  void pauseAll() {
+    manager.pause();
+    _demoManager?.pause();
+  }
 
   Future<void> remove(DownloadVm vm) async {
-    await manager.clear(vm.id);
+    await _managerFor(vm).clear(vm.id);
     _byId.remove(vm.id);
     downloads.remove(vm);
     vm.dispose();
