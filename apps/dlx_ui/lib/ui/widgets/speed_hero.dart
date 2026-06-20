@@ -1,20 +1,28 @@
 import 'package:flutter/material.dart';
 
+import '../../services/speed_history.dart';
 import '../../util/format.dart';
 import '../../util/palette.dart';
+import 'stacked_speed_chart.dart';
 
-/// Global speed hero — desktop shows large headline + bar chart area,
-/// mobile shows headline + mini SVG-style line chart.
+/// Global speed hero — desktop: large headline + stacked chart,
+/// mobile: headline + mini stacked chart side by side.
 class SpeedHero extends StatelessWidget {
   final double speedBps;
   final int activeCount;
   final int queuedCount;
   final VoidCallback? onResumeAll;
+  final SpeedHistory history;
+  final List<String> seriesOrder;
+  final Color Function(String id) colorOf;
 
   const SpeedHero({
     super.key,
     required this.speedBps,
     required this.activeCount,
+    required this.history,
+    required this.seriesOrder,
+    required this.colorOf,
     this.queuedCount = 0,
     this.onResumeAll,
   });
@@ -22,7 +30,7 @@ class SpeedHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final isDesktop = width >= 768;
+    final isDesktop = width >= kBreakpointMd;
     return isDesktop ? _DesktopHero(this) : _MobileHero(this);
   }
 }
@@ -46,7 +54,6 @@ class _DesktopHero extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Stack(
         children: [
-          // Subtle gradient overlay
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -58,7 +65,11 @@ class _DesktopHero extends StatelessWidget {
                     Colors.transparent,
                   ],
                 ),
-                borderRadius: BorderRadius.circular(AppRadius.xl),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(AppRadius.xl),
+                  topRight: Radius.circular(AppRadius.xl),
+                  bottomRight: Radius.circular(AppRadius.xl),
+                ),
               ),
             ),
           ),
@@ -69,12 +80,18 @@ class _DesktopHero extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: Column(
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: AppSpacing.sm,
+                        top: AppSpacing.sm,
+                      ),
+                      child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           formatSpeed(w.speedBps),
-                          style: AppTextStyles.headlineLg.copyWith(color: AppColors.onSurface),
+                          style: AppTextStyles.headlineLg
+                              .copyWith(color: AppColors.onSurface),
                         ),
                         const SizedBox(height: AppSpacing.xs),
                         Row(
@@ -88,6 +105,7 @@ class _DesktopHero extends StatelessWidget {
                           ],
                         ),
                       ],
+                      ),
                     ),
                   ),
                   Row(
@@ -111,44 +129,16 @@ class _DesktopHero extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              const _BarChartPlaceholder(),
+              StackedSpeedChart(
+                frames: w.history.frames,
+                limits: w.history.limits,
+                seriesOrder: w.seriesOrder,
+                colorOf: w.colorOf,
+                height: 96,
+              ),
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _BarChartPlaceholder extends StatelessWidget {
-  const _BarChartPlaceholder();
-
-  static const _heights = [0.30, 0.45, 0.60, 0.50, 0.75, 0.90, 0.85, 0.65, 0.95, 1.0];
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 96,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: List.generate(_heights.length, (i) {
-          final frac = _heights[i];
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: Container(
-                height: 96 * frac,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.2 + frac * 0.8),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.sm)),
-                  boxShadow: i == _heights.length - 1
-                      ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.5), blurRadius: 10)]
-                      : null,
-                ),
-              ),
-            ),
-          );
-        }),
       ),
     );
   }
@@ -166,7 +156,8 @@ class _ResumeAllButton extends StatelessWidget {
       label: const Text('Resume All'),
       style: FilledButton.styleFrom(
         textStyle: AppTextStyles.labelSm,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       ),
     );
   }
@@ -188,56 +179,69 @@ class _MobileHero extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.xl),
         border: Border.all(color: AppColors.outlineVariant),
       ),
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      clipBehavior: Clip.hardEdge,
       child: Stack(
         children: [
-          // Glow blob top-right
-          Positioned(
-            top: -48,
-            right: -48,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
+          // Full-width chart at the bottom
+          Positioned.fill(
+            child: StackedSpeedChart(
+              frames: w.history.frames,
+              limits: w.history.limits,
+              seriesOrder: w.seriesOrder,
+              colorOf: w.colorOf,
+              height: null,
             ),
           ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Global Download Speed',
-                        style: AppTextStyles.labelSm
-                            .copyWith(color: AppColors.onSurfaceVariant, letterSpacing: 0.8)),
-                    const SizedBox(height: AppSpacing.xs),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          _speedValue(w.speedBps),
-                          style: AppTextStyles.headlineLgMobile
-                              .copyWith(color: AppColors.primary),
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        Text(
-                          _speedUnit(w.speedBps),
-                          style: AppTextStyles.dataDisplay
-                              .copyWith(color: AppColors.primary.withValues(alpha: 0.7)),
-                        ),
-                      ],
-                    ),
+          // Gradient overlay so text stays readable
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.surfaceContainerHigh.withValues(alpha: 0.75),
+                    AppColors.surfaceContainerHigh.withValues(alpha: 0.1),
                   ],
                 ),
               ),
-              const SizedBox(width: AppSpacing.md),
-              const _MiniLineChart(),
-            ],
+            ),
+          ),
+          // Text overlay
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Global Download Speed',
+                  style: AppTextStyles.labelSm.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      _speedValue(w.speedBps),
+                      style: AppTextStyles.headlineLgMobile
+                          .copyWith(color: AppColors.primary),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      _speedUnit(w.speedBps),
+                      style: AppTextStyles.dataDisplay.copyWith(
+                          color: AppColors.primary.withValues(alpha: 0.7)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg + 48),
+              ],
+            ),
           ),
         ],
       ),
@@ -259,71 +263,3 @@ class _MobileHero extends StatelessWidget {
   }
 }
 
-class _MiniLineChart extends StatelessWidget {
-  const _MiniLineChart();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 120,
-      height: 64,
-      child: CustomPaint(painter: _LineChartPainter()),
-    );
-  }
-}
-
-class _LineChartPainter extends CustomPainter {
-  // Normalized y values (0=bottom, 1=top) matching the HTML SVG path
-  static const _pts = [
-    Offset(0.00, 0.40),
-    Offset(0.25, 0.80),
-    Offset(0.50, 0.30),
-    Offset(0.75, 0.70),
-    Offset(0.875, 0.90),
-    Offset(1.00, 1.00),
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path();
-    final fill = Path();
-
-    Offset pt(Offset n) => Offset(n.dx * size.width, size.height - n.dy * size.height);
-
-    path.moveTo(pt(_pts.first).dx, pt(_pts.first).dy);
-    for (var i = 1; i < _pts.length; i++) {
-      final p0 = pt(_pts[i - 1]);
-      final p1 = pt(_pts[i]);
-      final cx = (p0.dx + p1.dx) / 2;
-      path.cubicTo(cx, p0.dy, cx, p1.dy, p1.dx, p1.dy);
-    }
-
-    fill.addPath(path, Offset.zero);
-    fill.lineTo(size.width, size.height);
-    fill.lineTo(0, size.height);
-    fill.close();
-
-    final gradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        AppColors.primary.withValues(alpha: 0.3),
-        AppColors.primary.withValues(alpha: 0.0),
-      ],
-    ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-
-    canvas.drawPath(fill, Paint()..shader = gradient);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = AppColors.primary
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}

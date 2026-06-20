@@ -7,8 +7,6 @@ import 'add_download_dialog.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 
-const double kBreakpointMd = 768;
-
 class AppShell extends StatefulWidget {
   final DownloadService service;
   const AppShell({super.key, required this.service});
@@ -19,15 +17,22 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
+  final TextEditingController _searchCtrl = TextEditingController();
 
   static const _navItems = [
     _NavItem(icon: Icons.download_outlined, activeIcon: Icons.download_rounded, label: 'Home'),
     _NavItem(icon: Icons.settings_outlined, activeIcon: Icons.settings_rounded, label: 'Settings'),
   ];
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Widget _buildPage(int index) {
     return switch (index) {
-      0 => HomeScreen(service: widget.service),
+      0 => HomeScreen(service: widget.service, searchCtrl: _searchCtrl),
       1 => SettingsScreen(service: widget.service),
       _ => const _PlaceholderPage(),
     };
@@ -44,6 +49,7 @@ class _AppShellState extends State<AppShell> {
             navItems: _navItems,
             onDestinationSelected: (i) => setState(() => _selectedIndex = i),
             service: widget.service,
+            searchCtrl: _searchCtrl,
             child: _buildPage(_selectedIndex),
           )
         : _MobileShell(
@@ -65,6 +71,7 @@ class _DesktopShell extends StatelessWidget {
   final List<_NavItem> navItems;
   final ValueChanged<int> onDestinationSelected;
   final DownloadService service;
+  final TextEditingController searchCtrl;
   final Widget child;
 
   const _DesktopShell({
@@ -72,6 +79,7 @@ class _DesktopShell extends StatelessWidget {
     required this.navItems,
     required this.onDestinationSelected,
     required this.service,
+    required this.searchCtrl,
     required this.child,
   });
 
@@ -90,7 +98,7 @@ class _DesktopShell extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
-                _TopHeader(service: service),
+                _TopHeader(service: service, searchCtrl: searchCtrl),
                 Expanded(child: child),
               ],
             ),
@@ -218,7 +226,8 @@ class _SideNavButton extends StatelessWidget {
 
 class _TopHeader extends StatelessWidget {
   final DownloadService service;
-  const _TopHeader({required this.service});
+  final TextEditingController searchCtrl;
+  const _TopHeader({required this.service, required this.searchCtrl});
 
   @override
   Widget build(BuildContext context) {
@@ -236,7 +245,7 @@ class _TopHeader extends StatelessWidget {
           Expanded(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),
-              child: _SearchField(),
+              child: _SearchField(controller: searchCtrl),
             ),
           ),
           const Spacer(),
@@ -247,8 +256,6 @@ class _TopHeader extends StatelessWidget {
             tooltip: 'Pause all',
             onPressed: service.pauseAll,
           ),
-          const SizedBox(width: AppSpacing.xs),
-          _HeaderAction(icon: Icons.tune_outlined, tooltip: 'Scheduler'),
         ],
       ),
     );
@@ -527,9 +534,13 @@ class _DemoButton extends StatelessWidget {
 }
 
 class _SearchField extends StatelessWidget {
+  final TextEditingController controller;
+  const _SearchField({required this.controller});
+
   @override
   Widget build(BuildContext context) {
     return TextField(
+      controller: controller,
       style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface),
       decoration: InputDecoration(
         hintText: 'Search downloads...',

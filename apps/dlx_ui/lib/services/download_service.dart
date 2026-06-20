@@ -167,12 +167,11 @@ class DownloadService extends ChangeNotifier {
       io: DemoIo(),
       targetPath: '/demo/downloads',
       cachePath: '/demo/cache',
-      maxParallel: 2,
-      targetChunkCount: 4,
-      minChunkSize: 256 * 1024,
+      maxParallel: settings.maxParallel,
+      speedLimit: settings.speedLimit,
+      targetChunkCount: settings.targetChunkCount,
+      minChunkSize: settings.minChunkSize,
     ));
-    // Route the demo manager's events through the same handler; demo VMs live
-    // in the same registry, so tiles/charts update identically.
     m.emitter.on(_onEvent);
     return m;
   }
@@ -185,6 +184,10 @@ class DownloadService extends ChangeNotifier {
     manager.setMinChunkSize(s.minChunkSize);
     manager.setTargetPath(s.targetPath);
     manager.setJournal(s.journal);
+    _demoManager?.setMaxParallel(s.maxParallel);
+    _demoManager?.setSpeedLimit(s.speedLimit);
+    _demoManager?.setTargetChunkCount(s.targetChunkCount);
+    _demoManager?.setMinChunkSize(s.minChunkSize);
     // No live setters exist for these — mutate the retained config in place
     // (the engine reads them per attempt, so the change takes effect at once).
     _config.maxRetries = s.maxRetries;
@@ -222,7 +225,8 @@ class DownloadService extends ChangeNotifier {
         frame[vm.id] = vm.currentSpeed;
       }
     }
-    globalSpeedHistory.push(frame);
+    final limit = settings.speedLimit > 0 ? settings.speedLimit.toDouble() : null;
+    globalSpeedHistory.push(frame, speedLimit: limit);
     ticker.value = ticker.value + 1;
   }
 

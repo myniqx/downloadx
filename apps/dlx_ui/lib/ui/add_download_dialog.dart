@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../services/download_service.dart';
 import '../util/format.dart';
+import '../util/palette.dart';
 
 Future<void> showAddDownloadDialog(BuildContext context, DownloadService service) {
   return showDialog<void>(
@@ -26,6 +27,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   final _speedLimit = TextEditingController();
   ChunkMode _mode = ChunkMode.auto;
   bool _autoStart = true;
+  bool _showAdvanced = false;
   String? _error;
 
   @override
@@ -75,69 +77,84 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
               TextField(
                 controller: _url,
                 autofocus: true,
+                style: AppTextStyles.dataDisplay,
                 decoration: const InputDecoration(
                   labelText: 'URL',
                   hintText: 'https://example.com/file.iso',
                 ),
                 onSubmitted: (_) => _submit(),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.xs),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Start immediately'),
                 value: _autoStart,
                 onChanged: (v) => setState(() => _autoStart = v),
               ),
-              ExpansionPanelList.radio(
-                elevation: 0,
-                expandedHeaderPadding: EdgeInsets.zero,
-                children: [
-                  ExpansionPanelRadio(
-                    value: 'adv',
-                    headerBuilder: (_, _) => const ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Advanced (per-download)'),
-                    ),
-                    body: Column(
-                      children: [
-                        TextField(
-                          controller: _filename,
-                          decoration: const InputDecoration(
-                              labelText: 'Filename (optional)'),
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<ChunkMode>(
-                          initialValue: _mode,
-                          decoration: const InputDecoration(labelText: 'Chunk mode'),
-                          items: ChunkMode.values
-                              .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
-                              .toList(),
-                          onChanged: (m) => setState(() => _mode = m ?? ChunkMode.auto),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _chunkCount,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                              labelText: 'Target chunk count (optional)'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _speedLimit,
-                          decoration: const InputDecoration(
-                            labelText: 'Speed limit (optional)',
-                            hintText: 'e.g. 2M, 500k — empty = unlimited',
-                          ),
-                        ),
-                      ],
-                    ),
+              InkWell(
+                onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+                borderRadius: BorderRadius.circular(AppRadius.def),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppSpacing.sm,
+                    horizontal: AppSpacing.md,
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Advanced (per-download)',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      Icon(
+                        _showAdvanced ? Icons.expand_less : Icons.expand_more,
+                        color: AppColors.onSurfaceVariant,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
               ),
+              if (_showAdvanced) ...[
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: _filename,
+                  decoration: const InputDecoration(
+                    labelText: 'Filename (optional)',
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                DropdownMenu<ChunkMode>(
+                  initialSelection: _mode,
+                  label: const Text('Chunk mode'),
+                  expandedInsets: EdgeInsets.zero,
+                  onSelected: (m) => setState(() => _mode = m ?? ChunkMode.auto),
+                  dropdownMenuEntries: ChunkMode.values
+                      .map((m) => DropdownMenuEntry(value: m, label: m.name))
+                      .toList(),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: _chunkCount,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Target chunk count (optional)',
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: _speedLimit,
+                  decoration: const InputDecoration(
+                    labelText: 'Speed limit (optional)',
+                    hintText: 'e.g. 2M, 500k — empty = unlimited',
+                  ),
+                ),
+              ],
               if (_error != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                  padding: const EdgeInsets.only(top: AppSpacing.base),
+                  child: Text(_error!, style: const TextStyle(color: AppColors.error)),
                 ),
             ],
           ),

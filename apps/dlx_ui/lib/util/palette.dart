@@ -1,6 +1,8 @@
 import 'package:downloadx/downloadx.dart';
 import 'package:flutter/material.dart';
 
+const double kBreakpointMd = 768;
+
 // ---------------------------------------------------------------------------
 // AppColors — design.md "Velocity Dark" token map
 // ---------------------------------------------------------------------------

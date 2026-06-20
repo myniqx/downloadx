@@ -4,6 +4,7 @@ import '../services/download_service.dart';
 import '../services/settings_store.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
+import 'widgets/folder_picker_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   final DownloadService service;
@@ -241,7 +242,7 @@ class _EngineSection extends StatelessWidget {
           // Download folder
           _FieldLabel('Default Download Directory'),
           const SizedBox(height: AppSpacing.xs),
-          _PathField(controller: targetPath),
+          _PathField(controller: targetPath, showPicker: true),
           const SizedBox(height: AppSpacing.lg),
 
           // 2-column number grid
@@ -831,7 +832,17 @@ class _TwoCol extends StatelessWidget {
 class _PathField extends StatelessWidget {
   final TextEditingController controller;
   final String? hint;
-  const _PathField({required this.controller, this.hint});
+  final bool showPicker;
+
+  const _PathField({required this.controller, this.hint, this.showPicker = false});
+
+  static bool get _supportsNativePicker => true;
+
+  Future<void> _pickFolder(BuildContext context) async {
+    final initial = controller.text.trim().isNotEmpty ? controller.text.trim() : null;
+    final path = await showFolderPicker(context, initialPath: initial);
+    if (path != null) controller.text = path;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -863,6 +874,19 @@ class _PathField extends StatelessWidget {
               ),
             ),
           ),
+          if (showPicker && _supportsNativePicker) ...[
+            const SizedBox(width: AppSpacing.xs),
+            Builder(
+              builder: (ctx) => IconButton(
+                onPressed: () => _pickFolder(ctx),
+                icon: const Icon(Icons.folder_open_rounded, size: 18),
+                color: AppColors.onSurfaceVariant,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                tooltip: 'Browse',
+              ),
+            ),
+          ],
         ],
       ),
     );
