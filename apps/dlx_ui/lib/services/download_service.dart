@@ -9,6 +9,7 @@ import '../dev/demo_io.dart';
 import '../models/download_vm.dart';
 import 'settings_store.dart';
 import 'speed_history.dart';
+import 'ws_server.dart';
 
 /// The application's single source of truth. Wraps the [DownloadX] engine,
 /// exposes a list of [DownloadVm]s, and drives a steady UI cadence:
@@ -32,6 +33,7 @@ class DownloadService extends ChangeNotifier {
   final ValueNotifier<int> ticker = ValueNotifier(0);
 
   Timer? _tickTimer;
+  late final WsServer _ws;
 
   Future<void> init() async {
     final defaultTarget = await _resolveDownloadsDir();
@@ -58,6 +60,10 @@ class DownloadService extends ChangeNotifier {
     }
     manager.emitter.on(_onEvent);
     _tickTimer = Timer.periodic(const Duration(milliseconds: 400), (_) => _onTick());
+
+    _ws = WsServer(onMessage: _onWsMessage);
+    await _ws.start();
+
     notifyListeners();
   }
 
@@ -216,6 +222,30 @@ class DownloadService extends ChangeNotifier {
     }
   }
 
+  void _onWsMessage(Map<String, dynamic> msg, WebSocket socket) {
+    switch (msg['action']) {
+      case 'add-url':
+        final url = msg['url'] as String?;
+        if (url != null) addUrl(url);
+      case 'list':
+        _ws.send(socket, {
+          'action': 'list',
+          'downloads': downloads.map((vm) {
+            final total = vm.download.totalBytes;
+            final done = vm.download.downloadedBytes;
+            final pct = (total != null && total > 0) ? done / total * 100 : null;
+            return {
+              'id': vm.id,
+              'filename': vm.download.filename,
+              'state': vm.download.state.name,
+              'percent': pct,
+              'speed': vm.currentSpeed,
+            };
+          }).toList(),
+        });
+    }
+  }
+
   void _onTick() {
     final frame = <String, double>{};
     for (final vm in downloads) {
@@ -245,6 +275,7 @@ class DownloadService extends ChangeNotifier {
   void dispose() {
     _tickTimer?.cancel();
     ticker.dispose();
+    _ws.stop();
     super.dispose();
   }
 }

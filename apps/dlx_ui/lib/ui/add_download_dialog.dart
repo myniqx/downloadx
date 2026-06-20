@@ -5,23 +5,28 @@ import '../services/download_service.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
 
-Future<void> showAddDownloadDialog(BuildContext context, DownloadService service) {
+Future<void> showAddDownloadDialog(
+  BuildContext context,
+  DownloadService service, {
+  String? initialUrl,
+}) {
   return showDialog<void>(
     context: context,
-    builder: (_) => _AddDownloadDialog(service: service),
+    builder: (_) => _AddDownloadDialog(service: service, initialUrl: initialUrl),
   );
 }
 
 class _AddDownloadDialog extends StatefulWidget {
   final DownloadService service;
-  const _AddDownloadDialog({required this.service});
+  final String? initialUrl;
+  const _AddDownloadDialog({required this.service, this.initialUrl});
 
   @override
   State<_AddDownloadDialog> createState() => _AddDownloadDialogState();
 }
 
 class _AddDownloadDialogState extends State<_AddDownloadDialog> {
-  final _url = TextEditingController();
+  late final _url = TextEditingController(text: widget.initialUrl ?? '');
   final _filename = TextEditingController();
   final _chunkCount = TextEditingController();
   final _speedLimit = TextEditingController();
