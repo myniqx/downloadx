@@ -82,3 +82,13 @@ export 'src/retry.dart'
 export 'src/speed_tracker.dart' show SpeedTracker, AggregateSpeed;
 export 'src/throttle.dart' show Throttle;
 export 'src/types.dart';
+export 'src/hls/types.dart';
+export 'src/hls/parser.dart'
+    show
+        parseMasterPlaylist,
+        parseMediaPlaylist,
+        parsePlaylist,
+        selectBestStream,
+        HlsMasterResult,
+        HlsMediaResult,
+        HlsParseResult;

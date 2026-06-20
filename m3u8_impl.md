@@ -54,7 +54,7 @@ okunuyor. Bu Faz 0'da düzeltilecek.
 
 ---
 
-## Faz 0 — WebSocket `add-url` mesajına `filename` ve `targetPath` ekle
+## Faz 0 — WebSocket `add-url` mesajına `filename` ve `targetPath` ekle — DONE
 
 **Amaç:** Extension'dan gelen `pageTitle` ve ileride eklenecek `targetPath`'in
 engine'e ulaşmasını sağla.
@@ -91,7 +91,7 @@ sendWs({ action: 'add-url', url: msg.url, filename: msg.filename });
 
 ---
 
-## Faz 1 — m3u8 Tespiti (TypeScript + Dart)
+## Faz 1 — m3u8 Tespiti (TypeScript + Dart) — DONE
 
 **Amaç:** `probeUrl` sonucuna `isHls` flag'i ekle, `execute()` içinde dallanma
 noktası oluştur. Henüz HLS indirme yok — flag varsa `error` state'e düş

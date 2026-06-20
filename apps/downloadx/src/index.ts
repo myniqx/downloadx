@@ -8,6 +8,8 @@ export { SpeedTracker, AggregateSpeed } from './speedTracker.js';
 export { Throttle } from './throttle.js';
 export { planChunks, findSplitCandidate } from './chunkScheduler.js';
 export { probeUrl, filenameFromDisposition, filenameFromUrl } from './probe.js';
+export { parseMasterPlaylist, parseMediaPlaylist, parsePlaylist, selectBestStream } from './hls/parser.js';
+export type { HlsMasterPlaylist, HlsMediaPlaylist, HlsSegment, HlsStream } from './hls/types.js';
 export {
   createMeta,
   createEmptyMeta,
