@@ -101,6 +101,7 @@ void main() {
           lastModified: null,
           contentType: null,
           filename: 'file.bin',
+          isHls: false,
         ),
         chunks: [
           ChunkSnapshot(

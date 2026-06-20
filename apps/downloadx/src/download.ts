@@ -412,6 +412,12 @@ export class Download implements GlobalConfig {
         this._probe = probe;
       }
 
+      if (this._probe.isHls) {
+        this._meta.errorMessage = 'HLS downloads are not yet supported';
+        this.setState('error');
+        return;
+      }
+
       await this.ensureTargetDirs();
       await this.loadOrInitMeta();
 

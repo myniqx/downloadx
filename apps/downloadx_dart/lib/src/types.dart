@@ -264,6 +264,7 @@ class ProbeResult {
   final String? lastModified;
   final String? contentType;
   final String filename;
+  final bool isHls;
 
   const ProbeResult({
     required this.url,
@@ -274,6 +275,7 @@ class ProbeResult {
     required this.lastModified,
     required this.contentType,
     required this.filename,
+    required this.isHls,
   });
 
   ProbeResult copyWith({bool? acceptsRanges}) => ProbeResult(
@@ -285,6 +287,7 @@ class ProbeResult {
         lastModified: lastModified,
         contentType: contentType,
         filename: filename,
+        isHls: isHls,
       );
 }
 

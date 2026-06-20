@@ -141,6 +141,11 @@ ProbeResult _finalize(ProbeOptions opts, _ProbeRaw raw) {
       filenameFromUrl(opts.url) ??
       'download-${DateTime.now().millisecondsSinceEpoch}';
 
+  final ct = raw.contentType?.toLowerCase() ?? '';
+  final isHls = ct.contains('mpegurl') ||
+      ct.contains('x-m3u8') ||
+      opts.url.split('?').first.toLowerCase().endsWith('.m3u8');
+
   return ProbeResult(
     url: opts.url,
     finalUrl: raw.finalUrl,
@@ -150,6 +155,7 @@ ProbeResult _finalize(ProbeOptions opts, _ProbeRaw raw) {
     lastModified: raw.lastModified,
     contentType: raw.contentType,
     filename: filename,
+    isHls: isHls,
   );
 }
 

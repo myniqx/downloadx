@@ -27,6 +27,7 @@ MetaFile _seedMeta({
       lastModified: lastModified,
       contentType: null,
       filename: 'file.bin',
+      isHls: false,
     ),
     chunks: [
       ChunkSnapshot(

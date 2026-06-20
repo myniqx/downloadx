@@ -238,6 +238,7 @@ export interface ProbeResult {
   lastModified: string | null;
   contentType: string | null;
   filename: string;
+  isHls: boolean;
 }
 
 /** JSON shape persisted as `{id}.downloadx.json`. */

@@ -16,7 +16,7 @@ void main() {
 
     test('applyProbeToMeta fills probe-derived fields', () {
       final m = createEmptyMeta(id: 'abc', url: 'https://x/y');
-      final probe = const ProbeResult(
+      const probe = ProbeResult(
         url: 'https://x/y',
         finalUrl: 'https://x/y',
         totalSize: 1000,
@@ -25,6 +25,7 @@ void main() {
         lastModified: null,
         contentType: 'application/octet-stream',
         filename: 'y',
+        isHls: false,
       );
       applyProbeToMeta(m, probe, []);
       expect(m.filename, 'y');
@@ -47,6 +48,7 @@ void main() {
           lastModified: null,
           contentType: null,
           filename: 'y',
+          isHls: false,
         ),
         chunks: [
           ChunkSnapshot(
@@ -86,7 +88,7 @@ void main() {
       final m = createEmptyMeta(id: 'a', url: 'u')
         ..totalSize = 100
         ..etag = 'E1';
-      final probe = const ProbeResult(
+      const probe = ProbeResult(
         url: 'u',
         finalUrl: 'u',
         totalSize: 100,
@@ -95,6 +97,7 @@ void main() {
         lastModified: null,
         contentType: null,
         filename: 'f',
+        isHls: false,
       );
       expect(canResumeAgainst(m, probe), isTrue);
     });
@@ -103,7 +106,7 @@ void main() {
       final m = createEmptyMeta(id: 'a', url: 'u')
         ..totalSize = 100
         ..etag = 'E1';
-      final probe = const ProbeResult(
+      const probe = ProbeResult(
         url: 'u',
         finalUrl: 'u',
         totalSize: 100,
@@ -112,13 +115,14 @@ void main() {
         lastModified: null,
         contentType: null,
         filename: 'f',
+        isHls: false,
       );
       expect(canResumeAgainst(m, probe), isFalse);
     });
 
     test('canResumeAgainst: size mismatch blocks resume', () {
       final m = createEmptyMeta(id: 'a', url: 'u')..totalSize = 100;
-      final probe = const ProbeResult(
+      const probe = ProbeResult(
         url: 'u',
         finalUrl: 'u',
         totalSize: 200,
@@ -127,6 +131,7 @@ void main() {
         lastModified: null,
         contentType: null,
         filename: 'f',
+        isHls: false,
       );
       expect(canResumeAgainst(m, probe), isFalse);
     });

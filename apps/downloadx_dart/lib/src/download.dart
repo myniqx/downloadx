@@ -368,6 +368,12 @@ class Download implements GlobalConfig {
         ));
       }
 
+      if (_probe!.isHls) {
+        _meta.errorMessage = 'HLS downloads are not yet supported';
+        _setState(DownloadState.error);
+        return;
+      }
+
       await _ensureTargetDirs();
       await _loadOrInitMeta();
 
