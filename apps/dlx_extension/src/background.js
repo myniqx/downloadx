@@ -1,13 +1,38 @@
 "use strict";
 
-import { registerRequestWatcher, getCapturedForTab, clearCapturedForTab } from './request-watcher.js';
+import { registerRequestWatcher, getCapturedForTab, clearCapturedForTab, updateFileExtensions } from './request-watcher.js';
 import { startWsClient, isConnected, sendWs, addWsListener } from './ws-client.js';
 
 startWsClient();
 
-addWsListener(({ type }) => {
-  if (type === 'connect' || type === 'disconnect') updateAllBadges();
+addWsListener(({ type, msg }) => {
+  if (type === 'connect' || type === 'disconnect') {
+    updateAllBadges();
+    chrome.runtime.sendMessage({ action: 'ws-status', connected: type === 'connect' }).catch(() => {});
+  }
+
+  if (type === 'message') {
+    switch (msg.type) {
+      case 'handshake':
+      case 'options':
+        applyOptions(msg.options ?? msg);
+        break;
+      case 'progress':
+        chrome.runtime.sendMessage({ action: 'progress', downloads: msg.downloads }).catch(() => {});
+        break;
+    }
+  }
 });
+
+function applyOptions(options) {
+  if (Array.isArray(options.fileExtensions)) {
+    updateFileExtensions(options.fileExtensions);
+    chrome.storage.session.set({ fileExtensions: options.fileExtensions });
+  }
+  if (typeof options.browseMonitor === 'boolean') {
+    chrome.storage.session.set({ browseMonitor: options.browseMonitor });
+  }
+}
 
 // ---- Badge ------------------------------------------------------------------
 
@@ -41,12 +66,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.action === 'scan-tab') {
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-      if (!tab?.id) { sendResponse({ links: [] }); return; }
-      chrome.scripting.executeScript(
-        { target: { tabId: tab.id }, func: scanPageLinks },
-        (results) => sendResponse({ links: results?.[0]?.result ?? [] }),
-      );
+    chrome.storage.session.get(['fileExtensions', 'browseMonitor'], (stored) => {
+      const browseMonitor = stored.browseMonitor !== false;
+      if (!browseMonitor) { sendResponse({ links: [] }); return; }
+
+      const exts = stored.fileExtensions ?? null;
+      chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+        if (!tab?.id) { sendResponse({ links: [] }); return; }
+        chrome.scripting.executeScript(
+          { target: { tabId: tab.id }, func: scanPageLinks, args: [exts] },
+          (results) => sendResponse({ links: results?.[0]?.result ?? [] }),
+        );
+      });
     });
     return true;
   }
@@ -68,13 +99,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 // Injected into page context — no extension APIs.
-function scanPageLinks() {
-  const EXT = /\.(zip|gz|tar|rar|7z|iso|dmg|pkg|exe|msi|deb|rpm|apk|mp4|mkv|avi|mov|webm|mp3|flac|aac|wav|pdf|epub|torrent)(\?.*)?$/i;
+function scanPageLinks(fileExtensions) {
+  const extSet = fileExtensions
+    ? new Set(fileExtensions.map(e => e.toLowerCase()))
+    : new Set(['zip','gz','tar','rar','7z','iso','dmg','pkg','exe','msi','deb','rpm','apk','mp4','mkv','avi','mov','webm','mp3','flac','aac','wav','pdf','epub','torrent']);
+
+  const extRe = new RegExp('\\.(' + [...extSet].join('|') + ')(\\?.*)?$', 'i');
   const seen = new Set();
   const links = [];
   document.querySelectorAll('a[href]').forEach(a => {
     const href = a.href;
-    if (!href || seen.has(href) || !EXT.test(href)) return;
+    if (!href || seen.has(href) || !extRe.test(href)) return;
     seen.add(href);
     links.push({
       url: href,

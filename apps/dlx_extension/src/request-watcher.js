@@ -1,16 +1,23 @@
 "use strict";
 
-const MEDIA_EXTS = new Set([
+let MEDIA_EXTS = new Set([
   'mp4','mkv','avi','mov','webm','flv','wmv','m4v','ts','m3u8',
   'mp3','flac','aac','wav','ogg','opus','m4a',
 ]);
 
-const FILE_EXTS = new Set([
+let FILE_EXTS = new Set([
   'zip','gz','tar','rar','7z','bz2','xz','zst',
   'iso','dmg','img','pkg','exe','msi','deb','rpm','apk',
   'pdf','epub','mobi','djvu',
   'torrent',
 ]);
+
+export function updateFileExtensions(exts) {
+  const all = new Set(exts.map(e => e.toLowerCase()));
+  const mediaExts = new Set(['mp4','mkv','avi','mov','webm','flv','wmv','m4v','ts','m3u8','mp3','flac','aac','wav','ogg','opus','m4a']);
+  MEDIA_EXTS = new Set([...all].filter(e => mediaExts.has(e)));
+  FILE_EXTS  = new Set([...all].filter(e => !mediaExts.has(e)));
+}
 
 const MEDIA_TYPES = [
   'video/', 'audio/', 'application/octet-stream',

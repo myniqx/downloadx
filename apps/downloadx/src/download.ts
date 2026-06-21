@@ -178,7 +178,7 @@ export class Download implements GlobalConfig {
 
   get filename(): string {
     return (
-      this._probe?.filename ?? this._meta.filename ?? this.options.filename ?? `download-${this.id}`
+      this.options.filename ?? this._probe?.filename ?? this._meta.filename ?? `download-${this.id}`
     );
   }
 
@@ -192,8 +192,20 @@ export class Download implements GlobalConfig {
 
   /** Start (or resume) the download. Returns a promise that resolves on finish/pause/error. */
   start(): Promise<void> {
-    if (this.runningPromise) return this.runningPromise;
     if (this._state === 'completed') return Promise.resolve();
+
+    // HLS pause leaves runningPromise alive (session is spin-waiting on
+    // isPaused()). Clear the flag so the session exits the loop and resumes
+    // naturally — no need to start a new execute().
+    if (this.runningPromise !== null) {
+      if (this._state === 'paused' && this._probe?.isHls === true) {
+        this.pauseRequested = false;
+        this.cancelRequested = false;
+        this.setState('downloading');
+      }
+      return this.runningPromise;
+    }
+
     this.pauseRequested = false;
     this.cancelRequested = false;
     this._meta.errorMessage = null;
@@ -207,6 +219,14 @@ export class Download implements GlobalConfig {
     if (this._state !== 'downloading' && this._state !== 'probing') return;
     this.pauseRequested = true;
     for (const c of this.chunks) c.pause();
+    // HLS session spin-waits on isPaused() and never throws, so the catch
+    // block that calls setState('paused') is never reached. Set state
+    // immediately so callers see the correct state without waiting for the
+    // next segment boundary. Use probe.isHls as the guard — hlsSegmentsDone
+    // is undefined until the first batch finishes, missing an early pause.
+    if (this._probe?.isHls === true) {
+      this.setState('paused');
+    }
   }
 
   cancel(): void {
@@ -234,6 +254,17 @@ export class Download implements GlobalConfig {
       id: this.id,
     }).catch(() => undefined);
     await this.safeUnlink(this.journalPath());
+    // HLS writes segments to {cachePath}/{id}-hls/ — clean up the directory.
+    if (this._probe?.isHls === true) {
+      const segDir = this.io.joinPath(this.cachePath, `${this.id}-hls`);
+      const session = new HlsSession(this.id, this._context, this.throttle, {
+        onProgress: () => undefined,
+        onError: () => undefined,
+        isCancelled: () => true,
+        isPaused: () => false,
+      });
+      await session.cleanup(segDir);
+    }
   }
 
   /** Change the speed limit mid-download. 0 = unlimited. null clears the per-download override. */
@@ -297,7 +328,7 @@ export class Download implements GlobalConfig {
     return {
       id: this.id,
       url: this.url,
-      filename: this.meta.filename,
+      filename: this.filename,
       targetPath: this.meta.targetPath,
       addedAt: this.meta.addedAt,
       completedAt: this.meta.completedAt,

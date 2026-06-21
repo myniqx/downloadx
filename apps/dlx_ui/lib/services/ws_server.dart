@@ -5,13 +5,15 @@ import 'dart:io';
 const int kWsPort = 46582;
 
 typedef WsMessageHandler = void Function(Map<String, dynamic> msg, WebSocket socket);
+typedef WsConnectHandler = void Function(WebSocket socket);
 
 class WsServer {
   HttpServer? _server;
   final Set<WebSocket> _clients = {};
   final WsMessageHandler onMessage;
+  final WsConnectHandler? onConnect;
 
-  WsServer({required this.onMessage});
+  WsServer({required this.onMessage, this.onConnect});
 
   Future<void> start() async {
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, kWsPort);
@@ -27,10 +29,12 @@ class WsServer {
     }
     final socket = await WebSocketTransformer.upgrade(req);
     _clients.add(socket);
+    onConnect?.call(socket);
     socket.listen(
       (data) {
         try {
           final msg = jsonDecode(data as String) as Map<String, dynamic>;
+          print('[WS] <<< $data');
           onMessage(msg, socket);
         } catch (_) {}
       },

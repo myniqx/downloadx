@@ -61,7 +61,7 @@ class DownloadService extends ChangeNotifier {
     manager.emitter.on(_onEvent);
     _tickTimer = Timer.periodic(const Duration(milliseconds: 400), (_) => _onTick());
 
-    _ws = WsServer(onMessage: _onWsMessage);
+    _ws = WsServer(onMessage: _onWsMessage, onConnect: _onWsConnect);
     await _ws.start();
 
     notifyListeners();
@@ -114,9 +114,9 @@ class DownloadService extends ChangeNotifier {
   }
 
   Future<void> remove(DownloadVm vm) async {
-    await _managerFor(vm).clear(vm.id);
     _byId.remove(vm.id);
     downloads.remove(vm);
+    await _managerFor(vm).clear(vm.id);
     vm.dispose();
     notifyListeners();
   }
@@ -199,6 +199,7 @@ class DownloadService extends ChangeNotifier {
     _config.maxRetries = s.maxRetries;
     _config.requestTimeout = s.requestTimeout;
     await _settingsStore.save(s);
+    _broadcastOptions();
     notifyListeners();
   }
 
@@ -215,11 +216,65 @@ class DownloadService extends ChangeNotifier {
     final vm = _byId[e.downloadId];
     if (vm == null) return;
     vm.onEvent(e);
-    // Lifecycle transitions can reorder the list / change badges → refresh now.
     if (e is StateChangeEvent || e is CompletedEvent || e is ErrorEvent) {
       vm.refresh();
       notifyListeners();
+      _broadcastProgress();
+    } else if (e is ProgressEvent) {
+      // HLS progress events carry segment counts but no byte percent —
+      // refresh the vm so the tile repaints with the latest segment data.
+      vm.refresh();
     }
+  }
+
+  static const _fileExtensions = [
+    'zip','gz','tar','rar','7z','bz2','xz','zst',
+    'iso','dmg','img','pkg','exe','msi','deb','rpm','apk',
+    'pdf','epub','mobi','djvu','torrent',
+    'mp4','mkv','avi','mov','webm','flv','wmv','m4v','ts','m3u8',
+    'mp3','flac','aac','wav','ogg','opus','m4a',
+  ];
+
+  Map<String, dynamic> _buildHandshake() => {
+    'type': 'handshake',
+    'coreVersion': '0.2.0',
+    'serverType': 'ui',
+    'options': {
+      'fileExtensions': _fileExtensions,
+      'browseMonitor': true,
+    },
+  };
+
+  void _onWsConnect(WebSocket socket) {
+    _ws.send(socket, _buildHandshake());
+  }
+
+  void _broadcastOptions() {
+    _ws.broadcast({
+      'type': 'options',
+      'options': {
+        'fileExtensions': _fileExtensions,
+        'browseMonitor': true,
+      },
+    });
+  }
+
+  void _broadcastProgress() {
+    _ws.broadcast({
+      'type': 'progress',
+      'downloads': downloads.map((vm) {
+        final total = vm.download.totalBytes;
+        final done = vm.download.downloadedBytes;
+        final pct = (total != null && total > 0) ? done / total * 100 : null;
+        return {
+          'id': vm.id,
+          'filename': vm.download.filename,
+          'state': vm.download.state.name,
+          'percent': pct,
+          'speed': vm.currentSpeed,
+        };
+      }).toList(),
+    });
   }
 
   void _onWsMessage(Map<String, dynamic> msg, WebSocket socket) {
@@ -253,16 +308,19 @@ class DownloadService extends ChangeNotifier {
 
   void _onTick() {
     final frame = <String, double>{};
+    bool anyActive = false;
     for (final vm in downloads) {
       vm.tick();
       if (vm.download.state == DownloadState.downloading) {
         vm.refresh();
         frame[vm.id] = vm.currentSpeed;
+        anyActive = true;
       }
     }
     final limit = settings.speedLimit > 0 ? settings.speedLimit.toDouble() : null;
     globalSpeedHistory.push(frame, speedLimit: limit);
     ticker.value = ticker.value + 1;
+    if (anyActive) _broadcastProgress();
   }
 
   Future<String> _resolveDownloadsDir() async {

@@ -5,7 +5,6 @@ import '../models/download_vm.dart';
 import '../services/download_service.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
-import 'shell.dart' show kBreakpointMd;
 import 'widgets/chunk_speed_panel.dart';
 import 'widgets/chunk_viz.dart';
 
@@ -71,7 +70,7 @@ class _DetailAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
                 Expanded(
                   child: Text(
-                    vm.desc.filename ?? vm.desc.url,
+                    _displayName(vm.desc.filename, vm.desc.url),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.headlineMd.copyWith(color: AppColors.primary),
@@ -167,6 +166,59 @@ class _MobileLayout extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.md, AppSpacing.md, AppSpacing.md, 100),
       children: [
+        // File info header
+        _GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _displayName(d.filename, d.url),
+                style: AppTextStyles.headlineLgMobile
+                    .copyWith(color: AppColors.onSurface),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (d.targetPath != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Row(
+                  children: [
+                    const Icon(Icons.folder_open_outlined,
+                        size: 14, color: AppColors.onSurfaceVariant),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: Text(
+                        d.targetPath!,
+                        style: AppTextStyles.labelSm
+                            .copyWith(color: AppColors.onSurfaceVariant),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: AppSpacing.xs),
+              Row(
+                children: [
+                  const Icon(Icons.link_rounded,
+                      size: 14, color: AppColors.outlineVariant),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      d.url,
+                      style: AppTextStyles.labelSm.copyWith(
+                          color: AppColors.outlineVariant, fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+
         // Status card
         _GlassCard(
           child: Column(
@@ -219,7 +271,7 @@ class _MobileLayout extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xs),
               _GlowProgressBar(
-                value: d.percent == null ? null : d.percent! / 100,
+                value: vm.progressFraction,
                 active: running,
               ),
             ],
@@ -228,7 +280,7 @@ class _MobileLayout extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
 
         // Stats bento grid
-        _StatsBento(d: d),
+        _StatsBento(d: d, vm: vm),
         const SizedBox(height: AppSpacing.md),
 
         // Chunk visualization
@@ -319,7 +371,7 @@ class _DesktopLayout extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            d.filename ?? d.url,
+                            _displayName(d.filename, d.url),
                             style: AppTextStyles.headlineLgMobile
                                 .copyWith(color: AppColors.onSurface),
                             maxLines: 2,
@@ -332,11 +384,35 @@ class _DesktopLayout extends StatelessWidget {
                                 const Icon(Icons.folder_open_outlined,
                                     size: 14, color: AppColors.onSurfaceVariant),
                                 const SizedBox(width: AppSpacing.xs),
-                                Text(d.targetPath!,
+                                Expanded(
+                                  child: Text(
+                                    d.targetPath!,
                                     style: AppTextStyles.labelSm.copyWith(
-                                        color: AppColors.onSurfaceVariant)),
+                                        color: AppColors.onSurfaceVariant),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ],
                             ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Row(
+                            children: [
+                              const Icon(Icons.link_rounded,
+                                  size: 14, color: AppColors.outlineVariant),
+                              const SizedBox(width: AppSpacing.xs),
+                              Expanded(
+                                child: Text(
+                                  d.url,
+                                  style: AppTextStyles.labelSm.copyWith(
+                                      color: AppColors.outlineVariant,
+                                      fontSize: 11),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: AppSpacing.sm),
                           Row(
                             children: [
@@ -354,7 +430,9 @@ class _DesktopLayout extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          formatPercent(d.percent),
+                          vm.isHls
+                              ? _hlsProgressLabel(vm)
+                              : formatPercent(d.percent),
                           style: AppTextStyles.headlineLg.copyWith(
                               color: AppColors.primary, fontSize: 28),
                         ),
@@ -396,7 +474,7 @@ class _DesktopLayout extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.full),
                 child: _GlowProgressBar(
-                  value: d.percent == null ? null : d.percent! / 100,
+                  value: vm.progressFraction,
                   active: running,
                   height: 10,
                 ),
@@ -461,20 +539,28 @@ class _DesktopLayout extends StatelessWidget {
                     _MetricRow(
                         label: 'Downloaded',
                         value: formatBytes(d.downloadedBytes)),
-                    _MetricRow(
-                        label: 'Total Size',
-                        value: d.totalBytes == null
-                            ? '—'
-                            : formatBytes(d.totalBytes!)),
+                    if (!vm.isHls)
+                      _MetricRow(
+                          label: 'Total Size',
+                          value: d.totalBytes == null
+                              ? '—'
+                              : formatBytes(d.totalBytes!)),
+                    if (vm.isHls)
+                      _MetricRow(
+                          label: 'Segments',
+                          value: vm.hlsTotalSegments != null
+                              ? '${vm.hlsSegmentsDone ?? 0} / ${vm.hlsTotalSegments}'
+                              : '${vm.hlsSegmentsDone ?? 0}'),
                     _MetricRow(label: 'Speed', value: formatSpeed(d.totalSpeedBps.toDouble())),
                     _MetricRow(
                         label: 'ETA',
                         value: d.etaMs == null ? '—' : formatDuration(d.etaMs!)),
                     _MetricRow(
                         label: 'Elapsed', value: formatDuration(d.elapsedMs)),
-                    _MetricRow(
-                        label: 'Chunks',
-                        value: '${d.activeChunks} / ${d.totalChunks}'),
+                    if (!vm.isHls)
+                      _MetricRow(
+                          label: 'Chunks',
+                          value: '${d.activeChunks} / ${d.totalChunks}'),
                     _MetricRow(label: 'State', value: d.state.name),
                   ],
                 ),
@@ -567,19 +653,28 @@ class _SectionHeader extends StatelessWidget {
 
 class _StatsBento extends StatelessWidget {
   final DownloadDescription d;
-  const _StatsBento({required this.d});
+  final DownloadVm vm;
+  const _StatsBento({required this.d, required this.vm});
 
   @override
   Widget build(BuildContext context) {
+    final segLabel = vm.isHls
+        ? (vm.hlsTotalSegments != null
+            ? '${vm.hlsSegmentsDone ?? 0}/${vm.hlsTotalSegments}'
+            : '${vm.hlsSegmentsDone ?? 0}')
+        : '${d.activeChunks}/${d.totalChunks}';
+    final sizeLabel = vm.isHls
+        ? formatBytes(d.downloadedBytes)
+        : (d.totalBytes == null ? '—' : formatBytes(d.totalBytes!));
+
     final items = [
-      (Icons.storage_rounded, AppColors.onSurfaceVariant, 'Size',
-          d.totalBytes == null ? '—' : formatBytes(d.totalBytes!)),
+      (Icons.storage_rounded, AppColors.onSurfaceVariant, 'Size', sizeLabel),
       (Icons.speed_rounded, AppColors.primary, 'Speed',
           formatSpeed(d.totalSpeedBps.toDouble())),
       (Icons.timer_outlined, AppColors.onSurfaceVariant, 'ETA',
           d.etaMs == null ? '—' : formatDuration(d.etaMs!)),
-      (Icons.layers_rounded, AppColors.secondary, 'Chunks',
-          '${d.activeChunks}/${d.totalChunks}'),
+      (Icons.layers_rounded, AppColors.secondary,
+          vm.isHls ? 'Segments' : 'Chunks', segLabel),
     ];
     return GridView.count(
       crossAxisCount: 2,
@@ -965,6 +1060,20 @@ class _DiagnosticsPanel extends StatelessWidget {
         DiagnosticLevel.warn => AppColors.tertiary,
         DiagnosticLevel.info => AppColors.primary,
       };
+}
+
+String _hlsProgressLabel(DownloadVm vm) {
+  final done = vm.hlsSegmentsDone;
+  final total = vm.hlsTotalSegments;
+  if (done == null) return 'HLS';
+  if (total != null && total > 0) return '${(done / total * 100).toStringAsFixed(0)}%';
+  return '$done segs';
+}
+
+String _displayName(String? filename, String url) {
+  if (filename != null && filename.isNotEmpty) return filename;
+  final path = Uri.tryParse(url)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull;
+  return path ?? url;
 }
 
 String _stateLabel(DownloadState s) => switch (s) {

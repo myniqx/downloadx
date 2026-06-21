@@ -15,6 +15,8 @@ class DownloadVm extends ChangeNotifier {
   DownloadDescription desc;
   List<ChunkSnapshot> snapshots;
   double currentSpeed = 0;
+  int? hlsSegmentsDone;
+  int? hlsTotalSegments;
 
   /// Latest per-chunk instant speed (bytes/sec), updated from chunk events.
   final Map<String, double> _chunkSpeed = {};
@@ -29,8 +31,20 @@ class DownloadVm extends ChangeNotifier {
   String get id => download.id;
   DownloadState get state => download.state;
 
+  bool get isHls => hlsSegmentsDone != null || hlsTotalSegments != null;
+
+  /// Progress 0–1, null when unknown. For HLS uses segment count if byte percent unavailable.
+  double? get progressFraction {
+    final p = desc.percent;
+    if (p != null) return p / 100;
+    final done = hlsSegmentsDone;
+    final total = hlsTotalSegments;
+    if (done != null && total != null && total > 0) return done / total;
+    return null;
+  }
+
   /// Effective per-download speed limit in bytes/sec (null = none/inherits).
-  int? get speedLimit => download.get('speedLimit') as int?;
+  int? get speedLimit => download.speedLimit > 0 ? download.speedLimit.toInt() : null;
 
   /// Feed an engine event. Updates cached speeds; does not notify (the ticker
   /// and structural refreshes drive repaints to keep the UI cadence steady).
@@ -43,6 +57,8 @@ class DownloadVm extends ChangeNotifier {
       }
     } else if (e is ProgressEvent) {
       currentSpeed = e.totalSpeed;
+      if (e.hlsSegmentsDone != null) hlsSegmentsDone = e.hlsSegmentsDone;
+      if (e.hlsTotalSegments != null) hlsTotalSegments = e.hlsTotalSegments;
     }
   }
 

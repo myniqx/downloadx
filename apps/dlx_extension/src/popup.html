@@ -32,6 +32,15 @@
     <p class="error" id="error-msg"></p>
   </div>
 
+  <div id="state-offline" class="state hidden">
+    <p class="muted">DownloadX is not running.</p>
+    <p class="offline-hint">Open the dlx app to continue.</p>
+    <div class="offline-actions">
+      <button id="btn-retry">Retry now</button>
+      <span id="retry-countdown" class="muted"></span>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

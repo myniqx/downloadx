@@ -158,3 +158,30 @@ footer {
 }
 
 .btn-ghost:hover { border-color: #8c909f; color: #dae2fd; }
+
+.offline-hint {
+  font-size: 11px;
+  color: #8c909f;
+  margin-top: 4px;
+}
+
+.offline-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+#btn-retry {
+  padding: 5px 14px;
+  background: #4d8eff;
+  color: #00285d;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#btn-retry:hover { background: #adc6ff; }
+#btn-retry:disabled { opacity: 0.4; cursor: default; }

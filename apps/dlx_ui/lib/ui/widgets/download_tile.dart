@@ -53,7 +53,7 @@ class DownloadTile extends StatelessWidget {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
-                            value: d.percent == null ? null : d.percent! / 100,
+                            value: vm.progressFraction,
                             minHeight: 6,
                             backgroundColor: Theme.of(context).dividerColor,
                             color: colorForState(state),
@@ -92,6 +92,19 @@ class DownloadTile extends StatelessWidget {
   }
 
   String _subtitle(DownloadDescription d, DownloadState state) {
+    if (state == DownloadState.error) return d.errorMessage ?? 'error';
+
+    if (vm.isHls) {
+      final seg = vm.hlsSegmentsDone;
+      final total = vm.hlsTotalSegments;
+      final segStr = (seg != null && total != null) ? '$seg/$total segs' : (seg != null ? '$seg segs' : 'HLS');
+      if (state == DownloadState.downloading) {
+        final eta = d.etaMs == null ? '—' : formatDuration(d.etaMs!);
+        return '$segStr  ·  ${formatSpeed(d.totalSpeedBps)}  ·  ETA $eta';
+      }
+      return '$segStr  ·  ${state.name}';
+    }
+
     final size = d.totalBytes == null
         ? formatBytes(d.downloadedBytes)
         : '${formatBytes(d.downloadedBytes)} / ${formatBytes(d.totalBytes!)}';
@@ -100,9 +113,6 @@ class DownloadTile extends StatelessWidget {
       final eta = d.etaMs == null ? '—' : formatDuration(d.etaMs!);
       return '$size  ·  $pct  ·  ${formatSpeed(d.totalSpeedBps)}  ·  ETA $eta  ·  '
           '${d.activeChunks}/${d.totalChunks} chunks';
-    }
-    if (state == DownloadState.error) {
-      return d.errorMessage ?? 'error';
     }
     return '$size  ·  $pct  ·  ${state.name}';
   }

@@ -1,9 +1,9 @@
 "use strict";
 
+const STATES = ['state-scanning', 'state-empty', 'state-list', 'state-error', 'state-offline'];
+
 function show(id) {
-  ['state-scanning', 'state-empty', 'state-list', 'state-error'].forEach(s =>
-    document.getElementById(s).classList.toggle('hidden', s !== id)
-  );
+  STATES.forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
 }
 
 function formatSize(bytes) {
@@ -13,6 +13,117 @@ function formatSize(bytes) {
   if (bytes < 1024 ** 3) return (bytes / 1024 ** 2).toFixed(1) + ' MB';
   return (bytes / 1024 ** 3).toFixed(2) + ' GB';
 }
+
+// ---- Offline state ----------------------------------------------------------
+
+const RETRY_INTERVAL_MS = 5000;
+let retryTimer = null;
+let retryRemaining = 0;
+
+function showOffline() {
+  updateConnBadge(false);
+  show('state-offline');
+  startRetryCountdown();
+}
+
+function startRetryCountdown() {
+  clearInterval(retryTimer);
+  retryRemaining = Math.round(RETRY_INTERVAL_MS / 1000);
+  updateCountdown();
+  retryTimer = setInterval(() => {
+    retryRemaining--;
+    updateCountdown();
+    if (retryRemaining <= 0) {
+      clearInterval(retryTimer);
+      checkConnection();
+    }
+  }, 1000);
+}
+
+function updateCountdown() {
+  const el = document.getElementById('retry-countdown');
+  if (el) el.textContent = retryRemaining > 0 ? `Retrying in ${retryRemaining}s…` : '';
+}
+
+document.getElementById('btn-retry').addEventListener('click', () => {
+  clearInterval(retryTimer);
+  updateCountdown();
+  checkConnection();
+});
+
+// ---- Connection check -------------------------------------------------------
+
+function updateConnBadge(connected) {
+  const badge = document.getElementById('conn-badge');
+  badge.title = connected ? 'dlx is running' : 'dlx is not running';
+  badge.classList.toggle('connected', connected);
+}
+
+function checkConnection() {
+  chrome.runtime.sendMessage({ action: 'get-status' }, (res) => {
+    if (res?.connected) {
+      updateConnBadge(true);
+      loadItems();
+    } else {
+      showOffline();
+    }
+  });
+}
+
+// ---- Progress updates -------------------------------------------------------
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action === 'ws-status') {
+    if (msg.connected) {
+      clearInterval(retryTimer);
+      updateConnBadge(true);
+      loadItems();
+    } else {
+      showOffline();
+    }
+  }
+  if (msg.action === 'progress') {
+    updateProgressInList(msg.downloads);
+  }
+});
+
+function updateProgressInList(downloads) {
+  if (!downloads) return;
+  downloads.forEach(({ id, state, percent, speed }) => {
+    const el = document.querySelector(`[data-id="${id}"]`);
+    if (!el) return;
+    const meta = el.querySelector('.link-meta');
+    if (meta) {
+      const pct = percent != null ? `${percent.toFixed(1)}%` : '';
+      const spd = speed > 0 ? formatSpeed(speed) : '';
+      meta.textContent = [pct, spd, state].filter(Boolean).join('  ·  ');
+    }
+  });
+}
+
+function formatSpeed(bps) {
+  if (bps < 1024) return bps.toFixed(0) + ' B/s';
+  if (bps < 1024 ** 2) return (bps / 1024).toFixed(1) + ' KB/s';
+  return (bps / 1024 ** 2).toFixed(1) + ' MB/s';
+}
+
+// ---- Filename resolution ----------------------------------------------------
+
+const GENERIC_NAMES = /^(master|index|playlist|stream|video|audio|media|hls)(\.\w+)?$/i;
+
+function _cleanPageTitle(title) {
+  if (!title) return null;
+  const cleaned = title.split(/\s[\|\-–—]\s/).shift().trim();
+  return cleaned || title;
+}
+
+function _resolveFilename(filename, pageTitle) {
+  const name = filename ? filename.split('?')[0].split('/').pop() : null;
+  if (!name || GENERIC_NAMES.test(name)) return _cleanPageTitle(pageTitle) || null;
+  return name;
+}
+
+// ---- Send -------------------------------------------------------------------
 
 function sendUrl(url, filename, btn) {
   btn.disabled = true;
@@ -27,6 +138,8 @@ function sendUrl(url, filename, btn) {
   });
 }
 
+// ---- Render -----------------------------------------------------------------
+
 function renderItems(items) {
   if (items.length === 0) { show('state-empty'); return; }
 
@@ -36,6 +149,7 @@ function renderItems(items) {
   items.forEach(({ url, filename, pageTitle, size, source, isHls }) => {
     const li = document.createElement('li');
     li.className = 'link-item';
+    li.dataset.id = url;
 
     const displayName = pageTitle || filename;
     const hlsTag = isHls ? '<span class="tag-hls">HLS</span>' : '';
@@ -51,7 +165,7 @@ function renderItems(items) {
       <button class="btn-send">Send</button>
     `;
     li.querySelector('.btn-send').addEventListener('click', (e) =>
-      sendUrl(url, pageTitle || null, e.currentTarget)
+      sendUrl(url, _resolveFilename(filename, pageTitle), e.currentTarget)
     );
     list.appendChild(li);
   });
@@ -74,28 +188,22 @@ function renderItems(items) {
   show('state-list');
 }
 
-// Connection status indicator.
-chrome.runtime.sendMessage({ action: 'get-status' }, (res) => {
-  const badge = document.getElementById('conn-badge');
-  if (res?.connected) {
-    badge.title = 'dlx is running';
-    badge.classList.add('connected');
-  } else {
-    badge.title = 'dlx is not running';
-  }
-});
+function loadItems() {
+  show('state-scanning');
+  chrome.runtime.sendMessage({ action: 'get-captured' }, (res) => {
+    const dynamic = (res?.items ?? []).map(i => ({ ...i, source: 'dynamic' }));
 
-// 1. Get dynamically captured items.
-chrome.runtime.sendMessage({ action: 'get-captured' }, (res) => {
-  const dynamic = (res?.items ?? []).map(i => ({ ...i, source: 'dynamic' }));
+    chrome.runtime.sendMessage({ action: 'scan-tab' }, (res2) => {
+      const seen = new Set(dynamic.map(i => i.url));
+      const staticLinks = (res2?.links ?? [])
+        .filter(l => !seen.has(l.url))
+        .map(l => ({ ...l, source: 'static' }));
 
-  // 2. Scan static links in page — merge, deduplicate by URL.
-  chrome.runtime.sendMessage({ action: 'scan-tab' }, (res2) => {
-    const seen = new Set(dynamic.map(i => i.url));
-    const staticLinks = (res2?.links ?? [])
-      .filter(l => !seen.has(l.url))
-      .map(l => ({ ...l, source: 'static' }));
-
-    renderItems([...dynamic, ...staticLinks]);
+      renderItems([...dynamic, ...staticLinks]);
+    });
   });
-});
+}
+
+// ---- Boot -------------------------------------------------------------------
+
+checkConnection();

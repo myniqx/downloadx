@@ -156,9 +156,9 @@ class Download implements GlobalConfig {
     return sum;
   }
 
-  /// Resolved filename (probe → meta → options → fallback).
+  /// Resolved filename (user option → probe → meta → fallback).
   String get filename =>
-      _probe?.filename ?? _meta.filename ?? options.filename ?? 'download-$id';
+      options.filename ?? _probe?.filename ?? _meta.filename ?? 'download-$id';
 
   /// Absolute path where the finished file will be written.
   String get targetFilePath => io.joinPath([targetPath, filename]);
@@ -168,9 +168,20 @@ class Download implements GlobalConfig {
 
   /// Start (or resume) the download. Completes on finish/pause/error.
   Future<void> start() {
-    final running = _runningPromise;
-    if (running != null) return running;
     if (_state == DownloadState.completed) return Future.value();
+
+    // HLS pause leaves _runningPromise alive (session is spin-waiting on
+    // isPaused()). Clear the flag so the session exits the loop and resumes
+    // naturally — no need to start a new _execute().
+    if (_runningPromise != null) {
+      if (_state == DownloadState.paused && _probe?.isHls == true) {
+        _pauseRequested = false;
+        _cancelRequested = false;
+        _setState(DownloadState.downloading);
+      }
+      return _runningPromise!;
+    }
+
     _pauseRequested = false;
     _cancelRequested = false;
     _meta.errorMessage = null;
@@ -190,6 +201,14 @@ class Download implements GlobalConfig {
     _pauseRequested = true;
     for (final c in _chunks) {
       c.pause();
+    }
+    // HLS session polls isPaused() in a spin-wait and never throws, so the
+    // catch block that calls _setState('paused') is never reached. Set state
+    // immediately so the UI reflects the pause without waiting for the next
+    // segment boundary. Use probe.isHls as the guard — _hlsSegmentsDone is
+    // null until the first batch finishes, which would miss an early pause.
+    if (_probe?.isHls == true) {
+      _setState(DownloadState.paused);
     }
   }
 
@@ -217,6 +236,15 @@ class Download implements GlobalConfig {
     await deleteMeta(io, MetaLocator(dir: cachePath, id: id))
         .catchError((_) {});
     await _safeUnlink(_journalPath());
+    // HLS writes segments to {cachePath}/{id}-hls/ — clean up the directory.
+    if (_probe?.isHls == true) {
+      final segDir = io.joinPath([cachePath, '$id-hls']);
+      final session = HlsSession(
+        id: id, context: _context, throttle: _throttle,
+        onProgress: (_, __) {}, isCancelled: () => true, isPaused: () => false,
+      );
+      await session.cleanup(segDir);
+    }
   }
 
   /// Change the speed limit mid-download. 0 = unlimited. null clears the
@@ -269,7 +297,7 @@ class Download implements GlobalConfig {
     return DownloadDescription(
       id: id,
       url: url,
-      filename: _meta.filename,
+      filename: filename,
       targetPath: _meta.targetPath,
       addedAt: _meta.addedAt,
       completedAt: _meta.completedAt,
