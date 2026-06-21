@@ -99,7 +99,7 @@ void main() {
     _routeSegments(h.io, 3);
 
     final (:session, :progress) = makeSession(h);
-    final result = await session.run('https://example.com/master.m3u8');
+    final result = await session.run('https://example.com/master.m3u8', '/dl/output.ts');
 
     expect(result.segmentPaths, hasLength(3));
     expect(result.segmentPaths[0], '/cache/test-id-hls/seg-000000.ts');
@@ -121,13 +121,13 @@ void main() {
     _routeSegments(h.io, 3);
 
     final (:session, progress: _) = makeSession(h);
-    final result = await session.run('https://example.com/media.m3u8');
+    final result = await session.run('https://example.com/media.m3u8', '/dl/output.ts');
 
     expect(result.segmentPaths, hasLength(3));
     expect(result.playlist.totalDurationSec, closeTo(28.5, 0.01));
   });
 
-  test('writes segment file contents to disk', () async {
+  test('writes segment file contents to disk and binary-concats them', () async {
     h.io.fetcher.route(
       'https://example.com/media.m3u8',
       MockRoute(body: _utf8(_mediaM3u8), contentType: 'application/vnd.apple.mpegurl'),
@@ -135,12 +135,18 @@ void main() {
     _routeSegments(h.io, 3);
 
     final (:session, progress: _) = makeSession(h);
-    final result = await session.run('https://example.com/media.m3u8');
+    final result = await session.run('https://example.com/media.m3u8', '/dl/output.ts');
 
     for (final p in result.segmentPaths) {
       final data = await h.io.readFile(p);
       expect(Uint8List.fromList(data), equals(_segBody));
     }
+
+    // Binary concat: output should be 3 × _segBody.
+    final expected = Uint8List.fromList([..._segBody, ..._segBody, ..._segBody]);
+    final output = Uint8List.fromList(await h.io.readFile('/dl/output.ts'));
+    expect(output, equals(expected));
+    expect(result.outputPath, equals('/dl/output.ts'));
   });
 
   test('throws on live stream', () async {
@@ -151,7 +157,7 @@ void main() {
 
     final (:session, progress: _) = makeSession(h);
     expect(
-      () => session.run('https://example.com/live.m3u8'),
+      () => session.run('https://example.com/live.m3u8', '/dl/output.ts'),
       throwsA(predicate((e) => e.toString().contains('Live HLS'))),
     );
   });
@@ -176,7 +182,7 @@ https://cdn.example.com/seg-000001.ts
     );
 
     final (:session, progress: _) = makeSession(h);
-    final result = await session.run('https://example.com/media.m3u8');
+    final result = await session.run('https://example.com/media.m3u8', '/dl/output.ts');
     expect(result.segmentPaths, hasLength(1));
 
     final segCalls = h.io.fetcher.requests
@@ -194,7 +200,7 @@ https://cdn.example.com/seg-000001.ts
 
     final (:session, progress: _) = makeSession(h, isCancelled: () => true);
     expect(
-      () => session.run('https://example.com/media.m3u8'),
+      () => session.run('https://example.com/media.m3u8', '/dl/output.ts'),
       throwsA(isA<HlsCancelledException>()),
     );
   });

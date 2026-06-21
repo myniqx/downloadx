@@ -67,6 +67,8 @@ export interface InjectedFunctions {
   appendFile?: (path: string, buffer: Uint8Array) => Promise<void>;
   /** Optional: enables final size verification before rename. */
   fileSize?: (path: string) => Promise<number>;
+  /** Optional: concatenates HLS segment files into a single output file. Falls back to binary concat if absent. */
+  concatSegments?: (segments: string[], output: string) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

@@ -174,4 +174,7 @@ abstract class DownloadxIo {
 
   /// Optional: enables final size verification before rename. Null = absent.
   Future<int> Function(String path)? get fileSize => null;
+
+  /// Optional: concatenates HLS segment files into a single output file. Falls back to binary concat if absent.
+  Future<void> Function(List<String> segments, String output)? get concatSegments => null;
 }

@@ -15,6 +15,8 @@ export interface HlsSessionResult {
   /** Ordered list of local segment file paths ready to be concatenated. */
   segmentPaths: string[];
   playlist: HlsMediaPlaylist;
+  /** Final concatenated output file path. */
+  outputPath: string;
 }
 
 const MAX_PARALLEL_SEGMENTS = 4;
@@ -27,7 +29,7 @@ export class HlsSession {
     private readonly callbacks: HlsSessionCallbacks,
   ) {}
 
-  async run(masterUrl: string): Promise<HlsSessionResult> {
+  async run(masterUrl: string, outputPath: string): Promise<HlsSessionResult> {
     const playlist = await this.resolveMediaPlaylist(masterUrl);
 
     if (playlist.isLive) {
@@ -38,7 +40,8 @@ export class HlsSession {
     await this.global.io.mkdir(segDir);
 
     const segmentPaths = await this.downloadSegments(playlist, segDir);
-    return { segmentPaths, playlist };
+    await this.concatSegments(segmentPaths, outputPath);
+    return { segmentPaths, playlist, outputPath };
   }
 
   // ---- playlist resolution -------------------------------------------------
@@ -129,6 +132,29 @@ export class HlsSession {
     );
 
     return path;
+  }
+
+  // ---- concat --------------------------------------------------------------
+
+  private async concatSegments(segments: string[], output: string): Promise<void> {
+    const io = this.global.io;
+    if (io.concatSegments) {
+      await io.concatSegments(segments, output);
+      return;
+    }
+    // Binary concat fallback: read each segment and append to output.
+    const parts: Uint8Array[] = [];
+    for (const seg of segments) {
+      parts.push(await io.readFile(seg));
+    }
+    const total = parts.reduce((acc, p) => acc + p.byteLength, 0);
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      merged.set(part, offset);
+      offset += part.byteLength;
+    }
+    await io.writeFile(output, merged);
   }
 
   // ---- helpers -------------------------------------------------------------

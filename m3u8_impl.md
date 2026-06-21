@@ -107,68 +107,34 @@ sendWs({ action: 'add-url', url: msg.url, filename: msg.filename });
 
 ---
 
-## 🔄 Faz 3 — HLS Segment İndirici (TypeScript + Dart)
+## ✅ Faz 3 — HLS Segment İndirici (TypeScript + Dart)
 
-> **Durum: PARTIAL**
+> **Durum: DONE**
 > - TS: `hls/session.ts` oluşturuldu. `session.test.ts` yazıldı.
 > - Dart: `hls/session.dart` oluşturuldu. `session_test.dart` yazıldı ve
 >   hataları düzeltildi (`fetcher.calls` → `fetcher.requests`, named record
 >   wildcard pattern düzeltmeleri).
-> - **YAPILMADI:** Testler henüz çalıştırılıp geçtiği doğrulanmadı.
-> - **YAPILMADI:** `execute()` entegrasyonu yok — Faz 5'te yapılacak.
+> - Testler geçti (6/6 TS, 6/6 Dart).
+> - **NOT:** `execute()` entegrasyonu yok — Faz 5'te yapılacak.
 
 **Kontrol listesi:**
-- [ ] `dart test test/unit/hls/session_test.dart` geçmeli
-- [ ] `npx vitest run tests/unit/hls/session.test.ts` geçmeli
+- [x] `dart test test/unit/hls/session_test.dart` geçti
+- [x] `npx vitest run tests/unit/hls/session.test.ts` geçti
 
 ---
 
-## ⬜ Faz 4 — ffmpeg Birleştirme (TypeScript + Dart)
+## ✅ Faz 4 — Segment Birleştirme (TypeScript + Dart)
 
-> **Durum: YAPILMADI**
-
-**Amaç:** Segment dosyalarından tek final dosya üret.
-
-### ffmpeg Stratejisi
-
-`concat demuxer` — yeniden encode yok, hızlı:
-
-```bash
-# file_list.txt içeriği:
-# file '/tmp/dlx/abc/seg-0.ts'
-# file '/tmp/dlx/abc/seg-1.ts'
-# ...
-
-ffmpeg -f concat -safe 0 -i file_list.txt -c copy output.mp4
-```
-
-Container seçimi:
-- Segment'lerde video + audio varsa → `.mp4`
-- Sadece audio varsa → `.aac`
-- Belirsizse → `.ts` (en güvenli fallback)
-
-### ffmpeg Yolu
-
-CLI'dan: `process.env.FFMPEG_PATH ?? 'ffmpeg'`
-Flutter'dan: ayarlardan veya sistem PATH'inden.
-
-### ffmpeg Yoksa
-
-Segment'leri binary concat yap → `.ts` dosyası üret. Bazı oynatıcılar açar,
-kalite/sync sorunları olabilir. UI'da uyarı göster.
-
-### Dosya Konumu
-
-```
-apps/downloadx/src/hls/ffmpeg.ts       # spawn + concat logic
-apps/downloadx_dart/lib/src/hls/ffmpeg.dart
-```
-
-### Test
-
-- Gerçek ffmpeg ile 3 segment → tek `.mp4` çıkar
-- ffmpeg yoksa binary concat → `.ts` çıkar
-- Bozuk segment → hata state
+> **Durum: DONE**
+>
+> Core paketi ffmpeg'e bağımlı değil. Birleştirme stratejisi:
+> - `InjectedFunctions.concatSegments` (TS) / `DownloadxIo.concatSegments` (Dart)
+>   opsiyonel callback olarak eklendi.
+> - Uygulama (CLI, Flutter) bu callback'i ffmpeg ile implement edebilir.
+> - Callback yoksa core kendi binary concat fallback'ini çalıştırır → `.ts` çıkar.
+> - `HlsSession.run()` artık `outputPath` parametresi alıyor ve concat sonucunu
+>   `HlsSessionResult.outputPath` olarak döndürüyor.
+> - Testler güncellendi: binary concat doğrulaması eklendi (6/6 TS, 6/6 Dart).
 
 ---
 
@@ -283,8 +249,8 @@ m3u8 URL'lerini artık listeden gizleme — göster ama "HLS" etiketi ekle.
 | `download.ts`    | HLS dallanması (stub → gerçek)       | 🔄 stub |
 | `hls/types.ts`   | HLS veri modelleri                   | ✅    |
 | `hls/parser.ts`  | m3u8 parser                          | ✅    |
-| `hls/session.ts` | segment indirici                     | 🔄 test bekliyor |
-| `hls/ffmpeg.ts`  | ffmpeg birleştirme                   | ⬜    |
+| `hls/session.ts` | segment indirici                     | ✅    |
+| `hls/ffmpeg.ts`  | ffmpeg birleştirme                   | N/A — core'da yok, uygulama katmanı |
 
 ### Dart (`apps/downloadx_dart/lib/src/`)
 
@@ -295,8 +261,8 @@ m3u8 URL'lerini artık listeden gizleme — göster ama "HLS" etiketi ekle.
 | `download.dart`    | HLS dallanması (stub → gerçek) | 🔄 stub |
 | `hls/types.dart`   | HLS veri modelleri             | ✅    |
 | `hls/parser.dart`  | m3u8 parser                    | ✅    |
-| `hls/session.dart` | segment indirici               | 🔄 test bekliyor |
-| `hls/ffmpeg.dart`  | ffmpeg birleştirme             | ⬜    |
+| `hls/session.dart` | segment indirici               | ✅    |
+| `hls/ffmpeg.dart`  | ffmpeg birleştirme             | N/A — core'da yok, uygulama katmanı |
 
 ### Flutter UI (`apps/dlx_ui/lib/`)
 

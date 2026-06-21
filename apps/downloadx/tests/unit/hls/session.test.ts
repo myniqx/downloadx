@@ -89,7 +89,7 @@ describe('HlsSession', () => {
     }
 
     const { session, progress } = makeSession(harness);
-    const result = await session.run('https://example.com/master.m3u8');
+    const result = await session.run('https://example.com/master.m3u8', '/dl/output.ts');
 
     expect(result.segmentPaths).toHaveLength(3);
     expect(result.segmentPaths[0]).toBe('/cache/test-id-hls/seg-000000.ts');
@@ -119,13 +119,13 @@ describe('HlsSession', () => {
     }
 
     const { session } = makeSession(harness);
-    const result = await session.run('https://example.com/media.m3u8');
+    const result = await session.run('https://example.com/media.m3u8', '/dl/output.ts');
 
     expect(result.segmentPaths).toHaveLength(3);
     expect(result.playlist.totalDurationSec).toBeCloseTo(28.5);
   });
 
-  it('writes segment file contents to disk', async () => {
+  it('writes segment file contents to disk and binary-concats them', async () => {
     harness.fetch.route('https://example.com/media.m3u8', {
       body: new TextEncoder().encode(MEDIA_M3U8),
       acceptsRanges: false,
@@ -138,12 +138,18 @@ describe('HlsSession', () => {
     }
 
     const { session } = makeSession(harness);
-    const result = await session.run('https://example.com/media.m3u8');
+    const result = await session.run('https://example.com/media.m3u8', '/dl/output.ts');
 
     for (const p of result.segmentPaths) {
       const data = await harness.io.readFile(p);
       expect(data).toEqual(SEG_BODY);
     }
+
+    // Binary concat: output should be 3 × SEG_BODY.
+    const expected = new Uint8Array([...SEG_BODY, ...SEG_BODY, ...SEG_BODY]);
+    const output = await harness.io.readFile('/dl/output.ts');
+    expect(output).toEqual(expected);
+    expect(result.outputPath).toBe('/dl/output.ts');
   });
 
   it('throws on live stream', async () => {
@@ -153,7 +159,7 @@ describe('HlsSession', () => {
     });
 
     const { session } = makeSession(harness);
-    await expect(session.run('https://example.com/live.m3u8')).rejects.toThrow(
+    await expect(session.run('https://example.com/live.m3u8', '/dl/output.ts')).rejects.toThrow(
       'Live HLS streams are not supported',
     );
   });
@@ -178,7 +184,7 @@ https://cdn.example.com/seg-000001.ts
     });
 
     const { session } = makeSession(harness);
-    const result = await session.run('https://example.com/media.m3u8');
+    const result = await session.run('https://example.com/media.m3u8', '/dl/output.ts');
     expect(result.segmentPaths).toHaveLength(1);
 
     // 2 calls: 1 fail + 1 success
@@ -201,6 +207,6 @@ https://cdn.example.com/seg-000001.ts
     }
 
     const { session } = makeSession(harness, { isCancelled: () => true });
-    await expect(session.run('https://example.com/media.m3u8')).rejects.toThrow('cancelled');
+    await expect(session.run('https://example.com/media.m3u8', '/dl/output.ts')).rejects.toThrow('cancelled');
   });
 });

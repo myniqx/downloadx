@@ -13,8 +13,10 @@ class HlsSessionResult {
   /// Ordered local segment file paths ready to be concatenated.
   final List<String> segmentPaths;
   final HlsMediaPlaylist playlist;
+  /// Final concatenated output file path.
+  final String outputPath;
 
-  HlsSessionResult({required this.segmentPaths, required this.playlist});
+  HlsSessionResult({required this.segmentPaths, required this.playlist, required this.outputPath});
 }
 
 class HlsCancelledException implements Exception {
@@ -40,7 +42,7 @@ class HlsSession {
     required this.isPaused,
   });
 
-  Future<HlsSessionResult> run(String masterUrl) async {
+  Future<HlsSessionResult> run(String masterUrl, String outputPath) async {
     final playlist = await _resolveMediaPlaylist(masterUrl);
 
     if (playlist.isLive) {
@@ -51,7 +53,8 @@ class HlsSession {
     await global.io.mkdir(segDir);
 
     final paths = await _downloadSegments(playlist, segDir);
-    return HlsSessionResult(segmentPaths: paths, playlist: playlist);
+    await _concatSegments(paths, outputPath);
+    return HlsSessionResult(segmentPaths: paths, playlist: playlist, outputPath: outputPath);
   }
 
   // ---- playlist resolution -------------------------------------------------
@@ -147,6 +150,23 @@ class HlsSession {
     );
 
     return path;
+  }
+
+  // ---- concat --------------------------------------------------------------
+
+  Future<void> _concatSegments(List<String> segments, String output) async {
+    final io = global.io;
+    if (io.concatSegments != null) {
+      await io.concatSegments!(segments, output);
+      return;
+    }
+    // Binary concat fallback: read each segment and append to output.
+    final parts = <List<int>>[];
+    for (final seg in segments) {
+      parts.add(await io.readFile(seg));
+    }
+    final merged = parts.fold<List<int>>([], (acc, p) => acc..addAll(p));
+    await io.writeFile(output, merged);
   }
 
   // ---- helpers -------------------------------------------------------------
