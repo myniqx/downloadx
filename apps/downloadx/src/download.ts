@@ -259,55 +259,6 @@ export class Download implements GlobalConfig {
   }
 
   /**
-   * Generic key/value setter for live-configurable fields. Returns false if the
-   * key is unknown (caller should report the error); true on success.
-   * Value must already be the correct type — parse/validate before calling.
-   */
-  set(key: string, value: unknown): boolean {
-    switch (key) {
-      case 'speedLimit':
-        this.setSpeedLimit(value as number | null);
-        return true;
-      case 'targetPath':
-        this.setTargetPath(value as string | null);
-        return true;
-      case 'targetChunkCount':
-        this.setTargetChunkCount(value as number | null);
-        return true;
-      case 'minChunkSize':
-        this.setMinChunkSize(value as number);
-        return true;
-      case 'journal':
-        this.setJournal(value as boolean);
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  /**
-   * Generic key/value getter for live-configurable fields. Returns undefined if
-   * the key is unknown.
-   */
-  get<T>(key: string): T | undefined {
-    switch (key) {
-      case 'speedLimit':
-        return this._meta.speedLimit as T;
-      case 'targetPath':
-        return this.targetPath as T;
-      case 'targetChunkCount':
-        return (this._meta.targetChunkCount ?? null) as T;
-      case 'minChunkSize':
-        return this.minChunkSize as T;
-      case 'journal':
-        return this.journal as T;
-      default:
-        return undefined;
-    }
-  }
-
-
-  /**
    * Pre-allocate the part file to its final size. Requires `io.truncate` and
    * a known total size; silently no-ops otherwise. Called automatically at
    * download start, exposed for callers that want to allocate earlier.

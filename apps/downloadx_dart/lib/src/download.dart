@@ -84,7 +84,8 @@ class Download implements GlobalConfig {
   Download(String id, String url, DownloadOptions options, DlxContext context)
       : this._(id, url, options, context, null);
 
-  Download._(this.id, this.url, this.options, this._context, MetaFile? initialMeta) {
+  Download._(
+      this.id, this.url, this.options, this._context, MetaFile? initialMeta) {
     _throttle = Throttle(options.speedLimit ?? 0);
     if (initialMeta != null) {
       _meta = initialMeta;
@@ -219,48 +220,6 @@ class Download implements GlobalConfig {
 
   /// Toggle NDJSON journal writing; takes effect on the next diagnostic event.
   void setJournal(bool? enabled) => _meta.journal = enabled;
-
-  /// Generic key/value setter for live-configurable fields. Returns false if
-  /// the key is unknown. Value must already be the correct type.
-  bool set(String key, Object? value) {
-    switch (key) {
-      case 'speedLimit':
-        setSpeedLimit(value as int?);
-        return true;
-      case 'targetPath':
-        setTargetPath(value as String?);
-        return true;
-      case 'targetChunkCount':
-        setTargetChunkCount(value as int?);
-        return true;
-      case 'minChunkSize':
-        setMinChunkSize(value as int?);
-        return true;
-      case 'journal':
-        setJournal(value as bool?);
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  /// Generic key/value getter for live-configurable fields. Null if unknown.
-  Object? get(String key) {
-    switch (key) {
-      case 'speedLimit':
-        return _meta.speedLimit;
-      case 'targetPath':
-        return targetPath;
-      case 'targetChunkCount':
-        return _meta.targetChunkCount;
-      case 'minChunkSize':
-        return minChunkSize;
-      case 'journal':
-        return journal;
-      default:
-        return null;
-    }
-  }
 
   /// Pre-allocate the part file to its final size. Requires `io.truncate` and a
   /// known total size; silently no-ops otherwise.
