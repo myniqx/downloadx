@@ -314,6 +314,10 @@ export interface DownloadProgressPayload {
   percent: number | null;
   /** Estimated remaining time in ms, or null when size/speed is unknown. */
   etaMs: number | null;
+  /** Number of HLS segments downloaded so far. Undefined for non-HLS downloads. */
+  hlsSegmentsDone?: number;
+  /** Total HLS segment count. Undefined for non-HLS downloads. */
+  hlsTotalSegments?: number;
 }
 
 export interface DownloadStatePayload {
@@ -382,6 +386,10 @@ export interface DownloadDescription {
     retries: number;
   }>;
   recentDiagnostics: DiagnosticPayload[];
+  /** Number of HLS segments downloaded so far. Undefined for non-HLS downloads. */
+  hlsSegmentsDone?: number;
+  /** Total HLS segment count. Undefined for non-HLS downloads. */
+  hlsTotalSegments?: number;
 }
 
 /** Strict event map shared by Download and DownloadX emitters. */

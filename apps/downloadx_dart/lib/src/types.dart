@@ -461,6 +461,12 @@ class DownloadDescription {
   final List<ChunkDescription> chunks;
   final List<DiagnosticPayload> recentDiagnostics;
 
+  /// Number of HLS segments downloaded so far. Null for non-HLS downloads.
+  final int? hlsSegmentsDone;
+
+  /// Total HLS segment count. Null for non-HLS downloads.
+  final int? hlsTotalSegments;
+
   const DownloadDescription({
     required this.id,
     required this.url,
@@ -480,6 +486,8 @@ class DownloadDescription {
     required this.totalChunks,
     required this.chunks,
     required this.recentDiagnostics,
+    this.hlsSegmentsDone,
+    this.hlsTotalSegments,
   });
 
   Map<String, dynamic> toJson() => {
@@ -501,5 +509,7 @@ class DownloadDescription {
         'totalChunks': totalChunks,
         'chunks': chunks.map((c) => c.toJson()).toList(),
         'recentDiagnostics': recentDiagnostics.map((d) => d.toJson()).toList(),
+        if (hlsSegmentsDone != null) 'hlsSegmentsDone': hlsSegmentsDone,
+        if (hlsTotalSegments != null) 'hlsTotalSegments': hlsTotalSegments,
       };
 }

@@ -292,7 +292,7 @@ class _MobileCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    _StateChip(state: state),
+                    _StateChip(state: state, isHls: d.hlsSegmentsDone != null),
                   ],
                 ),
               ),
@@ -328,7 +328,9 @@ class _MobileCard extends StatelessWidget {
                         ? 'Paused'
                         : completed
                             ? '100%'
-                            : formatPercent(d.percent),
+                            : d.hlsSegmentsDone != null
+                                ? '${d.hlsSegmentsDone} / ${d.hlsTotalSegments ?? '?'}'
+                                : formatPercent(d.percent),
                 style: AppTextStyles.headlineMd.copyWith(
                   color: error
                       ? AppColors.error
@@ -338,7 +340,13 @@ class _MobileCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              if (running) ...[
+              if (running && d.hlsSegmentsDone != null) ...[
+                Text(
+                  'segments',
+                  style: AppTextStyles.dataDisplay
+                      .copyWith(color: AppColors.onSurfaceVariant),
+                ),
+              ] else if (running) ...[
                 Text(
                   formatSpeed(d.totalSpeedBps.toDouble()),
                   style: AppTextStyles.dataDisplay
@@ -389,12 +397,13 @@ class _MobileCard extends StatelessWidget {
 
 class _StateChip extends StatelessWidget {
   final DownloadState state;
-  const _StateChip({required this.state});
+  final bool isHls;
+  const _StateChip({required this.state, this.isHls = false});
 
   @override
   Widget build(BuildContext context) {
     final label = switch (state) {
-      DownloadState.downloading => 'Direct Link',
+      DownloadState.downloading => isHls ? 'HLS' : 'Direct Link',
       DownloadState.paused     => 'Paused',
       DownloadState.probing    => 'Probing',
       DownloadState.completed  => 'Done',

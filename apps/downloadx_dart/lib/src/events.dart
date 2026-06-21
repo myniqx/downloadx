@@ -19,6 +19,12 @@ class ProgressEvent extends DownloadEvent {
   /// Estimated remaining time in ms, or null when size/speed is unknown.
   final int? etaMs;
 
+  /// Number of HLS segments downloaded so far. Null for non-HLS downloads.
+  final int? hlsSegmentsDone;
+
+  /// Total HLS segment count. Null for non-HLS downloads.
+  final int? hlsTotalSegments;
+
   const ProgressEvent(
     super.downloadId, {
     required this.totalBytes,
@@ -27,6 +33,8 @@ class ProgressEvent extends DownloadEvent {
     required this.activeChunks,
     required this.percent,
     required this.etaMs,
+    this.hlsSegmentsDone,
+    this.hlsTotalSegments,
   });
 }
 

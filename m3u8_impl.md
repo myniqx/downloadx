@@ -273,17 +273,17 @@ m3u8 URL'lerini artık listeden gizleme — göster ama "HLS" etiketi ekle.
 
 | Dosya                          | Değişiklik                                  | Durum |
 | ------------------------------ | ------------------------------------------- | ----- |
-| `services/download_service.dart` | `filename` + `targetPath` WebSocket'ten oku | ⬜    |
-| `ui/add_download_dialog.dart`  | `filename` pre-fill                         | ⬜    |
-| `ui/widgets/transfer_card.dart` | HLS segment sayacı                         | ⬜    |
+| `services/download_service.dart` | `filename` WebSocket'ten oku                | ✅    |
+| `ui/add_download_dialog.dart`  | `filename` pre-fill                         | ✅    |
+| `ui/widgets/transfer_card.dart` | HLS segment sayacı                         | ✅    |
 
 ### Extension (`apps/dlx_extension/src/`)
 
 | Dosya                | Değişiklik                         | Durum |
 | -------------------- | ---------------------------------- | ----- |
-| `background.js`      | `add-url` mesajına `filename` ekle | ⬜    |
-| `request-watcher.js` | m3u8 listede göster, "HLS" etiketi | ⬜    |
-| `popup.js`           | HLS etiketi render                 | ⬜    |
+| `background.js`      | `add-url` mesajına `filename` ekle | ✅    |
+| `request-watcher.js` | m3u8 listede göster, "HLS" etiketi | ✅    |
+| `popup.js`           | HLS etiketi render                 | ✅    |
 
 ---
 

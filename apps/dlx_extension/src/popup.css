@@ -85,6 +85,21 @@ header {
   font-family: 'Geist', monospace;
 }
 
+.tag-hls {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #ff9a3c;
+  background: #ff9a3c22;
+  border: 1px solid #ff9a3c55;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 5px;
+  vertical-align: middle;
+  line-height: 14px;
+}
+
 .link-url {
   font-size: 10px;
   color: #8c909f;

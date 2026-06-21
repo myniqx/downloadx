@@ -54,6 +54,8 @@ export class Download implements GlobalConfig {
   private cancelRequested = false;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
   private startedAt = 0;
+  private hlsSegmentsDone: number | undefined = undefined;
+  private hlsTotalSegments: number | undefined = undefined;
   private chunkSeq = 0;
   private rangeFallbackDone = false;
   private readonly stalledSince = new Map<string, number>();
@@ -316,6 +318,8 @@ export class Download implements GlobalConfig {
         retries: s.retries,
       })),
       recentDiagnostics: [...this.recentDiagnostics],
+      ...(this.hlsSegmentsDone !== undefined && { hlsSegmentsDone: this.hlsSegmentsDone }),
+      ...(this.hlsTotalSegments !== undefined && { hlsTotalSegments: this.hlsTotalSegments }),
     };
   }
 
@@ -635,6 +639,8 @@ export class Download implements GlobalConfig {
       this.throttle,
       {
         onProgress: (done, total) => {
+          this.hlsSegmentsDone = done;
+          this.hlsTotalSegments = total;
           this.emitter.emit('progress', {
             downloadId: this.id,
             totalBytes: null,
@@ -643,6 +649,8 @@ export class Download implements GlobalConfig {
             activeChunks: 1,
             percent: total > 0 ? (done / total) * 100 : null,
             etaMs: null,
+            hlsSegmentsDone: done,
+            hlsTotalSegments: total,
           });
         },
         onError: (msg) => this.diag('error', 'hls-error', msg),

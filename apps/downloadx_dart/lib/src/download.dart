@@ -35,6 +35,8 @@ class Download implements GlobalConfig {
   bool _cancelRequested = false;
   Timer? _progressTimer;
   int _startedAt = 0;
+  int? _hlsSegmentsDone;
+  int? _hlsTotalSegments;
   int _chunkSeq = 0;
   bool _rangeFallbackDone = false;
   final Map<String, int> _stalledSince = {};
@@ -282,6 +284,8 @@ class Download implements GlobalConfig {
               ))
           .toList(),
       recentDiagnostics: List<DiagnosticPayload>.of(_recentDiagnostics),
+      hlsSegmentsDone: _hlsSegmentsDone,
+      hlsTotalSegments: _hlsTotalSegments,
     );
   }
 
@@ -595,6 +599,8 @@ class Download implements GlobalConfig {
       context: _context,
       throttle: _throttle,
       onProgress: (done, total) {
+        _hlsSegmentsDone = done;
+        _hlsTotalSegments = total;
         emitter.emit(ProgressEvent(
           id,
           totalBytes: null,
@@ -603,6 +609,8 @@ class Download implements GlobalConfig {
           activeChunks: 1,
           percent: total > 0 ? (done / total) * 100 : null,
           etaMs: null,
+          hlsSegmentsDone: done,
+          hlsTotalSegments: total,
         ));
       },
       isCancelled: () => _cancelRequested,

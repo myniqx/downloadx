@@ -53,7 +53,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.action === 'add-url') {
     if (!isConnected()) { sendResponse({ ok: false, error: 'dlx is not running' }); return; }
-    sendWs({ action: 'add-url', url: msg.url });
+    sendWs({ action: 'add-url', url: msg.url, filename: msg.filename ?? undefined });
     sendResponse({ ok: true });
     return;
   }

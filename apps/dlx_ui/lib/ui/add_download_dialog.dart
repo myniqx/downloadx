@@ -36,7 +36,32 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _url.addListener(_onUrlChanged);
+    if (widget.initialUrl != null) _prefillFilenameIfHls(widget.initialUrl!);
+  }
+
+  void _onUrlChanged() => _prefillFilenameIfHls(_url.text.trim());
+
+  void _prefillFilenameIfHls(String url) {
+    if (!_isHlsUrl(url)) return;
+    if (_filename.text.isNotEmpty) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final segment = uri.pathSegments.lastWhere((s) => s.isNotEmpty, orElse: () => '');
+    final stem = segment.contains('.') ? segment.substring(0, segment.lastIndexOf('.')) : segment;
+    if (stem.isNotEmpty) _filename.text = '$stem.mp4';
+  }
+
+  static bool _isHlsUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('.m3u8') || lower.contains('application/x-mpegurl');
+  }
+
+  @override
   void dispose() {
+    _url.removeListener(_onUrlChanged);
     _url.dispose();
     _filename.dispose();
     _chunkCount.dispose();

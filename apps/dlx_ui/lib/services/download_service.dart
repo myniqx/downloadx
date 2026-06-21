@@ -226,7 +226,12 @@ class DownloadService extends ChangeNotifier {
     switch (msg['action']) {
       case 'add-url':
         final url = msg['url'] as String?;
-        if (url != null) addUrl(url);
+        if (url != null) {
+          final options = DownloadOptions(
+            filename: msg['filename'] as String?,
+          );
+          addUrl(url, options: options);
+        }
       case 'list':
         _ws.send(socket, {
           'action': 'list',

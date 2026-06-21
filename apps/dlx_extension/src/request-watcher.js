@@ -124,6 +124,7 @@ export function registerRequestWatcher(onCaptured) {
         size: sizeFrom(res.responseHeaders || []),
         mime: (res.responseHeaders || []).find(h => h.name.toLowerCase() === 'content-type')?.value ?? null,
         tabId,
+        isHls: extOf(res.url) === 'm3u8',
       };
       tabMap.set(res.url, item);
 
