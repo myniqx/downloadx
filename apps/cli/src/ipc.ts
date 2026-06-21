@@ -22,7 +22,8 @@ export interface DaemonConfig {
 export interface AddRequest {
   cmd: 'add';
   url: string;
-  targetPath?: string;
+  filename?: string;
+  options?: Record<string, string>;
 }
 export interface PauseRequest {
   cmd: 'pause';

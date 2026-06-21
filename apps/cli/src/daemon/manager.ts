@@ -15,6 +15,7 @@ import {
   createDownloadX,
   type Download,
   type DownloadDescription,
+  type DownloadOptions,
   type DownloadProgressPayload,
   type ChunkProgressPayload,
   type ChunkLifecyclePayload,
@@ -239,11 +240,10 @@ export function getDownloadConfig(id: string, key: string): unknown {
 */
 export async function addDownload(
   url: string,
-  targetPath: string | null,
+  options: DownloadOptions,
 ): Promise<DownloadDescription> {
   const mgr = getManager();
-  const dl = await mgr.addUrl(url);
-  if (targetPath !== null) dl.setTargetPath(targetPath);
+  const dl = await mgr.addUrl(url, options);
   attachListeners(dl);
   activeCount++;
   void dl.start();

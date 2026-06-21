@@ -8,6 +8,7 @@ import {
   UNKNOWN_SIZE_LENGTH,
 } from './constants.js';
 import { TypedEventEmitter } from './events.js';
+import { HlsSession } from './hls/session.js';
 import {
   applyProbeToMeta,
   canResumeAgainst,
@@ -23,6 +24,7 @@ import { Throttle } from './throttle.js';
 import type {
   ChunkSnapshot,
   DiagnosticPayload,
+  DlxContext,
   DownloadDescription,
   DownloadEventMap,
   DownloadOptions,
@@ -38,7 +40,7 @@ export class Download implements GlobalConfig {
   readonly url: string;
   readonly emitter = new TypedEventEmitter<DownloadEventMap>();
   readonly options: DownloadOptions;
-  private readonly _global: GlobalConfig;
+  private readonly _context: DlxContext;
 
   private _state: DownloadState = 'idle';
   private _probe: ProbeResult | null = null;
@@ -52,6 +54,8 @@ export class Download implements GlobalConfig {
   private cancelRequested = false;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
   private startedAt = 0;
+  private hlsSegmentsDone: number | undefined = undefined;
+  private hlsTotalSegments: number | undefined = undefined;
   private chunkSeq = 0;
   private rangeFallbackDone = false;
   private readonly stalledSince = new Map<string, number>();
@@ -62,49 +66,49 @@ export class Download implements GlobalConfig {
   // meta overrides for fields that support them.
   // ---------------------------------------------------------------------------
 
-  get io(): InjectedFunctions { return this._global.io; }
-  get cachePath(): string { return this._global.cachePath; }
-  get maxParallel(): number { return this._global.maxParallel; }
-  get speedLimit(): number { return this._global.speedLimit; }
-  get sharedThrottle(): GlobalConfig['sharedThrottle'] { return this._global.sharedThrottle; }
+  get io(): InjectedFunctions { return this._context.io; }
+  get cachePath(): string { return this._context.cachePath; }
+  get maxParallel(): number { return this._context.maxParallel; }
+  get speedLimit(): number { return this._context.speedLimit; }
+  get sharedThrottle(): GlobalConfig['sharedThrottle'] { return this._context.sharedThrottle; }
 
-  get maxRetries(): number { return this._global.maxRetries; }
-  get retryDelay(): number { return this._global.retryDelay; }
-  get retryBackoff(): number { return this._global.retryBackoff; }
-  get speedSampleWindow(): number { return this._global.speedSampleWindow; }
-  get requestTimeout(): number { return this._global.requestTimeout; }
-  get headers(): Record<string, string> { return this._global.headers; }
+  get maxRetries(): number { return this._context.maxRetries; }
+  get retryDelay(): number { return this._context.retryDelay; }
+  get retryBackoff(): number { return this._context.retryBackoff; }
+  get speedSampleWindow(): number { return this._context.speedSampleWindow; }
+  get requestTimeout(): number { return this._context.requestTimeout; }
+  get headers(): Record<string, string> { return this._context.headers; }
 
   get targetChunkCount(): number {
-    return this._meta.targetChunkCount ?? this._global.targetChunkCount;
+    return this._meta.targetChunkCount ?? this._context.targetChunkCount;
   }
   get targetPath(): string {
-    return this._meta.targetPath ?? this._global.targetPath;
+    return this._meta.targetPath ?? this._context.targetPath;
   }
   get minChunkSize(): number {
-    return this._meta.minChunkSize ?? this._global.minChunkSize;
+    return this._meta.minChunkSize ?? this._context.minChunkSize;
   }
   get journal(): boolean {
-    return this._meta.journal ?? this._global.journal;
+    return this._meta.journal ?? this._context.journal;
   }
 
   // ---------------------------------------------------------------------------
 
-  static fromMeta(meta: MetaFile, global: GlobalConfig): Download {
-    return new Download(meta.id, meta.url, {}, global, meta);
+  static fromMeta(meta: MetaFile, context: DlxContext): Download {
+    return new Download(meta.id, meta.url, {}, context, meta);
   }
 
   constructor(
     id: string,
     url: string,
     options: DownloadOptions,
-    global: GlobalConfig,
+    context: DlxContext,
     initialMeta?: MetaFile,
   ) {
     this.id = id;
     this.url = url;
     this.options = options;
-    this._global = global;
+    this._context = context;
     this.throttle = new Throttle(options.speedLimit ?? 0);
     if (initialMeta !== undefined) {
       this._meta = initialMeta;
@@ -114,6 +118,9 @@ export class Download implements GlobalConfig {
     } else {
       this._meta = createEmptyMeta({ id, url });
       if (options.targetPath !== undefined) this._meta.targetPath = options.targetPath;
+      if (options.speedLimit !== undefined) this._meta.speedLimit = options.speedLimit;
+      if (options.minChunkSize !== undefined) this._meta.minChunkSize = options.minChunkSize;
+      if (options.journal !== undefined) this._meta.journal = options.journal;
     }
     this.emitter.on('chunkLifecycle', (payload) => {
       if (
@@ -257,55 +264,6 @@ export class Download implements GlobalConfig {
   }
 
   /**
-   * Generic key/value setter for live-configurable fields. Returns false if the
-   * key is unknown (caller should report the error); true on success.
-   * Value must already be the correct type — parse/validate before calling.
-   */
-  set(key: string, value: unknown): boolean {
-    switch (key) {
-      case 'speedLimit':
-        this.setSpeedLimit(value as number | null);
-        return true;
-      case 'targetPath':
-        this.setTargetPath(value as string | null);
-        return true;
-      case 'targetChunkCount':
-        this.setTargetChunkCount(value as number | null);
-        return true;
-      case 'minChunkSize':
-        this.setMinChunkSize(value as number);
-        return true;
-      case 'journal':
-        this.setJournal(value as boolean);
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  /**
-   * Generic key/value getter for live-configurable fields. Returns undefined if
-   * the key is unknown.
-   */
-  get<T>(key: string): T | undefined {
-    switch (key) {
-      case 'speedLimit':
-        return this._meta.speedLimit as T;
-      case 'targetPath':
-        return this.targetPath as T;
-      case 'targetChunkCount':
-        return (this._meta.targetChunkCount ?? null) as T;
-      case 'minChunkSize':
-        return this.minChunkSize as T;
-      case 'journal':
-        return this.journal as T;
-      default:
-        return undefined;
-    }
-  }
-
-
-  /**
    * Pre-allocate the part file to its final size. Requires `io.truncate` and
    * a known total size; silently no-ops otherwise. Called automatically at
    * download start, exposed for callers that want to allocate earlier.
@@ -363,6 +321,8 @@ export class Download implements GlobalConfig {
         retries: s.retries,
       })),
       recentDiagnostics: [...this.recentDiagnostics],
+      ...(this.hlsSegmentsDone !== undefined && { hlsSegmentsDone: this.hlsSegmentsDone }),
+      ...(this.hlsTotalSegments !== undefined && { hlsTotalSegments: this.hlsTotalSegments }),
     };
   }
 
@@ -410,6 +370,11 @@ export class Download implements GlobalConfig {
           ...(this.options.filename !== undefined ? { filenameHint: this.options.filename } : {}),
         });
         this._probe = probe;
+      }
+
+      if (this._probe.isHls) {
+        await this.runHls();
+        return;
       }
 
       await this.ensureTargetDirs();
@@ -662,6 +627,80 @@ export class Download implements GlobalConfig {
       }
 
       await this.persistCurrentMeta().catch(() => undefined);
+    }
+  }
+
+  private async runHls(): Promise<void> {
+    this.setState('downloading');
+    this.startedAt = Date.now();
+
+    const baseFilename = this.filename;
+    const outputPath = this.targetFilePath;
+    const session = new HlsSession(
+      this.id,
+      this._context,
+      this.throttle,
+      {
+        onProgress: (done, total) => {
+          this.hlsSegmentsDone = done;
+          this.hlsTotalSegments = total;
+          this.emitter.emit('progress', {
+            downloadId: this.id,
+            totalBytes: null,
+            downloadedBytes: done,
+            totalSpeed: 0,
+            activeChunks: 1,
+            percent: total > 0 ? (done / total) * 100 : null,
+            etaMs: null,
+            hlsSegmentsDone: done,
+            hlsTotalSegments: total,
+          });
+        },
+        onError: (msg) => this.diag('error', 'hls-error', msg),
+        isCancelled: () => this.cancelRequested,
+        isPaused: () => this.pauseRequested,
+      },
+    );
+
+    try {
+      await this.ensureTargetDirs();
+      const result = await session.run(this.url, outputPath, baseFilename);
+
+      if ('type' in result && result.type === 'multi-stream') {
+        // Multiple streams registered as idle downloads — this download is done.
+        this.setState('completed');
+        this._meta.completedAt = Date.now();
+        await this.persistCurrentMeta().catch(() => undefined);
+        return;
+      }
+
+      this.setState('completed');
+      this._meta.completedAt = Date.now();
+      await this.persistCurrentMeta().catch(() => undefined);
+      this.emitter.emit('completed', {
+        downloadId: this.id,
+        filename: this.filename,
+        totalBytes: this.downloadedBytes,
+        durationMs: this.startedAt === 0 ? 0 : Date.now() - this.startedAt,
+      });
+    } catch (err) {
+      if (this.cancelRequested) {
+        this.setState('cancelled');
+        await this.persistCurrentMeta().catch(() => undefined);
+        return;
+      }
+      if (this.pauseRequested) {
+        this.setState('paused');
+        await this.persistCurrentMeta().catch(() => undefined);
+        return;
+      }
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.setState('error');
+      this._meta.errorMessage = error.message;
+      this.emitter.emit('error', { downloadId: this.id, error, fatal: true });
+      await this.persistCurrentMeta().catch(() => undefined);
+    } finally {
+      this.stopProgressTimer();
     }
   }
 

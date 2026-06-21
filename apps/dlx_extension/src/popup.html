@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>DownloadX</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <span class="logo">dlx</span>
+    <span class="tagline">DownloadX</span>
+    <span id="conn-badge" class="conn-badge">●</span>
+  </header>
+
+  <div id="state-scanning" class="state">
+    <p class="muted">Scanning…</p>
+  </div>
+
+  <div id="state-empty" class="state hidden">
+    <p class="muted">No downloadable content detected on this page.</p>
+  </div>
+
+  <div id="state-list" class="state hidden">
+    <ul id="link-list"></ul>
+    <footer>
+      <button id="btn-clear" class="btn-ghost">Clear</button>
+      <button id="btn-all">Send all</button>
+    </footer>
+  </div>
+
+  <div id="state-error" class="state hidden">
+    <p class="error" id="error-msg"></p>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

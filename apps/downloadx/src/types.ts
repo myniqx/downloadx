@@ -67,6 +67,8 @@ export interface InjectedFunctions {
   appendFile?: (path: string, buffer: Uint8Array) => Promise<void>;
   /** Optional: enables final size verification before rename. */
   fileSize?: (path: string) => Promise<number>;
+  /** Optional: concatenates HLS segment files into a single output file. Falls back to binary concat if absent. */
+  concatSegments?: (segments: string[], output: string) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +96,7 @@ export interface GlobalConfig extends DownloadConfig {
   readonly journal: boolean;
   readonly sharedThrottle: { consume: (bytes: number, signal?: AbortSignal) => Promise<void> };
 }
+
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -160,6 +163,12 @@ export interface DownloadXConfig {
   journal?: boolean;
 }
 
+/** Minimal interface for the download manager — passed to HlsSession so it can
+ *  register additional downloads (e.g. multi-stream HLS) without importing DownloadX. */
+export interface DlxContext extends GlobalConfig {
+  addUrl(url: string, options?: DownloadOptions): Promise<unknown>;
+}
+
 /** Per-download overrides passed to {@link DownloadX.addUrl}. */
 export interface DownloadOptions {
   /** Override filename. Defaults to one inferred from URL / Content-Disposition. */
@@ -176,6 +185,12 @@ export interface DownloadOptions {
 
   /** Override per-download speed limit (bytes/sec). 0 = unlimited. */
   speedLimit?: number;
+
+  /** Override minimum chunk size for this download. */
+  minChunkSize?: number;
+
+  /** Write NDJSON diagnostic journal for this download. */
+  journal?: boolean;
 
   /** Override retry behaviour. */
   maxRetries?: number;
@@ -238,6 +253,7 @@ export interface ProbeResult {
   lastModified: string | null;
   contentType: string | null;
   filename: string;
+  isHls: boolean;
 }
 
 /** JSON shape persisted as `{id}.downloadx.json`. */
@@ -304,6 +320,10 @@ export interface DownloadProgressPayload {
   percent: number | null;
   /** Estimated remaining time in ms, or null when size/speed is unknown. */
   etaMs: number | null;
+  /** Number of HLS segments downloaded so far. Undefined for non-HLS downloads. */
+  hlsSegmentsDone?: number;
+  /** Total HLS segment count. Undefined for non-HLS downloads. */
+  hlsTotalSegments?: number;
 }
 
 export interface DownloadStatePayload {
@@ -372,6 +392,10 @@ export interface DownloadDescription {
     retries: number;
   }>;
   recentDiagnostics: DiagnosticPayload[];
+  /** Number of HLS segments downloaded so far. Undefined for non-HLS downloads. */
+  hlsSegmentsDone?: number;
+  /** Total HLS segment count. Undefined for non-HLS downloads. */
+  hlsTotalSegments?: number;
 }
 
 /** Strict event map shared by Download and DownloadX emitters. */

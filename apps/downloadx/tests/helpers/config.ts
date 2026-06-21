@@ -30,7 +30,11 @@ export interface HarnessOverrides {
 export function makeHarness(overrides: HarnessOverrides = {}): TestHarness {
   const fs = new MockFs();
   const fetch = new MockFetch();
-  const io: InjectedFunctions = { fetch: fetch.fetch, ...fs };
+  const io: InjectedFunctions = {
+    fetch: fetch.fetch,
+    ...fs,
+    get concatSegments() { return fs.concatSegments; },
+  };
   const config: DownloadXConfig = {
     io,
     targetPath: overrides.targetPath ?? '/dl',

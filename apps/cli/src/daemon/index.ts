@@ -48,7 +48,15 @@ async function runForIds(ids: string[], fn: (id: string) => Promise<void>): Prom
 async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
   switch (req.cmd) {
     case 'add': {
-      const desc = await addDownload(req.url, req.targetPath ?? null);
+      const options: Record<string, unknown> = {};
+      if (req.filename !== undefined) options.filename = req.filename;
+      if (req.options) {
+        for (const [key, raw] of Object.entries(req.options)) {
+          const def = LOCAL_KEYS.find((d) => d.canonical.toLowerCase() === key.toLowerCase());
+          if (def) options[def.canonical] = def.parse(raw);
+        }
+      }
+      const desc = await addDownload(req.url, options);
       send(socket, { ok: true, data: desc });
       break;
     }

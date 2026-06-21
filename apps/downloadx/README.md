@@ -40,6 +40,11 @@ Deno, edge runtimes, or against a custom storage backend such as S3.
   retries).
 - **Integrity** — optional disk pre-allocation before the first write and a
   final size verification before the part file is renamed into place.
+- **HLS (m3u8) support** — master and media playlists are parsed and segments
+  downloaded in parallel. A master playlist with multiple quality streams
+  registers each as a separate idle download so the caller picks the one to
+  start. Segment concatenation is handled by an optional `concatSegments` I/O
+  hook (ffmpeg recommended); without it a binary fallback produces a raw `.ts`.
 - **Observability** — a strictly-typed event emitter, an NDJSON diagnostic
   journal sidecar, and `describe()` / `describeText()` reports compact enough
   to paste into a dashboard, a log line, or an LLM prompt.
@@ -229,6 +234,7 @@ interface InjectedFunctions {
   truncate?: (path, size) => Promise<void>; // disk pre-allocation
   appendFile?: (path, bytes) => Promise<void>; // NDJSON journal
   fileSize?: (path) => Promise<number>; // final size verification
+  concatSegments?: (segments: string[], output: string) => Promise<void>; // HLS concat
 }
 ```
 
@@ -236,6 +242,61 @@ The `fetch` must match the WHATWG `fetch` shape (streaming body and
 `AbortSignal` support). Everything else maps directly to your chosen storage
 backend — disk, S3, IndexedDB, or a database — as long as `writeChunk`
 supports random-access offset writes **without truncating the file**.
+
+#### `concatSegments` — HLS segment concatenation
+
+When provided, this hook is called after all `.ts` segments are downloaded.
+Without it the core falls back to a binary concat, producing a raw `.ts` file.
+
+**ffmpeg example — remux to `.mp4` (no re-encode, fast):**
+
+```ts
+import { spawn } from 'node:child_process';
+
+const io = {
+  // ...other fields,
+  concatSegments: (segments, output) =>
+    new Promise((resolve, reject) => {
+      // Write a concat list file so ffmpeg doesn't hit ARG_MAX on large playlists.
+      const listPath = output + '.ffconcat';
+      const content = 'ffconcat version 1.0\n' +
+        segments.map(s => `file '${s}'`).join('\n');
+      await writeFile(listPath, Buffer.from(content));
+
+      const ff = spawn('ffmpeg', [
+        '-f', 'concat', '-safe', '0', '-i', listPath,
+        '-c', 'copy',   // remux only — no re-encode
+        '-movflags', '+faststart',
+        '-y', output,
+      ]);
+      ff.on('close', (code) => {
+        unlink(listPath).catch(() => undefined);
+        code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`));
+      });
+    }),
+};
+```
+
+**ffmpeg example — transcode `.ts` segments to `.mp4` (H.264 + AAC):**
+
+```ts
+concatSegments: (segments, output) =>
+  new Promise((resolve, reject) => {
+    const ff = spawn('ffmpeg', [
+      '-i', `concat:${segments.join('|')}`,
+      '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-y', output,
+    ]);
+    ff.on('close', (code) =>
+      code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))
+    );
+  }),
+```
+
+> Without `concatSegments`, the core binary-concatenates the segments into a
+> `.ts` file. This is valid for most streams but skips container conversion and
+> metadata — use ffmpeg when you need `.mp4` / `.mkv` output or chapter marks.
 
 ### Events
 
@@ -245,7 +306,7 @@ listeners see exactly what the Download emitted).
 
 | Event            | Payload                                                                                                                                   |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `progress`       | Aggregate: `{ downloadId, totalBytes, downloadedBytes, totalSpeed, activeChunks, percent, etaMs }`                                        |
+| `progress`       | Aggregate: `{ downloadId, totalBytes, downloadedBytes, totalSpeed, activeChunks, percent, etaMs, hlsSegmentsDone?, hlsTotalSegments? }`    |
 | `chunkProgress`  | Per-chunk: `{ downloadId, chunkId, offset, length, downloadedBytes, instantSpeed, windowedSpeed, quality }`                               |
 | `chunkLifecycle` | `{ downloadId, chunkId, status }` — `pending`/`downloading`/`completed`/`failed`/`paused`/`reassigned`                                    |
 | `chunkSplit`     | `{ downloadId, sourceChunkId, newChunkId, splitOffset, reason }`                                                                          |

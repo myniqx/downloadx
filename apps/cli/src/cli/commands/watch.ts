@@ -54,6 +54,8 @@ interface DownloadState {
   percent: number | null;
   chunks: Map<string, ChunkState>;
   chunkColorCounter: number;
+  hlsSegmentsDone: number | undefined;
+  hlsTotalSegments: number | undefined;
 }
 
 const state = new Map<string, DownloadState>();
@@ -89,23 +91,32 @@ function fmtEta(downloaded: number, total: number | null, speed: number): string
 }
 
 function renderBar(ds: DownloadState, barWidth: number): string {
+  if (barWidth <= 0) return '';
+
+  // HLS mode — segment-based progress bar
+  if (ds.hlsSegmentsDone !== undefined && ds.hlsTotalSegments !== undefined && ds.hlsTotalSegments > 0) {
+    const filled = Math.round((ds.hlsSegmentsDone / ds.hlsTotalSegments) * barWidth);
+    const HLS_COLOR = '\x1b[35m'; // magenta
+    return (
+      `${HLS_COLOR}${'█'.repeat(filled)}${RESET}` +
+      `\x1b[90m${'░'.repeat(barWidth - filled)}${RESET}`
+    );
+  }
+
   const total = ds.totalBytes;
-  if (!total || barWidth <= 0) return '·'.repeat(barWidth);
+  if (!total) return '·'.repeat(barWidth);
 
   const cells = new Array<string>(barWidth).fill('·');
 
-  // Mark completed chunks as solid block using their color
   for (const chunk of ds.chunks.values()) {
     const color = CHUNK_COLORS[chunk.colorIdx % CHUNK_COLORS.length]!;
     const startCell = Math.floor((chunk.offset / total) * barWidth);
     const endCell = Math.floor(((chunk.offset + chunk.downloadedBytes) / total) * barWidth);
     const fullEnd = Math.floor(((chunk.offset + chunk.length) / total) * barWidth);
 
-    // Downloaded portion — solid block
     for (let i = startCell; i <= Math.min(endCell, barWidth - 1); i++) {
       cells[i] = `${color}█${RESET}`;
     }
-    // Remaining portion of this chunk — faint shade
     for (let i = endCell + 1; i <= Math.min(fullEnd, barWidth - 1); i++) {
       cells[i] = `${color}░${RESET}`;
     }
@@ -115,6 +126,12 @@ function renderBar(ds: DownloadState, barWidth: number): string {
 }
 
 function renderLegend(ds: DownloadState): string {
+  // HLS mode — show segment counter as legend
+  if (ds.hlsSegmentsDone !== undefined && ds.hlsTotalSegments !== undefined) {
+    const HLS_COLOR = '\x1b[35m';
+    return `${HLS_COLOR}HLS${RESET}  ${ds.hlsSegmentsDone} / ${ds.hlsTotalSegments} segments`;
+  }
+
   const parts: string[] = [];
   let idx = 0;
   for (const chunk of ds.chunks.values()) {
@@ -146,8 +163,13 @@ function render(): void {
     const eta = fmtEta(ds.downloadedBytes, ds.totalBytes, ds.totalSpeed);
     const size = `${fmtBytes(ds.downloadedBytes)} / ${fmtBytes(ds.totalBytes)}`;
 
-    const header = `${statusColor}${entry.id.slice(0, 8)}${RESET}  ${BOLD}${name}${RESET}  [${entry.state}]`;
-    const meta = `${pct.padStart(6)}  ${size}  ${speed}  ETA ${eta}`;
+    const isHls = ds.hlsSegmentsDone !== undefined && ds.hlsTotalSegments !== undefined;
+    const hlsLabel = isHls ? `  \x1b[35mHLS\x1b[0m` : '';
+    const header = `${statusColor}${entry.id.slice(0, 8)}${RESET}  ${BOLD}${name}${RESET}  [${entry.state}]${hlsLabel}`;
+    const progress = isHls
+      ? `${ds.hlsSegmentsDone} / ${ds.hlsTotalSegments} segs`.padStart(14)
+      : pct.padStart(6);
+    const meta = `${progress}  ${size}  ${speed}  ETA ${eta}`;
     lines.push(header);
     lines.push(meta);
 
@@ -195,6 +217,8 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
       percent: entry.percent,
       chunks: new Map(),
       chunkColorCounter: 0,
+      hlsSegmentsDone: entry.hlsSegmentsDone,
+      hlsTotalSegments: entry.hlsTotalSegments,
     });
   }
 
@@ -250,6 +274,8 @@ export async function cmdWatch(simple: boolean, json = false): Promise<void> {
             ds.totalBytes = e.totalBytes;
             ds.totalSpeed = e.totalSpeed;
             ds.percent = e.percent;
+            ds.hlsSegmentsDone = e.hlsSegmentsDone;
+            ds.hlsTotalSegments = e.hlsTotalSegments;
           }
           break;
         }

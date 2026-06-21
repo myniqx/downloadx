@@ -119,6 +119,12 @@ function finalize(opts: ProbeOptions, raw: ProbeRaw): ProbeResult {
     filenameFromUrl(opts.url) ??
     `download-${Date.now()}`;
 
+  const ct = raw.contentType?.toLowerCase() ?? '';
+  const isHls =
+    ct.includes('mpegurl') ||
+    ct.includes('x-m3u8') ||
+    (opts.url.split('?')[0] ?? '').toLowerCase().endsWith('.m3u8');
+
   return {
     url: opts.url,
     finalUrl: raw.finalUrl,
@@ -128,6 +134,7 @@ function finalize(opts: ProbeOptions, raw: ProbeRaw): ProbeResult {
     lastModified: raw.lastModified,
     contentType: raw.contentType,
     filename,
+    isHls,
   };
 }
 
