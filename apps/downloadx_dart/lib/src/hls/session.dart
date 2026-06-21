@@ -4,6 +4,7 @@ import '../config.dart';
 import '../io.dart';
 import '../retry.dart';
 import '../throttle.dart';
+import '../types.dart';
 import 'parser.dart';
 import 'types.dart';
 
@@ -19,13 +20,20 @@ class HlsSessionResult {
   HlsSessionResult({required this.segmentPaths, required this.playlist, required this.outputPath});
 }
 
+/// Returned when a master playlist has multiple streams — each stream has been
+/// registered as an idle Download via [DlxContext.addUrl]; no segments downloaded.
+class HlsMultiStreamResult {
+  final List<HlsStream> streams;
+  HlsMultiStreamResult({required this.streams});
+}
+
 class HlsCancelledException implements Exception {
   const HlsCancelledException();
 }
 
 class HlsSession {
   final String id;
-  final GlobalConfig global;
+  final DlxContext context;
   final Throttle throttle;
   final HlsProgressCallback onProgress;
   final bool Function() isCancelled;
@@ -35,22 +43,32 @@ class HlsSession {
 
   HlsSession({
     required this.id,
-    required this.global,
+    required this.context,
     required this.throttle,
     required this.onProgress,
     required this.isCancelled,
     required this.isPaused,
   });
 
-  Future<HlsSessionResult> run(String masterUrl, String outputPath) async {
-    final playlist = await _resolveMediaPlaylist(masterUrl);
+  /// Run the HLS session.
+  /// - Single stream → downloads segments and returns [HlsSessionResult].
+  /// - Multiple streams → registers each as a separate idle Download via
+  ///   [context.addUrl] and returns [HlsMultiStreamResult].
+  Future<Object> run(String masterUrl, String outputPath, String baseFilename) async {
+    final resolution = await _resolvePlaylist(masterUrl);
 
+    if (resolution is _MultiStream) {
+      await _registerStreams(resolution.streams, baseFilename, outputPath);
+      return HlsMultiStreamResult(streams: resolution.streams);
+    }
+
+    final playlist = (resolution as _MediaResult).playlist;
     if (playlist.isLive) {
       throw Exception('Live HLS streams are not supported');
     }
 
-    final segDir = global.io.joinPath([global.cachePath, '$id-hls']);
-    await global.io.mkdir(segDir);
+    final segDir = context.io.joinPath([context.cachePath, '$id-hls']);
+    await context.io.mkdir(segDir);
 
     final paths = await _downloadSegments(playlist, segDir);
     await _concatSegments(paths, outputPath);
@@ -59,22 +77,52 @@ class HlsSession {
 
   // ---- playlist resolution -------------------------------------------------
 
-  Future<HlsMediaPlaylist> _resolveMediaPlaylist(String url) async {
+  Future<Object> _resolvePlaylist(String url) async {
     final text = await _fetchText(url);
     final result = parsePlaylist(text, url);
 
-    if (result is HlsMediaResult) return result.playlist;
+    if (result is HlsMediaResult) return _MediaResult(result.playlist);
 
-    final master = (result as HlsMasterResult).playlist;
-    final best = selectBestStream(master);
-    if (best == null) throw Exception('HLS master playlist has no streams');
+    final streams = (result as HlsMasterResult).playlist.streams;
+    if (streams.isEmpty) throw Exception('HLS master playlist has no streams');
 
-    final mediaText = await _fetchText(best.uri);
-    final mediaResult = parsePlaylist(mediaText, best.uri);
+    if (streams.length > 1) return _MultiStream(streams);
+
+    // Single stream — resolve directly.
+    final mediaText = await _fetchText(streams[0].uri);
+    final mediaResult = parsePlaylist(mediaText, streams[0].uri);
     if (mediaResult is! HlsMediaResult) {
       throw Exception('Expected media playlist, got another master playlist');
     }
-    return mediaResult.playlist;
+    return _MediaResult(mediaResult.playlist);
+  }
+
+  Future<void> _registerStreams(
+    List<HlsStream> streams,
+    String baseFilename,
+    String outputPath,
+  ) async {
+    final dotIndex = baseFilename.lastIndexOf('.');
+    final ext = dotIndex >= 0 ? baseFilename.substring(dotIndex) : '.ts';
+    final stem = dotIndex >= 0 ? baseFilename.substring(0, dotIndex) : baseFilename;
+    final dir = _dirname(outputPath);
+
+    for (var i = 0; i < streams.length; i++) {
+      final stream = streams[i];
+      final String qualifier;
+      if (stream.resolution != null) {
+        qualifier = stream.resolution!;
+      } else if (stream.bandwidth > 0) {
+        qualifier = '${(stream.bandwidth / 1000).round()}kbps';
+      } else {
+        qualifier = 'stream-${i + 1}';
+      }
+      final filename = '$stem $qualifier$ext';
+      await context.addUrl(
+        stream.uri,
+        DownloadOptions(filename: filename, targetPath: dir, autoStart: false),
+      );
+    }
   }
 
   // ---- segment download ----------------------------------------------------
@@ -120,7 +168,7 @@ class HlsSession {
     String segDir,
   ) async {
     final name = 'seg-${index.toString().padLeft(6, '0')}.ts';
-    final path = global.io.joinPath([segDir, name]);
+    final path = context.io.joinPath([segDir, name]);
 
     await withRetry(
       (_) async {
@@ -135,17 +183,17 @@ class HlsSession {
               : null,
         );
 
-        final res = await global.io.fetch(seg.uri, init);
+        final res = await context.io.fetch(seg.uri, init);
         if (!res.ok) throw HttpStatusError(res.status, res.statusText);
 
         final buf = await res.bytes();
         await throttle.consume(buf.length);
-        await global.io.writeFile(path, buf);
+        await context.io.writeFile(path, buf);
       },
       RetryOptions(
-        maxRetries: global.maxRetries,
-        retryDelay: global.retryDelay,
-        retryBackoff: global.retryBackoff,
+        maxRetries: context.maxRetries,
+        retryDelay: context.retryDelay,
+        retryBackoff: context.retryBackoff,
       ),
     );
 
@@ -155,7 +203,7 @@ class HlsSession {
   // ---- concat --------------------------------------------------------------
 
   Future<void> _concatSegments(List<String> segments, String output) async {
-    final io = global.io;
+    final io = context.io;
     if (io.concatSegments != null) {
       await io.concatSegments!(segments, output);
       return;
@@ -172,7 +220,7 @@ class HlsSession {
   // ---- helpers -------------------------------------------------------------
 
   Future<String> _fetchText(String url) async {
-    final res = await global.io.fetch(
+    final res = await context.io.fetch(
       url,
       FetchInit(headers: {
         'Accept': 'application/vnd.apple.mpegurl, application/x-mpegurl, */*',
@@ -189,11 +237,29 @@ class HlsSession {
   }
 
   Future<void> cleanup(String segDir) async {
-    final io = global.io;
+    final io = context.io;
     for (var i = 0; ; i++) {
       final p = io.joinPath([segDir, 'seg-${i.toString().padLeft(6, '0')}.ts']);
       if (!await io.exists(p)) break;
       await io.unlink(p).catchError((_) {});
     }
   }
+
+  static String _dirname(String path) {
+    final idx = path.lastIndexOf('/');
+    if (idx <= 0) return '/';
+    return path.substring(0, idx);
+  }
+}
+
+// ---- internal discriminated union helpers ----------------------------------
+
+class _MediaResult {
+  final HlsMediaPlaylist playlist;
+  _MediaResult(this.playlist);
+}
+
+class _MultiStream {
+  final List<HlsStream> streams;
+  _MultiStream(this.streams);
 }

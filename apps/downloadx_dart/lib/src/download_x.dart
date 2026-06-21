@@ -10,7 +10,7 @@ import 'types.dart';
 
 /// Manager: a registry of [Download]s with a `maxParallel` queue, event relay,
 /// and a manager-wide shared bandwidth throttle.
-class DownloadX implements GlobalConfig {
+class DownloadX implements DlxContext {
   final EventEmitter emitter = EventEmitter();
 
   final Map<String, Download> _downloads = {};
@@ -52,6 +52,7 @@ class DownloadX implements GlobalConfig {
 
   /// Register a new download. Returns the [Download] handle for imperative
   /// control. Pass `autoStart: true` to begin immediately.
+  @override
   Future<Download> addUrl(String url,
       [DownloadOptions options = const DownloadOptions()]) async {
     final id = options.id ?? _hashUrl(url);

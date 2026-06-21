@@ -1,5 +1,6 @@
 import 'io.dart';
 import 'throttle.dart';
+import 'types.dart';
 
 /// The slice of configuration a [Chunk] reads on every retry. Implemented by
 /// `Download` so values are live (not snapshotted at construction).
@@ -28,4 +29,10 @@ abstract class GlobalConfig extends DownloadConfig {
 
   /// Manager-wide bandwidth cap shared by all downloads.
   Throttle get sharedThrottle;
+}
+
+/// Minimal interface for the download manager — passed to HlsSession so it can
+/// register additional downloads (e.g. multi-stream HLS) without importing DownloadX.
+abstract class DlxContext extends GlobalConfig {
+  Future<void> addUrl(String url, [DownloadOptions options]);
 }

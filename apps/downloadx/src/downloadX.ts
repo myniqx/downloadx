@@ -4,12 +4,12 @@ import { TypedEventEmitter } from './events.js';
 import { listMetaFiles, persistMeta } from './meta.js';
 import { Throttle } from './throttle.js';
 import type {
+  DlxContext,
   DownloadDescription,
   DownloadEventMap,
   DownloadEventName,
   DownloadOptions,
   DownloadXConfig,
-  GlobalConfig,
 } from './types.js';
 
 const RELAYED_EVENTS: readonly DownloadEventName[] = [
@@ -24,7 +24,7 @@ const RELAYED_EVENTS: readonly DownloadEventName[] = [
   'diagnostic',
 ];
 
-export class DownloadX implements GlobalConfig {
+export class DownloadX implements DlxContext {
   readonly emitter = new TypedEventEmitter<DownloadEventMap>();
 
   private readonly downloads = new Map<string, Download>();

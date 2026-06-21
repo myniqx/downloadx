@@ -10,9 +10,11 @@ import type { InjectedFunctions } from '../../src/types.js';
  * Used by every test, including concurrent writers (the underlying JS event
  * loop guarantees `writeChunk` resolves atomically per call).
  */
-export class MockFs implements Required<Omit<InjectedFunctions, 'fetch'>> {
+export class MockFs implements Required<Omit<InjectedFunctions, 'fetch' | 'concatSegments'>> {
   private readonly files = new Map<string, Uint8Array>();
   private readonly dirs = new Set<string>();
+
+  concatSegments: InjectedFunctions['concatSegments'] = undefined;
 
   readonly joinPath = (...segments: string[]): string => {
     if (segments.length === 0) return '';

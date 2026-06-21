@@ -7,6 +7,7 @@ import 'chunk_scheduler.dart';
 import 'config.dart';
 import 'constants.dart';
 import 'events.dart';
+import 'hls/session.dart';
 import 'io.dart';
 import 'meta.dart';
 import 'probe.dart';
@@ -20,7 +21,7 @@ class Download implements GlobalConfig {
   final String url;
   final EventEmitter emitter = EventEmitter();
   final DownloadOptions options;
-  final GlobalConfig _global;
+  final DlxContext _context;
 
   DownloadState _state = DownloadState.idle;
   ProbeResult? _probe;
@@ -42,49 +43,48 @@ class Download implements GlobalConfig {
   // ---- GlobalConfig delegation -------------------------------------------
 
   @override
-  DownloadxIo get io => _global.io;
+  DownloadxIo get io => _context.io;
   @override
-  String get cachePath => _global.cachePath;
+  String get cachePath => _context.cachePath;
   @override
-  int get maxParallel => _global.maxParallel;
+  int get maxParallel => _context.maxParallel;
   @override
-  num get speedLimit => _global.speedLimit;
+  num get speedLimit => _context.speedLimit;
   @override
-  Throttle get sharedThrottle => _global.sharedThrottle;
+  Throttle get sharedThrottle => _context.sharedThrottle;
 
   @override
-  int get maxRetries => _global.maxRetries;
+  int get maxRetries => _context.maxRetries;
   @override
-  int get retryDelay => _global.retryDelay;
+  int get retryDelay => _context.retryDelay;
   @override
-  num get retryBackoff => _global.retryBackoff;
+  num get retryBackoff => _context.retryBackoff;
   @override
-  int get speedSampleWindow => _global.speedSampleWindow;
+  int get speedSampleWindow => _context.speedSampleWindow;
   @override
-  int get requestTimeout => _global.requestTimeout;
+  int get requestTimeout => _context.requestTimeout;
   @override
-  Map<String, String> get headers => _global.headers;
+  Map<String, String> get headers => _context.headers;
 
   @override
   int get targetChunkCount =>
-      _meta.targetChunkCount ?? _global.targetChunkCount;
+      _meta.targetChunkCount ?? _context.targetChunkCount;
   @override
-  String get targetPath => _meta.targetPath ?? _global.targetPath;
+  String get targetPath => _meta.targetPath ?? _context.targetPath;
   @override
-  int get minChunkSize => _meta.minChunkSize ?? _global.minChunkSize;
+  int get minChunkSize => _meta.minChunkSize ?? _context.minChunkSize;
   @override
-  bool get journal => _meta.journal ?? _global.journal;
+  bool get journal => _meta.journal ?? _context.journal;
 
   // ------------------------------------------------------------------------
 
-  factory Download.fromMeta(MetaFile meta, GlobalConfig global) =>
-      Download._(meta.id, meta.url, const DownloadOptions(), global, meta);
+  factory Download.fromMeta(MetaFile meta, DlxContext context) =>
+      Download._(meta.id, meta.url, const DownloadOptions(), context, meta);
 
-  Download(String id, String url, DownloadOptions options, GlobalConfig global)
-      : this._(id, url, options, global, null);
+  Download(String id, String url, DownloadOptions options, DlxContext context)
+      : this._(id, url, options, context, null);
 
-  Download._(
-      this.id, this.url, this.options, this._global, MetaFile? initialMeta) {
+  Download._(this.id, this.url, this.options, this._context, MetaFile? initialMeta) {
     _throttle = Throttle(options.speedLimit ?? 0);
     if (initialMeta != null) {
       _meta = initialMeta;
@@ -369,8 +369,7 @@ class Download implements GlobalConfig {
       }
 
       if (_probe!.isHls) {
-        _meta.errorMessage = 'HLS downloads are not yet supported';
-        _setState(DownloadState.error);
+        await _runHls();
         return;
       }
 
@@ -622,6 +621,69 @@ class Download implements GlobalConfig {
         launch(newChunk);
       }
 
+      await _persistCurrentMeta().catchError((_) {});
+    }
+  }
+
+  Future<void> _runHls() async {
+    _setState(DownloadState.downloading);
+    _startedAt = _nowMs();
+
+    final baseFilename = filename;
+    final outputPath = targetFilePath;
+    final session = HlsSession(
+      id: id,
+      context: _context,
+      throttle: _throttle,
+      onProgress: (done, total) {
+        emitter.emit(ProgressEvent(
+          id,
+          totalBytes: null,
+          downloadedBytes: done,
+          totalSpeed: 0,
+          activeChunks: 1,
+          percent: total > 0 ? (done / total) * 100 : null,
+          etaMs: null,
+        ));
+      },
+      isCancelled: () => _cancelRequested,
+      isPaused: () => _pauseRequested,
+    );
+
+    try {
+      await _ensureTargetDirs();
+      final result = await session.run(url, outputPath, baseFilename);
+
+      if (result is HlsMultiStreamResult) {
+        _setState(DownloadState.completed);
+        _meta.completedAt = _nowMs();
+        await _persistCurrentMeta().catchError((_) {});
+        return;
+      }
+
+      _setState(DownloadState.completed);
+      _meta.completedAt = _nowMs();
+      await _persistCurrentMeta().catchError((_) {});
+      emitter.emit(CompletedEvent(
+        id,
+        filename: filename,
+        totalBytes: downloadedBytes,
+        durationMs: _startedAt == 0 ? 0 : _nowMs() - _startedAt,
+      ));
+    } catch (err) {
+      if (_cancelRequested) {
+        _setState(DownloadState.cancelled);
+        await _persistCurrentMeta().catchError((_) {});
+        return;
+      }
+      if (_pauseRequested) {
+        _setState(DownloadState.paused);
+        await _persistCurrentMeta().catchError((_) {});
+        return;
+      }
+      _setState(DownloadState.error);
+      _meta.errorMessage = err.toString();
+      emitter.emit(ErrorEvent(id, error: err, fatal: true));
       await _persistCurrentMeta().catchError((_) {});
     }
   }

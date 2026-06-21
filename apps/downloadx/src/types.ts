@@ -97,6 +97,7 @@ export interface GlobalConfig extends DownloadConfig {
   readonly sharedThrottle: { consume: (bytes: number, signal?: AbortSignal) => Promise<void> };
 }
 
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -160,6 +161,12 @@ export interface DownloadXConfig {
    * retries, splits, timeouts, and state changes. Requires `io.appendFile`.
    */
   journal?: boolean;
+}
+
+/** Minimal interface for the download manager — passed to HlsSession so it can
+ *  register additional downloads (e.g. multi-stream HLS) without importing DownloadX. */
+export interface DlxContext extends GlobalConfig {
+  addUrl(url: string, options?: DownloadOptions): Promise<unknown>;
 }
 
 /** Per-download overrides passed to {@link DownloadX.addUrl}. */

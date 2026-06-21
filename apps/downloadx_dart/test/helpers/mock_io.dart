@@ -301,12 +301,19 @@ class MockIo extends DownloadxIo {
   bool enableAppend;
   bool enableFileSize;
 
+  /// Injectable concat callback — set in tests to verify it's called.
+  Future<void> Function(List<String> segments, String output)? concatSegmentsOverride;
+
   MockIo({
     MockFetch? fetcher,
     this.enableTruncate = true,
     this.enableAppend = true,
     this.enableFileSize = true,
   }) : fetcher = fetcher ?? MockFetch();
+
+  @override
+  Future<void> Function(List<String> segments, String output)? get concatSegments =>
+      concatSegmentsOverride;
 
   @override
   Future<FetchResponse> fetch(String url, [FetchInit? init]) =>

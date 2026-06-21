@@ -138,9 +138,14 @@ sendWs({ action: 'add-url', url: msg.url, filename: msg.filename });
 
 ---
 
-## ⬜ Faz 5 — `execute()` Entegrasyonu + UI (TypeScript + Dart)
+## ✅ Faz 5 — `execute()` Entegrasyonu (TypeScript + Dart)
 
-> **Durum: YAPILMADI**
+> **Durum: DONE**
+> - `DlxContext` interface (TS) / abstract class (Dart) eklendi — `GlobalConfig` extend + `addUrl`.
+> - `DownloadX` her iki tarafta `DlxContext` implement ediyor.
+> - `HlsSession` artık `DlxContext` alıyor; çoklu stream → her biri `addUrl` ile idle Download, tek stream → direkt indir.
+> - `download.ts` / `download.dart` HLS stub → gerçek `runHls()` ile değiştirildi.
+> - TS: 145/145, Dart: 118/118 test geçiyor.
 
 **Amaç:** Faz 1'deki stub'ı gerçek `HlsSession` + Faz 4 ffmpeg ile değiştir.
 Flutter UI'da HLS indirmeleri için özel progress gösterimi.
@@ -246,7 +251,7 @@ m3u8 URL'lerini artık listeden gizleme — göster ama "HLS" etiketi ekle.
 | ---------------- | ------------------------------------ | ----- |
 | `types.ts`       | `ProbeResult.isHls`                  | ✅    |
 | `probe.ts`       | isHls tespiti                        | ✅    |
-| `download.ts`    | HLS dallanması (stub → gerçek)       | 🔄 stub |
+| `download.ts`    | HLS dallanması (stub → gerçek)       | ✅    |
 | `hls/types.ts`   | HLS veri modelleri                   | ✅    |
 | `hls/parser.ts`  | m3u8 parser                          | ✅    |
 | `hls/session.ts` | segment indirici                     | ✅    |
@@ -258,7 +263,7 @@ m3u8 URL'lerini artık listeden gizleme — göster ama "HLS" etiketi ekle.
 | ------------------ | ------------------------------ | ----- |
 | `types.dart`       | `ProbeResult.isHls`            | ✅    |
 | `probe.dart`       | isHls tespiti                  | ✅    |
-| `download.dart`    | HLS dallanması (stub → gerçek) | 🔄 stub |
+| `download.dart`    | HLS dallanması (stub → gerçek) | ✅    |
 | `hls/types.dart`   | HLS veri modelleri             | ✅    |
 | `hls/parser.dart`  | m3u8 parser                    | ✅    |
 | `hls/session.dart` | segment indirici               | ✅    |
