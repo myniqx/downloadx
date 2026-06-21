@@ -15,7 +15,7 @@ function attrMap(attrLine: string): Map<string, string> {
   const re = /([A-Z0-9_-]+)=("(?:[^"\\]|\\.)*"|[^,]+)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(attrLine)) !== null) {
-    map.set(m[1], m[2].replace(/^"|"$/g, ''));
+    map.set(m[1]!, m[2]!.replace(/^"|"$/g, ''));
   }
   return map;
 }
@@ -89,7 +89,7 @@ export function parseMediaPlaylist(text: string, baseUrl: string): HlsMediaPlayl
 
     if (line.startsWith('#EXTINF:')) {
       // #EXTINF:<duration>[,<title>]
-      const val = line.slice('#EXTINF:'.length).split(',')[0];
+      const val = line.slice('#EXTINF:'.length).split(',')[0] ?? '0';
       pendingDuration = parseFloat(val);
       continue;
     }
@@ -98,7 +98,7 @@ export function parseMediaPlaylist(text: string, baseUrl: string): HlsMediaPlayl
       // #EXT-X-BYTERANGE:<length>[@<offset>]
       const val = line.slice('#EXT-X-BYTERANGE:'.length);
       const [lenStr, offStr] = val.split('@');
-      const length = parseInt(lenStr, 10);
+      const length = parseInt(lenStr!, 10);
       const offset = offStr !== undefined ? parseInt(offStr, 10) : byteRangeOffset;
       pendingByteRange = { length, offset };
       byteRangeOffset = offset + length;
