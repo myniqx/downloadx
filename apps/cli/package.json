@@ -1,6 +1,6 @@
 {
   "name": "@downloadx/cli",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Daemon-based CLI for downloadx — parallel chunked downloads via Unix socket IPC.",
   "keywords": [
     "cli",
@@ -50,7 +50,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@downloadx/core": "^0.1.0"
+    "@downloadx/core": "^0.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

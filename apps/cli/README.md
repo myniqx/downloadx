@@ -27,7 +27,9 @@ automatically on the first command and shuts down with `downloadx stop`.
 ## Commands
 
 ```
-downloadx add --url <url> [--path <dir>]              Add and start a download
+downloadx add --url <url> [--filename <name>]
+              [--speedLimit <n>] [--targetPath <dir>]
+              [--targetChunkCount <n>] [--minChunkSize <n>] [--journal true|false]
 downloadx list                                        List all downloads
 downloadx status  --id <#|id> [--json]                Detailed status for a download
 downloadx pause   --id <#|id> | --all                 Pause one or all downloads
@@ -72,8 +74,11 @@ without restarting the daemon.
 | `minChunkSize`     | `1mb`                                | Minimum chunk size before splitting stops. Accepts `500kb`, `1mb`, etc. Takes effect on the next split decision    |
 | `journal`          | `true`                               | Write an NDJSON diagnostic log (`.downloadx.log`) next to each download. Takes effect on the next diagnostic event |
 
-Per-download overrides (via `--id`): `speedLimit`, `targetPath`,
-`targetChunkCount`, `minChunkSize`, `journal`.
+Per-download overrides can be set at add time as flags (`--speedLimit`,
+`--targetPath`, `--targetChunkCount`, `--minChunkSize`, `--journal`) or later
+via `set --id`: `speedLimit`, `targetPath`, `targetChunkCount`, `minChunkSize`,
+`journal`. Flag names are case-insensitive and size values accept the same
+units as the global keys (`500kb`, `3mb`, etc.).
 
 The daemon's cache directory (`~/.local/share/downloadx/cache`) is fixed at
 daemon startup and is not a runtime-configurable key.
