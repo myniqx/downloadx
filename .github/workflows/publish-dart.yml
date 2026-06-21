@@ -1,0 +1,36 @@
+name: Publish downloadx (pub.dev)
+
+on:
+  push:
+    tags:
+      - 'dart-v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        run: dart pub get
+        working-directory: apps/downloadx_dart
+
+      - name: Analyze
+        run: dart analyze
+        working-directory: apps/downloadx_dart
+
+      - name: Test
+        run: dart test
+        working-directory: apps/downloadx_dart
+
+      - name: Publish
+        run: dart pub publish --force
+        working-directory: apps/downloadx_dart
