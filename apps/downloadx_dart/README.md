@@ -39,6 +39,12 @@ Everything the TypeScript core supports is supported here:
   retryable vs. permanent HTTP status distinction.
 - **Integrity** — optional disk pre-allocation and a final size verification
   before the part file is renamed into place.
+- **HLS (m3u8) support** — master and media playlists are parsed and segments
+  downloaded in parallel. A master playlist with multiple quality streams
+  registers each as a separate idle download so the caller picks the one to
+  start. Segment concatenation is handled by the optional `concatSegments` hook
+  on `DownloadxIo` (ffmpeg recommended); without it a binary fallback produces
+  a raw `.ts`.
 - **Observability** — a synchronous typed event API, an NDJSON diagnostic
   journal sidecar, and `describe()` / `describeText()` reports.
 - **Unknown sizes handled** — downloads with no `Content-Length` stream to EOF
@@ -123,7 +129,7 @@ for everything. All events are also relayed on the manager's `emitter`.
 
 | Event                 | Notable fields                                                            |
 | --------------------- | ------------------------------------------------------------------------- |
-| `ProgressEvent`       | `totalBytes, downloadedBytes, totalSpeed, activeChunks, percent, etaMs`   |
+| `ProgressEvent`       | `totalBytes, downloadedBytes, totalSpeed, activeChunks, percent, etaMs, hlsSegmentsDone?, hlsTotalSegments?` |
 | `ChunkProgressEvent`  | `chunkId, offset, length, downloadedBytes, instantSpeed, windowedSpeed`   |
 | `ChunkQualityEvent`   | same shape as `ChunkProgressEvent`; `quality ∈ good/poor/stalled`         |
 | `ChunkLifecycleEvent` | `chunkId, status`                                                         |
@@ -138,8 +144,64 @@ for everything. All events are also relayed on the manager's `emitter`.
 Implement `DownloadxIo` to target a different backend (web, S3, a database, an
 in-memory mock for tests). `writeChunk` must support random-access offset
 writes **without truncating**. The optional `truncate` / `appendFile` /
-`fileSize` getters each unlock a feature (pre-allocation / journal / size
-verification) when non-null.
+`fileSize` / `concatSegments` getters each unlock a feature when non-null:
+pre-allocation / journal / size verification / HLS concat.
+
+#### `concatSegments` — HLS segment concatenation
+
+When provided, this hook is called after all `.ts` segments are downloaded.
+Without it the core falls back to a binary concat, producing a raw `.ts` file.
+
+**ffmpeg example — remux to `.mp4` (no re-encode, fast):**
+
+```dart
+import 'dart:io';
+
+class MyIo extends NativeIo {
+  @override
+  Future<void> Function(List<String> segments, String output)?
+      get concatSegments => (segments, output) async {
+        final listPath = '$output.ffconcat';
+        final content = StringBuffer('ffconcat version 1.0\n');
+        for (final s in segments) {
+          content.writeln("file '$s'");
+        }
+        await File(listPath).writeAsString(content.toString());
+
+        final result = await Process.run('ffmpeg', [
+          '-f', 'concat', '-safe', '0', '-i', listPath,
+          '-c', 'copy',        // remux only — no re-encode
+          '-movflags', '+faststart',
+          '-y', output,
+        ]);
+        await File(listPath).delete().catchError((_) => File(listPath));
+        if (result.exitCode != 0) {
+          throw Exception('ffmpeg exited ${result.exitCode}:\n${result.stderr}');
+        }
+      };
+}
+```
+
+**ffmpeg example — transcode `.ts` segments to `.mp4` (H.264 + AAC):**
+
+```dart
+get concatSegments => (segments, output) async {
+  final input = segments.join('|');
+  final result = await Process.run('ffmpeg', [
+    '-i', 'concat:$input',
+    '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+    '-c:a', 'aac', '-b:a', '128k',
+    '-y', output,
+  ]);
+  if (result.exitCode != 0) {
+    throw Exception('ffmpeg exited ${result.exitCode}:\n${result.stderr}');
+  }
+};
+```
+
+> Without `concatSegments`, the core binary-concatenates the segments into a
+> `.ts` file. This is valid for most streams but skips container conversion and
+> metadata — use ffmpeg when you need `.mp4` / `.mkv` output or chapter marks.
 
 ## Development
 
