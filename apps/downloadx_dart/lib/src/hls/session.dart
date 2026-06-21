@@ -8,15 +8,22 @@ import '../types.dart';
 import 'parser.dart';
 import 'types.dart';
 
+/// Progress callback called after each batch of HLS segments finishes.
+/// [done] is the completed segment count; [total] is the total segment count.
 typedef HlsProgressCallback = void Function(int done, int total);
 
+/// Result of a successfully completed single-stream HLS download.
 class HlsSessionResult {
   /// Ordered local segment file paths ready to be concatenated.
   final List<String> segmentPaths;
+
+  /// The parsed media playlist that was downloaded.
   final HlsMediaPlaylist playlist;
+
   /// Final concatenated output file path.
   final String outputPath;
 
+  /// Creates an [HlsSessionResult].
   HlsSessionResult({required this.segmentPaths, required this.playlist, required this.outputPath});
 }
 
@@ -27,20 +34,35 @@ class HlsMultiStreamResult {
   HlsMultiStreamResult({required this.streams});
 }
 
+/// Thrown internally when the HLS session is cancelled mid-download.
 class HlsCancelledException implements Exception {
+  /// Creates an [HlsCancelledException].
   const HlsCancelledException();
 }
 
+/// Orchestrates downloading and concatenating HLS segments for a single stream.
 class HlsSession {
+  /// Download identifier (used for temp segment directory naming).
   final String id;
+
+  /// Manager context providing I/O, config, and the ability to register streams.
   final DlxContext context;
+
+  /// Bandwidth throttle shared with the parent download.
   final Throttle throttle;
+
+  /// Called after each batch of segments completes.
   final HlsProgressCallback onProgress;
+
+  /// Returns true when the parent download has been cancelled.
   final bool Function() isCancelled;
+
+  /// Returns true when the parent download has been paused.
   final bool Function() isPaused;
 
   static const _maxParallel = 4;
 
+  /// Creates an [HlsSession].
   HlsSession({
     required this.id,
     required this.context,
@@ -236,6 +258,7 @@ class HlsSession {
     if (isCancelled()) throw const HlsCancelledException();
   }
 
+  /// Deletes all segment files written to [segDir] by this session.
   Future<void> cleanup(String segDir) async {
     final io = context.io;
     for (var i = 0; ; i++) {

@@ -12,37 +12,84 @@ import 'io.dart';
 // ---------------------------------------------------------------------------
 
 /// Strategy for splitting a download into chunks.
-enum ChunkMode { auto, single, fixed }
+enum ChunkMode {
+  /// Split automatically based on file size and [DefaultConfig.targetChunkCount].
+  auto,
+
+  /// Force a single sequential chunk regardless of server support.
+  single,
+
+  /// Use exactly [DownloadXConfig.targetChunkCount] chunks.
+  fixed,
+}
 
 /// Lifecycle state of a whole download.
 enum DownloadState {
+  /// Registered but not yet started.
   idle,
+
+  /// Probing the URL to determine size, range support, and filename.
   probing,
+
+  /// Actively downloading chunks.
   downloading,
+
+  /// Paused by the user; resumes from progress on next [Download.start].
   paused,
+
+  /// All chunks completed and the file has been renamed to its final path.
   completed,
+
+  /// A permanent error occurred; see [Download.meta] for the error message.
   error,
+
+  /// Cancelled by the user via [Download.cancel].
   cancelled,
 }
 
 /// Lifecycle state of a single chunk.
 enum ChunkStatus {
+  /// Chunk has not started downloading yet.
   pending,
+
+  /// Chunk is actively streaming bytes.
   downloading,
+
+  /// Chunk was paused; will restart from [Chunk.downloadedBytes] on next run.
   paused,
+
+  /// Chunk finished writing all its bytes.
   completed,
+
+  /// Chunk failed permanently after exhausting retries.
   failed,
+
+  /// Chunk's byte range was transferred to another chunk.
   reassigned,
 }
 
 /// Qualitative health of a chunk, used by the dynamic splitter.
-enum ChunkQuality { good, poor, stalled }
+enum ChunkQuality {
+  /// Chunk speed is within normal range.
+  good,
+
+  /// Chunk speed is below [qualityPoorRatio] × median.
+  poor,
+
+  /// Chunk speed is below [qualityStalledRatio] × median.
+  stalled,
+}
 
 /// Why a split happened. Serialised with the wire-compatible string used by
 /// the TypeScript implementation (`completed-reassign`, not `completedReassign`).
 enum SplitReason {
+  /// Split triggered because a chunk was classified as slow or stalled.
   slow,
+
+  /// Split triggered because a chunk failed and its range was reassigned.
   failed,
+
+  /// Split triggered when a completed chunk's remaining capacity was redistributed.
   completedReassign;
 
   String get wire => switch (this) {
@@ -53,7 +100,16 @@ enum SplitReason {
 }
 
 /// Severity level of a [DiagnosticPayload].
-enum DiagnosticLevel { info, warn, error }
+enum DiagnosticLevel {
+  /// Informational — normal lifecycle events.
+  info,
+
+  /// Warning — recoverable condition (retry, stall, range fallback).
+  warn,
+
+  /// Error — a failure that may or may not be fatal.
+  error,
+}
 
 // Enum <-> string helpers (names are wire-compatible with the TS package, so
 // meta sidecars are interchangeable between the two implementations).
@@ -209,22 +265,43 @@ class DownloadOptions {
 
 /// A half-open byte range `[offset, offset + length)`.
 class ByteRange {
+  /// Start position within the file.
   final int offset;
+
+  /// Number of bytes in the range.
   final int length;
+
+  /// Creates a [ByteRange].
   const ByteRange({required this.offset, required this.length});
 }
 
 /// Snapshot of a chunk, persisted to the meta file for resume.
 class ChunkSnapshot {
+  /// Unique chunk identifier.
   String id;
+
+  /// Byte offset from the start of the file.
   int offset;
+
+  /// Number of bytes this chunk covers.
   int length;
+
+  /// Bytes already written (non-zero on resume).
   int downloadedBytes;
+
+  /// Last known lifecycle state.
   ChunkStatus status;
+
+  /// Last known quality classification.
   ChunkQuality quality;
+
+  /// Number of retries attempted.
   int retries;
+
+  /// Last error message, or null if no error occurred.
   String? lastError;
 
+  /// Creates a [ChunkSnapshot].
   ChunkSnapshot({
     required this.id,
     required this.offset,
@@ -236,6 +313,7 @@ class ChunkSnapshot {
     this.lastError,
   });
 
+  /// Serialises this snapshot to a JSON-compatible map.
   Map<String, dynamic> toJson() {
     final m = <String, dynamic>{
       'id': id,
@@ -250,6 +328,7 @@ class ChunkSnapshot {
     return m;
   }
 
+  /// Deserialises a [ChunkSnapshot] from a JSON map.
   factory ChunkSnapshot.fromJson(Map<String, dynamic> j) => ChunkSnapshot(
         id: j['id'] as String,
         offset: (j['offset'] as num).toInt(),
@@ -264,16 +343,34 @@ class ChunkSnapshot {
 
 /// Result of the initial HTTP probe.
 class ProbeResult {
+  /// The original request URL.
   final String url;
+
+  /// Final URL after any redirects.
   final String finalUrl;
+
+  /// Total file size in bytes, or null when unknown (no Content-Length).
   final int? totalSize;
+
+  /// True when the server honours `Range` headers.
   final bool acceptsRanges;
+
+  /// ETag validator for cache-busting on resume.
   final String? etag;
+
+  /// Last-Modified validator for cache-busting on resume.
   final String? lastModified;
+
+  /// Content-Type returned by the server.
   final String? contentType;
+
+  /// Inferred filename (from Content-Disposition, URL path, or timestamp fallback).
   final String filename;
+
+  /// True when the content-type indicates an HLS playlist (`.m3u8`).
   final bool isHls;
 
+  /// Creates a [ProbeResult].
   const ProbeResult({
     required this.url,
     required this.finalUrl,
@@ -286,6 +383,7 @@ class ProbeResult {
     required this.isHls,
   });
 
+  /// Returns a copy with the given fields overridden.
   ProbeResult copyWith({bool? acceptsRanges}) => ProbeResult(
         url: url,
         finalUrl: finalUrl,
@@ -301,29 +399,73 @@ class ProbeResult {
 
 /// JSON shape persisted as `{id}.downloadx.json`.
 class MetaFile {
+  /// Schema version; mismatches cause the file to be discarded on load.
   final int schemaVersion;
+
+  /// Unique download identifier.
   final String id;
+
+  /// Original request URL.
   final String url;
+
+  /// Final URL after redirects (filled after probe).
   String? finalUrl;
+
+  /// Inferred filename (filled after probe).
   String? filename;
+
+  /// Total file size in bytes (filled after probe, null when unknown).
   int? totalSize;
+
+  /// Whether the server supports byte-range requests.
   bool acceptsRanges;
+
+  /// ETag validator (filled after probe).
   String? etag;
+
+  /// Last-Modified validator (filled after probe).
   String? lastModified;
+
+  /// Content-Type returned by the server.
   String? contentType;
+
+  /// Unix timestamp (ms) when the meta file was first created.
   final int createdAt;
+
+  /// Unix timestamp (ms) of the last meta write.
   int updatedAt;
+
+  /// Current download state, dehydrated before persist.
   DownloadState state;
+
+  /// Chunk snapshots, updated on every progress persist.
   List<ChunkSnapshot> chunks;
+
+  /// Unix timestamp (ms) when the download was registered.
   final int addedAt;
+
+  /// Unix timestamp (ms) when the download completed, or null.
   int? completedAt;
+
+  /// Last error message, or null.
   String? errorMessage;
+
+  /// Per-download speed limit in bytes/sec, or null (uses manager default).
   int? speedLimit;
+
+  /// Per-download chunk count override, or null.
   int? targetChunkCount;
+
+  /// Per-download target directory override, or null.
   String? targetPath;
+
+  /// Per-download minimum chunk size override, or null.
   int? minChunkSize;
+
+  /// Whether the NDJSON journal is enabled for this download, or null (manager default).
   bool? journal;
 
+  /// Creates a [MetaFile].
   MetaFile({
     required this.schemaVersion,
     required this.id,
@@ -349,6 +491,7 @@ class MetaFile {
     required this.journal,
   });
 
+  /// Serialises this meta file to a JSON-compatible map.
   Map<String, dynamic> toJson() => {
         'schemaVersion': schemaVersion,
         'id': id,
@@ -402,6 +545,7 @@ class DiagnosticPayload {
     this.data,
   });
 
+  /// Serialises this payload to a JSON-compatible map (used for NDJSON journal).
   Map<String, dynamic> toJson() {
     final m = <String, dynamic>{
       'downloadId': downloadId,
@@ -418,14 +562,28 @@ class DiagnosticPayload {
 
 /// One row in [DownloadDescription.chunks].
 class ChunkDescription {
+  /// Chunk identifier.
   final String id;
+
+  /// Current lifecycle state.
   final ChunkStatus status;
+
+  /// Current quality classification.
   final ChunkQuality quality;
+
+  /// Byte offset from the start of the file.
   final int offset;
+
+  /// Total bytes assigned to this chunk.
   final int length;
+
+  /// Bytes written so far.
   final int downloadedBytes;
+
+  /// Number of retries so far.
   final int retries;
 
+  /// Creates a [ChunkDescription].
   const ChunkDescription({
     required this.id,
     required this.status,
@@ -436,6 +594,7 @@ class ChunkDescription {
     required this.retries,
   });
 
+  /// Serialises to a JSON-compatible map.
   Map<String, dynamic> toJson() => {
         'id': id,
         'status': status.name,
@@ -450,23 +609,58 @@ class ChunkDescription {
 /// Compact, serialisable status report aimed at dashboards and LLM/agent
 /// consumers. Produced by [Download.describe].
 class DownloadDescription {
+  /// Download identifier.
   final String id;
+
+  /// Original request URL.
   final String url;
+
+  /// Inferred filename, or null if not yet probed.
   final String? filename;
+
+  /// Per-download target directory override, or null.
   final String? targetPath;
+
+  /// Unix timestamp (ms) when the download was registered.
   final int addedAt;
+
+  /// Unix timestamp (ms) when the download completed, or null.
   final int? completedAt;
+
+  /// Last error message, or null.
   final String? errorMessage;
+
+  /// Current download state.
   final DownloadState state;
+
+  /// Total file size in bytes, or null when unknown.
   final int? totalBytes;
+
+  /// Bytes downloaded across all chunks.
   final int downloadedBytes;
+
+  /// Progress as a percentage (0–100), or null when total size is unknown.
   final double? percent;
+
+  /// Aggregate download speed in bytes/sec.
   final int totalSpeedBps;
+
+  /// Estimated time remaining in ms, or null when speed/size is unknown.
   final int? etaMs;
+
+  /// Wall-clock elapsed time in ms since [Download.start] was called.
   final int elapsedMs;
+
+  /// Number of chunks currently in the `downloading` state.
   final int activeChunks;
+
+  /// Total number of chunks (including completed and failed ones).
   final int totalChunks;
+
+  /// Descriptions of chunks that are not yet completed or reassigned.
   final List<ChunkDescription> chunks;
+
+  /// Up to the last 10 diagnostic events for this download.
   final List<DiagnosticPayload> recentDiagnostics;
 
   /// Number of HLS segments downloaded so far. Null for non-HLS downloads.
@@ -475,6 +669,7 @@ class DownloadDescription {
   /// Total HLS segment count. Null for non-HLS downloads.
   final int? hlsTotalSegments;
 
+  /// Creates a [DownloadDescription].
   const DownloadDescription({
     required this.id,
     required this.url,
@@ -498,6 +693,7 @@ class DownloadDescription {
     this.hlsTotalSegments,
   });
 
+  /// Serialises to a JSON-compatible map.
   Map<String, dynamic> toJson() => {
         'id': id,
         'url': url,

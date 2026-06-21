@@ -124,9 +124,13 @@ class DownloadX implements DlxContext {
     _queue.remove(d);
   }
 
+  /// Returns the [Download] with [id], or null when not registered.
   Download? operator [](String id) => _downloads[id];
+
+  /// Returns the [Download] with [id], or null when not registered.
   Download? getDownload(String id) => _downloads[id];
 
+  /// Returns all registered downloads sorted by registration time.
   List<Download> list() {
     final all = _downloads.values.toList();
     all.sort((a, b) => a.meta.addedAt.compareTo(b.meta.addedAt));
@@ -144,6 +148,7 @@ class DownloadX implements DlxContext {
   @override
   num get speedLimit => _sharedThrottle.capacityBytesPerSec;
 
+  /// Change the maximum number of concurrent downloads. Triggers a queue pump.
   void setMaxParallel(int n) {
     if (n < 1) throw ArgumentError('maxParallel must be >= 1');
     _maxParallel = n;
@@ -153,6 +158,7 @@ class DownloadX implements DlxContext {
   @override
   int get maxParallel => _maxParallel;
 
+  /// Change the global target directory for future downloads.
   void setTargetPath(String path) => _targetPath = path;
 
   @override
@@ -229,7 +235,7 @@ class DownloadX implements DlxContext {
   @override
   Throttle get sharedThrottle => _sharedThrottle;
 
-  /// The current effective global config — live values from setters.
+  /// Returns the current effective global config as a JSON-compatible map.
   Map<String, Object?> getConfig() => {
         'targetPath': _targetPath,
         'cachePath': _cachePath,

@@ -10,6 +10,7 @@ import 'io.dart';
 class NativeIo extends DownloadxIo {
   final HttpClient _client;
 
+  /// Creates a [NativeIo]. Provide [client] to override the HTTP client.
   NativeIo({HttpClient? client})
       : _client = client ?? (HttpClient()..autoUncompress = false);
 

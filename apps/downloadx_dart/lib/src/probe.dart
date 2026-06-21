@@ -2,15 +2,24 @@ import 'io.dart';
 import 'io_fetch.dart';
 import 'types.dart';
 
+/// Options for [probeUrl].
 class ProbeOptions {
+  /// Fetch function used to issue HEAD and range GET requests.
   final FetchFn fetch;
+
+  /// The URL to probe.
   final String url;
+
+  /// Extra HTTP headers merged into the probe requests.
   final Map<String, String>? headers;
+
+  /// Cancellation token; fires abort into the in-flight probe request.
   final CancelToken? signal;
 
   /// Optional filename override; takes precedence over inference.
   final String? filenameHint;
 
+  /// Creates a [ProbeOptions].
   const ProbeOptions({
     required this.fetch,
     required this.url,

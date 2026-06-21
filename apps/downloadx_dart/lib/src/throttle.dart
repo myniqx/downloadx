@@ -20,6 +20,8 @@ class Throttle {
   final void Function(int ms, void Function() cb) _schedule;
   final List<_Waiter> _queue = [];
 
+  /// Creates a [Throttle] with a [capacity] in bytes/sec. 0 disables throttling.
+  /// [now] and [schedule] override the clock and timer for deterministic tests.
   Throttle(
     num capacity, {
     int Function()? now,
@@ -62,6 +64,7 @@ class Throttle {
     _drainQueue();
   }
 
+  /// The current capacity in bytes/sec (0 = unlimited).
   num get capacityBytesPerSec => _capacity;
 
   /// Wait until [bytes] tokens are available, then deduct them. Resolves
@@ -93,6 +96,7 @@ class Throttle {
     return completer.future;
   }
 
+  /// Disposes this throttle, rejecting any queued [consume] futures.
   void dispose() {
     _disposed = true;
     for (final entry in _queue) {

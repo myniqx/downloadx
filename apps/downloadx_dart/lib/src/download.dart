@@ -128,12 +128,19 @@ class Download implements GlobalConfig {
     });
   }
 
+  /// Current lifecycle state of this download.
   DownloadState get state => _state;
+
+  /// The probe result populated after the initial HEAD/GET, or null before.
   ProbeResult? get probe => _probe;
+
+  /// The sidecar meta file for this download.
   MetaFile get meta => _meta;
 
+  /// Total file size in bytes, or null when unknown.
   int? get totalBytes => _probe?.totalSize ?? _meta.totalSize;
 
+  /// Sum of bytes written across all chunks.
   int get downloadedBytes {
     if (_chunks.isEmpty) {
       var sum = 0;
@@ -149,11 +156,14 @@ class Download implements GlobalConfig {
     return sum;
   }
 
+  /// Resolved filename (probe → meta → options → fallback).
   String get filename =>
       _probe?.filename ?? _meta.filename ?? options.filename ?? 'download-$id';
 
+  /// Absolute path where the finished file will be written.
   String get targetFilePath => io.joinPath([targetPath, filename]);
 
+  /// Absolute path of the in-progress `.part` file.
   String get partFilePath => '$targetFilePath$tempExt';
 
   /// Start (or resume) the download. Completes on finish/pause/error.
@@ -171,6 +181,7 @@ class Download implements GlobalConfig {
     return p;
   }
 
+  /// Pause the download. Resumes from progress on the next [start] call.
   void pause() {
     if (_state != DownloadState.downloading &&
         _state != DownloadState.probing) {
@@ -182,6 +193,7 @@ class Download implements GlobalConfig {
     }
   }
 
+  /// Cancel the download. Progress is preserved for potential resume.
   void cancel() {
     _cancelRequested = true;
     _pauseRequested = true;
@@ -239,6 +251,7 @@ class Download implements GlobalConfig {
     }
   }
 
+  /// Returns snapshots of all current chunks.
   List<ChunkSnapshot> getChunkSnapshots() =>
       _chunks.map((c) => c.snapshot()).toList();
 

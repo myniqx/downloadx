@@ -16,6 +16,8 @@ class SpeedTracker {
   final int windowMs;
   final int Function() _now;
 
+  /// Creates a [SpeedTracker] with a moving-average [windowMs].
+  /// [now] overrides the clock source for deterministic tests.
   SpeedTracker(this.windowMs, [int Function()? now])
       : _now = now ?? _defaultNow,
         _startedAt = (now ?? _defaultNow)() {
@@ -69,14 +71,17 @@ class SpeedTracker {
     return (_totalBytes * 1000) / span;
   }
 
+  /// Total bytes recorded since construction.
   int get bytesRecorded => _totalBytes;
 
+  /// Milliseconds elapsed since this tracker was created.
   int get ageMs => _now() - _startedAt;
 
   /// Whether enough time has passed since start to trust the windowed speed
   /// for quality decisions (avoids flagging a chunk `poor` during TCP warmup).
   bool hasWarmedUp(int warmupMs) => ageMs >= warmupMs;
 
+  /// Clears speed samples and resets the instant speed to zero.
   void reset() {
     _samples.clear();
     _lastSampleAt = null;
@@ -104,10 +109,16 @@ int _defaultNow() => DateTime.now().millisecondsSinceEpoch;
 class AggregateSpeed {
   final Map<String, SpeedTracker> _children = {};
 
+  /// Creates an empty [AggregateSpeed].
+  AggregateSpeed();
+
+  /// Registers a [tracker] under [id]. Replaces any existing entry.
   void add(String id, SpeedTracker tracker) => _children[id] = tracker;
 
+  /// Removes the tracker registered under [id].
   void remove(String id) => _children.remove(id);
 
+  /// Sum of instant speeds across all registered trackers (bytes/sec).
   double get totalSpeed {
     var sum = 0.0;
     for (final t in _children.values) {
@@ -116,6 +127,7 @@ class AggregateSpeed {
     return sum;
   }
 
+  /// Sum of bytes recorded across all registered trackers.
   int get totalBytes {
     var sum = 0;
     for (final t in _children.values) {

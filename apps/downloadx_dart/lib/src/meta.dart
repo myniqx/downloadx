@@ -13,15 +13,19 @@ import 'types.dart';
 
 const _jsonEncoder = JsonEncoder.withIndent('  ');
 
+/// Locates the sidecar meta file for a download on disk.
 class MetaLocator {
   /// Directory the meta JSON lives in (usually cachePath).
   final String dir;
 
   /// Download id — the meta filename is `{id}.downloadx.json`.
   final String id;
+
+  /// Creates a [MetaLocator].
   const MetaLocator({required this.dir, required this.id});
 }
 
+/// Returns the absolute path to the meta file described by [locator].
 String metaPath(DownloadxIo io, MetaLocator locator) =>
     io.joinPath([locator.dir, '${locator.id}$metaExt']);
 
@@ -87,6 +91,7 @@ MetaFile applyProbeToMeta(
   return meta;
 }
 
+/// Loads and validates a meta file. Returns null when the file is missing or corrupt.
 Future<MetaFile?> loadMeta(DownloadxIo io, MetaLocator locator) async {
   final path = metaPath(io, locator);
   if (!await io.exists(path)) return null;
@@ -117,6 +122,7 @@ Future<List<MetaFile>> listMetaFiles(DownloadxIo io, String dir) async {
   return out;
 }
 
+/// Atomically writes [meta] to disk (write-to-tmp then rename).
 Future<void> persistMeta(
     DownloadxIo io, MetaLocator locator, MetaFile meta) async {
   await io.mkdir(locator.dir);
@@ -128,6 +134,7 @@ Future<void> persistMeta(
   await io.rename(tmp, target);
 }
 
+/// Deletes the meta file. Silently no-ops when the file does not exist.
 Future<void> deleteMeta(DownloadxIo io, MetaLocator locator) async {
   await io.unlink(metaPath(io, locator));
 }

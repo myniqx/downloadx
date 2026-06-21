@@ -1,10 +1,18 @@
 import 'chunk.dart';
 import 'types.dart';
 
+/// A planned byte range assigned to one chunk before download starts.
 class ChunkPlan {
+  /// Byte offset from the start of the file.
   final int offset;
+
+  /// Number of bytes this chunk is responsible for.
   final int length;
+
+  /// Bytes already written for this range (non-zero on resume).
   final int downloadedBytes;
+
+  /// Creates a [ChunkPlan] for the given byte range.
   const ChunkPlan({
     required this.offset,
     required this.length,
@@ -12,14 +20,21 @@ class ChunkPlan {
   });
 }
 
+/// Options for [planChunks].
 class PlanOptions {
+  /// Total file size in bytes.
   final int totalSize;
+
+  /// Desired number of chunks (may be reduced when file is small).
   final int targetChunkCount;
+
+  /// Minimum bytes per chunk; prevents splitting into too-small pieces.
   final int minChunkSize;
 
   /// Bytes already placed on disk per offset-sorted plan index (for resume).
   final List<ChunkPlan>? resumeFrom;
 
+  /// Creates a [PlanOptions] with the given parameters.
   const PlanOptions({
     required this.totalSize,
     required this.targetChunkCount,
@@ -65,12 +80,18 @@ List<ChunkPlan> planChunks(PlanOptions opts) {
   return plans;
 }
 
+/// A chunk selected to donate its tail to a new parallel worker.
 class SplitCandidate {
+  /// The chunk whose tail will be truncated and reassigned.
   final Chunk chunk;
 
   /// The slice taken from [chunk]'s tail, to be issued as a new chunk.
   final ByteRange newRange;
+
+  /// Why this split was triggered.
   final SplitReason reason;
+
+  /// Creates a [SplitCandidate].
   const SplitCandidate({
     required this.chunk,
     required this.newRange,
@@ -78,11 +99,21 @@ class SplitCandidate {
   });
 }
 
+/// Options for [findSplitCandidate].
 class FindSplitOptions {
+  /// Currently active chunks to evaluate for splitting.
   final List<Chunk> activeChunks;
+
+  /// Upper bound on total live chunks; no split when already at capacity.
   final int maxChunks;
+
+  /// Minimum bytes a chunk must have remaining to be eligible for splitting.
   final int minChunkSize;
+
+  /// The reason that triggered this split search.
   final SplitReason trigger;
+
+  /// Creates a [FindSplitOptions].
   const FindSplitOptions({
     required this.activeChunks,
     required this.maxChunks,

@@ -60,7 +60,9 @@ abstract class ChunkProgressBase extends DownloadEvent {
   });
 }
 
+/// Per-chunk progress update emitted after each successful write.
 class ChunkProgressEvent extends ChunkProgressBase {
+  /// Creates a [ChunkProgressEvent].
   const ChunkProgressEvent(
     super.downloadId, {
     required super.chunkId,
@@ -88,18 +90,34 @@ class ChunkQualityEvent extends ChunkProgressBase {
   });
 }
 
+/// Emitted whenever a chunk transitions to a new [ChunkStatus].
 class ChunkLifecycleEvent extends DownloadEvent {
+  /// The chunk whose status changed.
   final String chunkId;
+
+  /// The new status.
   final ChunkStatus status;
+
+  /// Creates a [ChunkLifecycleEvent].
   const ChunkLifecycleEvent(super.downloadId,
       {required this.chunkId, required this.status});
 }
 
+/// Emitted when a chunk donates its tail to a newly spawned worker.
 class ChunkSplitEvent extends DownloadEvent {
+  /// The chunk that was truncated.
   final String sourceChunkId;
+
+  /// The newly created chunk that received the donated range.
   final String newChunkId;
+
+  /// Byte offset where the split occurred.
   final int splitOffset;
+
+  /// Why the split was triggered.
   final SplitReason reason;
+
+  /// Creates a [ChunkSplitEvent].
   const ChunkSplitEvent(
     super.downloadId, {
     required this.sourceChunkId,
@@ -109,33 +127,59 @@ class ChunkSplitEvent extends DownloadEvent {
   });
 }
 
+/// Emitted on every download state transition.
 class StateChangeEvent extends DownloadEvent {
+  /// The state before the transition.
   final DownloadState previous;
+
+  /// The state after the transition.
   final DownloadState current;
+
+  /// Creates a [StateChangeEvent].
   const StateChangeEvent(super.downloadId,
       {required this.previous, required this.current});
 }
 
+/// Emitted when an error occurs at the chunk or download level.
 class ErrorEvent extends DownloadEvent {
+  /// The chunk that failed, or null for download-level errors.
   final String? chunkId;
+
+  /// The error object.
   final Object error;
+
+  /// True when the download cannot continue (e.g. probe failed, all retries exhausted).
   final bool fatal;
+
+  /// Creates an [ErrorEvent].
   const ErrorEvent(super.downloadId,
       {this.chunkId, required this.error, required this.fatal});
 }
 
+/// Emitted once when a download finishes successfully.
 class CompletedEvent extends DownloadEvent {
+  /// Final filename of the completed file.
   final String filename;
+
+  /// Total bytes written.
   final int totalBytes;
+
+  /// Wall-clock duration of the download in milliseconds.
   final int durationMs;
+
+  /// Creates a [CompletedEvent].
   const CompletedEvent(super.downloadId,
       {required this.filename,
       required this.totalBytes,
       required this.durationMs});
 }
 
+/// Emitted for internal lifecycle diagnostics (retries, splits, timeouts, stalls).
 class DiagnosticEvent extends DownloadEvent {
+  /// The structured diagnostic payload.
   final DiagnosticPayload payload;
+
+  /// Creates a [DiagnosticEvent].
   const DiagnosticEvent(super.downloadId, this.payload);
 }
 
@@ -167,6 +211,7 @@ class EventEmitter {
     return () => _listeners.remove(wrapper);
   }
 
+  /// Dispatch [event] to all registered listeners synchronously.
   void emit(DownloadEvent event) {
     if (_listeners.isEmpty) return;
     // Copy so listeners that remove themselves during dispatch don't corrupt
@@ -185,8 +230,10 @@ class EventEmitter {
     }
   }
 
+  /// Number of currently registered listeners.
   int get listenerCount => _listeners.length;
 
+  /// Removes all listeners.
   void removeAllListeners() => _listeners.clear();
 
   /// Re-emit every event this emitter fires through [target]. Used so a single

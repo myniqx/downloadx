@@ -29,6 +29,7 @@ bool _isMasterPlaylist(String text) => text.contains('#EXT-X-STREAM-INF');
 // Master playlist parser
 // ---------------------------------------------------------------------------
 
+/// Parses an HLS master playlist from [text]. [baseUrl] resolves relative URIs.
 HlsMasterPlaylist parseMasterPlaylist(String text, String baseUrl) {
   final lines = text.split(RegExp(r'\r?\n'));
   final streams = <HlsStream>[];
@@ -62,6 +63,7 @@ HlsMasterPlaylist parseMasterPlaylist(String text, String baseUrl) {
 // Media playlist parser
 // ---------------------------------------------------------------------------
 
+/// Parses an HLS media playlist from [text]. [baseUrl] resolves relative URIs.
 HlsMediaPlaylist parseMediaPlaylist(String text, String baseUrl) {
   final lines = text.split(RegExp(r'\r?\n'));
   final segments = <HlsSegment>[];
@@ -130,18 +132,29 @@ HlsMediaPlaylist parseMediaPlaylist(String text, String baseUrl) {
 // Auto-detect and parse
 // ---------------------------------------------------------------------------
 
+/// Sealed result type returned by [parsePlaylist].
 sealed class HlsParseResult {}
 
+/// Result when [parsePlaylist] detects a master playlist.
 class HlsMasterResult extends HlsParseResult {
+  /// The parsed master playlist.
   final HlsMasterPlaylist playlist;
+
+  /// Creates an [HlsMasterResult].
   HlsMasterResult(this.playlist);
 }
 
+/// Result when [parsePlaylist] detects a media playlist.
 class HlsMediaResult extends HlsParseResult {
+  /// The parsed media playlist.
   final HlsMediaPlaylist playlist;
+
+  /// Creates an [HlsMediaResult].
   HlsMediaResult(this.playlist);
 }
 
+/// Parses [text] as either a master or media playlist and returns the result.
+/// [baseUrl] is used to resolve relative segment/stream URIs.
 HlsParseResult parsePlaylist(String text, String baseUrl) {
   if (_isMasterPlaylist(text)) {
     return HlsMasterResult(parseMasterPlaylist(text, baseUrl));
@@ -149,5 +162,6 @@ HlsParseResult parsePlaylist(String text, String baseUrl) {
   return HlsMediaResult(parseMediaPlaylist(text, baseUrl));
 }
 
+/// Returns the highest-bandwidth stream from [master], or null when empty.
 HlsStream? selectBestStream(HlsMasterPlaylist master) =>
     master.streams.isEmpty ? null : master.streams.first;

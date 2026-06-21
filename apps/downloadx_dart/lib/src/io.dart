@@ -11,7 +11,10 @@ import 'dart:async';
 /// Thrown when an operation is aborted by deliberate user intent (pause /
 /// cancel). The retry loop never retries this — mirrors a DOM `AbortError`.
 class AbortError implements Exception {
+  /// Human-readable reason for the abort.
   final String message;
+
+  /// Creates an [AbortError] with an optional [message].
   const AbortError([this.message = 'Aborted']);
   @override
   String toString() => 'AbortError: $message';
@@ -20,7 +23,10 @@ class AbortError implements Exception {
 /// Abort reason carrying *transient* meaning: the request should be retried
 /// from the bytes already written. Used for idle-timeout and stall-restart.
 class TransientAbort implements Exception {
+  /// Human-readable reason for the transient abort.
   final String message;
+
+  /// Creates a [TransientAbort] with a descriptive [message].
   const TransientAbort(this.message);
   @override
   String toString() => 'TransientAbort: $message';
@@ -34,6 +40,7 @@ class CancelToken {
   final _completer = Completer<void>();
   final List<void Function()> _listeners = [];
 
+  /// Whether this token has been cancelled.
   bool get isCancelled => _cancelled;
 
   /// The reason this token was cancelled with. Only meaningful once cancelled.
@@ -73,18 +80,31 @@ class CancelToken {
 
 /// HTTP request options passed to [DownloadxIo.fetch].
 class FetchInit {
+  /// HTTP method (e.g. `'GET'`, `'HEAD'`). Defaults to `'GET'` when null.
   final String? method;
+
+  /// HTTP headers sent with the request.
   final Map<String, String>? headers;
+
+  /// Cancellation token; cancelling it aborts the in-flight request.
   final CancelToken? signal;
+
+  /// Optional request body (e.g. for POST).
   final List<int>? body;
 
+  /// Creates a [FetchInit] with the given options.
   const FetchInit({this.method, this.headers, this.signal, this.body});
 }
 
 /// Case-insensitive response header view.
 abstract class FetchHeaders {
+  /// Returns the value for [name], or null if absent.
   String? get(String name);
+
+  /// Returns true when a header named [name] is present.
   bool has(String name);
+
+  /// Iterates all headers, calling [cb] with each value and name.
   void forEach(void Function(String value, String name) cb);
 }
 
@@ -92,12 +112,14 @@ abstract class FetchHeaders {
 class MapFetchHeaders implements FetchHeaders {
   final Map<String, String> _map = {};
 
+  /// Creates a [MapFetchHeaders], optionally pre-populated with [initial].
   MapFetchHeaders([Map<String, String>? initial]) {
     if (initial != null) {
       initial.forEach((k, v) => _map[k.toLowerCase()] = v);
     }
   }
 
+  /// Sets a header, normalising [name] to lowercase.
   void set(String name, String value) => _map[name.toLowerCase()] = value;
 
   @override
@@ -113,9 +135,16 @@ class MapFetchHeaders implements FetchHeaders {
 
 /// Minimal WHATWG-`Response`-shaped abstraction the engine consumes.
 abstract class FetchResponse {
+  /// HTTP status code (e.g. 200, 206, 404).
   int get status;
+
+  /// HTTP reason phrase (e.g. `'OK'`, `'Partial Content'`).
   String get statusText;
+
+  /// True when [status] is in the 200–299 range.
   bool get ok;
+
+  /// Response headers.
   FetchHeaders get headers;
 
   /// Streaming body, or null when the implementation buffers instead.
@@ -126,6 +155,8 @@ abstract class FetchResponse {
 
   /// Read the whole body into a buffer (the streaming alternative).
   Future<List<int>> bytes();
+
+  /// Read the whole body as a UTF-8 string.
   Future<String> text();
 }
 

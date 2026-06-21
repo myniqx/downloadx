@@ -11,6 +11,7 @@ class HttpStatusError implements Exception {
   final String statusText;
   final String message;
 
+  /// Creates an [HttpStatusError] for the given [status] and [statusText].
   HttpStatusError(this.status, this.statusText, [String? message])
       : message = message ?? 'HTTP $status $statusText';
 
@@ -23,22 +24,33 @@ class HttpStatusError implements Exception {
 /// download falls back to a single full-body request. Status 200 is in neither
 /// retry set, so the retry loop fails fast.
 class RangeNotHonoredError extends HttpStatusError {
+  /// Creates a [RangeNotHonoredError].
   RangeNotHonoredError()
       : super(
             200, 'OK', 'Server ignored Range header (HTTP 200 instead of 206)');
 }
 
+/// Passed to [RetryOptions.onRetry] before each retry.
 class RetryInfo {
+  /// 1-based retry attempt number.
   final int attempt;
+
+  /// Delay that will be waited before the retry fires (ms).
   final int delayMs;
+
+  /// The error that triggered this retry.
   final Object error;
+
+  /// Creates a [RetryInfo].
   const RetryInfo(
       {required this.attempt, required this.delayMs, required this.error});
 }
 
 typedef RetrySleep = Future<void> Function(int ms, CancelToken? signal);
 
+/// Configuration for [withRetry].
 class RetryOptions {
+  /// Maximum number of retry attempts (not counting the initial try).
   final int maxRetries;
 
   /// Base delay in ms for the first retry.
@@ -59,6 +71,7 @@ class RetryOptions {
   /// Jitter source — overridable for deterministic tests.
   final Random? random;
 
+  /// Creates a [RetryOptions].
   const RetryOptions({
     required this.maxRetries,
     required this.retryDelay,

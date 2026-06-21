@@ -2,12 +2,13 @@ name: downloadx
 description: >-
   An IDM-style download manager for Dart and Flutter — parallel chunked
   downloads, dynamic splitting, resume across restarts, and pluggable I/O.
-version: 0.1.0
+version: 0.2.0
 repository: https://github.com/myniqx/downloadx
 homepage: https://myniqx.dev/projects/downloadx
+publisher: myniqx.dev
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  sdk: '>=3.4.0 <4.0.0'
 
 # Zero runtime dependencies — the package only uses dart:core, dart:io,
 # dart:async, dart:convert, dart:typed_data and dart:math. Keeping it

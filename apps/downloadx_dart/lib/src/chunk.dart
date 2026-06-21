@@ -9,12 +9,24 @@ import 'retry.dart';
 import 'speed_tracker.dart';
 import 'types.dart';
 
+/// Immutable configuration passed to a [Chunk] at construction.
 class ChunkParams {
+  /// Unique identifier for this chunk.
   final String id;
+
+  /// Identifier of the parent download.
   final String downloadId;
+
+  /// The URL to fetch bytes from.
   final String url;
+
+  /// Absolute path of the in-progress `.part` file.
   final String targetFilePath;
+
+  /// Byte offset within the file where this chunk begins.
   final int offset;
+
+  /// Number of bytes this chunk is responsible for.
   final int length;
 
   /// Bytes already written from a previous session (resume).
@@ -38,6 +50,7 @@ class ChunkParams {
   /// Clock, overridable for deterministic tests.
   final int Function()? now;
 
+  /// Creates a [ChunkParams].
   const ChunkParams({
     required this.id,
     required this.downloadId,
@@ -93,15 +106,31 @@ class Chunk {
         _now = _params.now ?? _defaultNow,
         _tracker = SpeedTracker(_params.global.speedSampleWindow, _params.now);
 
+  /// Current byte length of this chunk (may shrink when the tail is split off).
   int get length => _length;
+
+  /// Current lifecycle state.
   ChunkStatus get status => _status;
+
+  /// Bytes written to disk so far (including any resumed progress).
   int get downloadedBytes => _downloadedBytes;
+
+  /// Bytes still to download, clamped to zero.
   int get remainingBytes => (_length - _downloadedBytes).clamp(0, _length);
+
+  /// Qualitative health classification updated after each write.
   ChunkQuality get quality => _quality;
+
+  /// Live speed tracker for this chunk.
   SpeedTracker get speedTracker => _tracker;
+
+  /// Machine-readable failure code set on permanent failure (e.g. `'range-not-honored'`).
   String? get failureCode => _failureCode;
+
+  /// Human-readable description of the last error, or null.
   String? get lastError => _lastError;
 
+  /// Returns an immutable snapshot of the current chunk state for persistence.
   ChunkSnapshot snapshot() => ChunkSnapshot(
         id: id,
         offset: offset,
