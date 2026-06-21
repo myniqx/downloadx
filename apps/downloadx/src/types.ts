@@ -186,6 +186,12 @@ export interface DownloadOptions {
   /** Override per-download speed limit (bytes/sec). 0 = unlimited. */
   speedLimit?: number;
 
+  /** Override minimum chunk size for this download. */
+  minChunkSize?: number;
+
+  /** Write NDJSON diagnostic journal for this download. */
+  journal?: boolean;
+
   /** Override retry behaviour. */
   maxRetries?: number;
   retryDelay?: number;

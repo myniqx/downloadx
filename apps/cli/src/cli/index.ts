@@ -1,5 +1,5 @@
 import { ensureDaemon, sendRequest } from './client.ts';
-import { cmdAdd } from './commands/add.ts';
+import { cmdAdd, parseAddOptions } from './commands/add.ts';
 import { cmdList } from './commands/list.ts';
 import { cmdPause, cmdResume, cmdRestart, cmdCancel, cmdClear } from './commands/pause.ts';
 import { cmdStatus } from './commands/status.ts';
@@ -9,7 +9,8 @@ const HELP = `
 downloadx — download manager CLI
 
 Usage:
-  downloadx add --url <url> [--path <dir>]              Add and start a download
+  downloadx add --url <url> [--filename <name>] [--speedLimit <n>] [--targetPath <dir>]
+                [--targetChunkCount <n>] [--minChunkSize <n>] [--journal true|false]
   downloadx list                                          List all downloads
   downloadx status --id <#|id> [--json]                  Detailed status for a download
   downloadx pause  --id <#|id> | --all                   Pause one or all downloads
@@ -71,11 +72,10 @@ export async function runCli(argv: string[]): Promise<void> {
 
   switch (cmd) {
     case 'add': {
-      const url = argString('--url');
-      const targetPath = argString('--path');
-      if (!url) cliError('Usage: downloadx add --url <url> [--path <dir>]');
+      const { url, filename, options: addOpts } = parseAddOptions(args);
+      if (!url) cliError('Usage: downloadx add --url <url> [--filename <name>] [--speedLimit <n>] ...');
       try {
-        await cmdAdd(url, targetPath);
+        await cmdAdd(url, filename, addOpts);
       } catch (e) {
         cliError(`Could not add download: ${e instanceof Error ? e.message : e}`);
       }

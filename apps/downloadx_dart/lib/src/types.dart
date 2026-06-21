@@ -166,6 +166,12 @@ class DownloadOptions {
   /// Override per-download speed limit (bytes/sec). 0 = unlimited.
   final int? speedLimit;
 
+  /// Override minimum chunk size for this download.
+  final int? minChunkSize;
+
+  /// Write NDJSON diagnostic journal for this download.
+  final bool? journal;
+
   /// Override retry behaviour.
   final int? maxRetries;
   final int? retryDelay;
@@ -186,6 +192,8 @@ class DownloadOptions {
     this.chunkMode,
     this.targetChunkCount,
     this.speedLimit,
+    this.minChunkSize,
+    this.journal,
     this.maxRetries,
     this.retryDelay,
     this.retryBackoff,

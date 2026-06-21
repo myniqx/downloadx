@@ -99,6 +99,9 @@ class Download implements GlobalConfig {
     } else {
       _meta = createEmptyMeta(id: id, url: url);
       if (options.targetPath != null) _meta.targetPath = options.targetPath;
+      if (options.speedLimit != null) _meta.speedLimit = options.speedLimit;
+      if (options.minChunkSize != null) _meta.minChunkSize = options.minChunkSize;
+      if (options.journal != null) _meta.journal = options.journal;
     }
     emitter.onType<ChunkLifecycleEvent>((payload) {
       if (payload.status == ChunkStatus.completed ||

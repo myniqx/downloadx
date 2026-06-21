@@ -118,6 +118,9 @@ export class Download implements GlobalConfig {
     } else {
       this._meta = createEmptyMeta({ id, url });
       if (options.targetPath !== undefined) this._meta.targetPath = options.targetPath;
+      if (options.speedLimit !== undefined) this._meta.speedLimit = options.speedLimit;
+      if (options.minChunkSize !== undefined) this._meta.minChunkSize = options.minChunkSize;
+      if (options.journal !== undefined) this._meta.journal = options.journal;
     }
     this.emitter.on('chunkLifecycle', (payload) => {
       if (
