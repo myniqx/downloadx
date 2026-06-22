@@ -45,6 +45,12 @@ class ChunkParams {
   /// — when the segment size is unknown — streams until EOF. Retry, throttle,
   /// speed tracking and resume all behave exactly as for a normal chunk.
   final bool isSegment;
+
+  /// HLS segment: resolved source segment URI (for snapshot persistence).
+  final String? uri;
+
+  /// HLS segment: segment duration in seconds (from #EXTINF), for ETA.
+  final double? durationSec;
   final EventEmitter emitter;
 
   /// Optional throttle hook — called with bytes-just-read before write.
@@ -70,6 +76,8 @@ class ChunkParams {
     this.lastModified,
     required this.global,
     this.isSegment = false,
+    this.uri,
+    this.durationSec,
     required this.emitter,
     this.throttle,
     required this.medianSpeedRef,
@@ -150,6 +158,11 @@ class Chunk {
         quality: _quality,
         retries: _retries,
         lastError: _lastError,
+        // Segment chunks carry extra fields so they can be rebuilt on resume.
+        isSegment: _params.isSegment ? true : null,
+        targetFilePath: _params.isSegment ? _params.targetFilePath : null,
+        uri: _params.isSegment ? _params.uri : null,
+        durationSec: _params.isSegment ? _params.durationSec : null,
       );
 
   /// Shrink this chunk so the tail portion can be given to another chunk.

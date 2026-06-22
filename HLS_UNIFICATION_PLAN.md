@@ -114,35 +114,33 @@ yanına `✅ DONE` yazılır.
 - [x] **TS testleri yeşil.** (152/152)
 - [x] **Dart portu + testleri yeşil.** (125/125)
 
-### Phase 3 — `HlsSession` sadeleştirme (parse + concat)
+### Phase 3+4 — `HlsSession` sadeleştirme + `Download.runHls` birleştirme (BİRLEŞTİRİLDİ) ✅ DONE
 
-> Download/retry/throttle kopyalarını sil; session sadece playlist çözer ve
-> concat yapar.
+> Phase 3 izole test edilemediği için (runHls session.run'a bağlı) ikisi tek
+> session'da yapılır: session sadece parse+concat bırakılır, runHls segment'leri
+> `isSegment` chunk olarak planlayıp normal `driveChunks` ile indirir.
 
-- [ ] `HlsSession`'dan `downloadSegments`/`downloadSegment`/retry/throttle kodunu çıkar.
-- [ ] `resolvePlaylist` (master/media ayrımı) ve `registerStreams` (multi-stream) korunur.
-- [ ] `concatSegments` korunur (io.concatSegments / binary fallback).
-- [ ] Segment listesini `Download`'a verecek bir arayüz (parse sonucu → ChunkSnapshot listesi planı) tanımla.
-- [ ] `MAX_PARALLEL_SEGMENTS` sabitini kaldır.
-- [ ] **Parser/session birim testleri yeşil.**
-- [ ] **Dart portu + testleri yeşil.**
+**Kullanıcı kararları:** resume'da playlist yeniden resolve edilir (metadan körlemesine
+değil); eski session download testleri `tests/integration/hls.test.ts`'e taşınır.
 
-### Phase 4 — `Download.runHls` birleştirme
+`HlsSession` sadeleştirme:
+- [x] `run`/`downloadSegments`/`downloadSegment`/`MAX_PARALLEL_SEGMENTS`/`sleep`/retry/throttle/callbacks kaldırıldı.
+- [x] Public API: `resolve(url)` (media | multi-stream, live throw), `registerStreams`, `concat(paths, out)`, `cleanup(segDir)`, `segDir()`/`segPath(i)`. Constructor sadece `id` + `context`.
 
-> Asıl birleştirme. `runHls`, segment'leri isSegment chunk olarak planlayıp
-> normal `driveChunks` ile indirir.
-
-- [ ] `runHls`: master ise dallan (child register, completed). Media ise segment'leri `ChunkSnapshot[]` olarak `meta.chunks`'a yaz (`isSegment`, `offset=0`, `uri`, kendi `targetFilePath`, `length=UNKNOWN`).
-- [ ] Segment dosyaları `{cachePath}/{id}-hls/seg-N.ts` yoluna; concat sonrası temizlik.
-- [ ] `driveChunks`'ı HLS modunda da kullan (concurrency = targetChunkCount).
-- [ ] Tüm segmentler completed → `concatSegments` → `rename` → completed.
-- [ ] `alloc` ve finalize size-mismatch HLS'te atlansın.
-- [ ] Progress: yüzde = segment oranı, hız = aggregate, ETA = kalan segment × ort. segment süresi.
-- [ ] Resume: `isHls` metadan okunur, tamamlanmış segment chunk'ları atlanır, kalanlar inilir.
-- [ ] Pause/cancel: chunk pause mekanizması üzerinden (HLS spin-wait kodu kaldırılır).
-- [ ] `cleanup` (segment dosyaları silme) chunk modeline uyarlanır.
-- [ ] **HLS integration testleri (resume dahil) yeşil.**
-- [ ] **Dart portu + testleri yeşil.**
+`Download.runHls`:
+- [x] `resolve()`: multi-stream → register + completed. Media → segment planla.
+- [x] Segment'ler `ChunkSnapshot[]`: `isSegment`, `offset=0`, `uri`, kendi `targetFilePath` (`{cachePath}/{id}-hls/seg-NNNNNN.ts`), `length=UNKNOWN`, `durationSec`.
+- [x] `Chunk.snapshot()` → `isSegment`/`targetFilePath`/`uri`/`durationSec` döndürür; `buildChunk` bunları okur (`ChunkParams`'a `uri`/`durationSec` eklendi).
+- [x] `driveChunks` HLS modunda kullanılır (concurrency = targetChunkCount, Phase 2 hazır).
+- [x] Tüm segment completed → `session.concat` → segment dosyaları sil → completed.
+- [x] `alloc` ve finalize size-mismatch HLS'te atlanır (runHls finalize'i kullanmıyor; totalSize=null).
+- [x] Progress: yüzde = tamamlanan/toplam segment, hız = aggregate; `hlsSegmentsDone/Total` chunk sayısından türetilir (`_isSegmentMode` getter).
+- [x] Resume: playlist her run'da yeniden resolve, tamamlanmış segment dosyaları (var + boyut>0) atlanır.
+- [x] Pause/cancel: chunk pause üzerinden; `start()`/`pause()`'daki HLS spin-wait guard'ları kaldırıldı.
+- [x] `clear()` cleanup yeni `session.cleanup` imzasına uyarlandı.
+- [x] Eski session download testleri `tests/integration/hls.test.ts`'e taşındı; `session.test.ts` parse/registerStreams/concat/cleanup kaldı.
+- [x] **TS testleri yeşil.** (161/161)
+- [x] **Dart portu + testleri yeşil.** (134/134)
 
 ### Phase 5 — Temizlik & doğrulama
 

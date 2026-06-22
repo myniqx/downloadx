@@ -172,15 +172,7 @@ class Download implements GlobalConfig {
   Future<void> start() {
     if (_state == DownloadState.completed) return Future.value();
 
-    // HLS pause leaves _runningPromise alive (session is spin-waiting on
-    // isPaused()). Clear the flag so the session exits the loop and resumes
-    // naturally — no need to start a new _execute().
     if (_runningPromise != null) {
-      if (_state == DownloadState.paused && _probe?.isHls == true) {
-        _pauseRequested = false;
-        _cancelRequested = false;
-        _setState(DownloadState.downloading);
-      }
       return _runningPromise!;
     }
 
@@ -203,14 +195,6 @@ class Download implements GlobalConfig {
     _pauseRequested = true;
     for (final c in _chunks) {
       c.pause();
-    }
-    // HLS session polls isPaused() in a spin-wait and never throws, so the
-    // catch block that calls _setState('paused') is never reached. Set state
-    // immediately so the UI reflects the pause without waiting for the next
-    // segment boundary. Use probe.isHls as the guard — _hlsSegmentsDone is
-    // null until the first batch finishes, which would miss an early pause.
-    if (_probe?.isHls == true) {
-      _setState(DownloadState.paused);
     }
   }
 
@@ -239,13 +223,9 @@ class Download implements GlobalConfig {
         .catchError((_) {});
     await _safeUnlink(_journalPath());
     // HLS writes segments to {cachePath}/{id}-hls/ — clean up the directory.
-    if (_probe?.isHls == true) {
-      final segDir = io.joinPath([cachePath, '$id-hls']);
-      final session = HlsSession(
-        id: id, context: _context, throttle: _throttle,
-        onProgress: (_, __) {}, isCancelled: () => true, isPaused: () => false,
-      );
-      await session.cleanup(segDir);
+    if (_probe?.isHls == true || _meta.isHls == true) {
+      final session = HlsSession(id: id, context: _context);
+      await session.cleanup(session.segDir());
     }
   }
 
@@ -296,6 +276,57 @@ class Download implements GlobalConfig {
             s.status != ChunkStatus.completed &&
             s.status != ChunkStatus.reassigned)
         .toList();
+
+    // HLS: percent/ETA are segment-based since total bytes are unknown.
+    if (_isSegmentMode) {
+      final totalSegments = snaps.length;
+      final doneSegments = snaps
+          .where((s) =>
+              s.status == ChunkStatus.completed ||
+              s.status == ChunkStatus.reassigned)
+          .length;
+      final elapsed = _startedAt == 0 ? 0 : _nowMs() - _startedAt;
+      return DownloadDescription(
+        id: id,
+        url: url,
+        filename: filename,
+        targetPath: _meta.targetPath,
+        addedAt: _meta.addedAt,
+        completedAt: _meta.completedAt,
+        errorMessage: _meta.errorMessage,
+        description: _meta.description,
+        metadata: _meta.metadata,
+        state: _state,
+        totalBytes: null,
+        downloadedBytes: downloaded,
+        percent: totalSegments > 0
+            ? (doneSegments / totalSegments * 1000).round() / 10
+            : null,
+        totalSpeedBps: speed.round(),
+        etaMs: doneSegments > 0 && doneSegments < totalSegments
+            ? (elapsed / doneSegments * (totalSegments - doneSegments)).round()
+            : null,
+        elapsedMs: elapsed,
+        activeChunks:
+            snaps.where((s) => s.status == ChunkStatus.downloading).length,
+        totalChunks: totalSegments,
+        chunks: live
+            .map((s) => ChunkDescription(
+                  id: s.id,
+                  status: s.status,
+                  quality: s.quality,
+                  offset: s.offset,
+                  length: s.length,
+                  downloadedBytes: s.downloadedBytes,
+                  retries: s.retries,
+                ))
+            .toList(),
+        recentDiagnostics: List<DiagnosticPayload>.of(_recentDiagnostics),
+        hlsSegmentsDone: doneSegments,
+        hlsTotalSegments: totalSegments,
+      );
+    }
+
     return DownloadDescription(
       id: id,
       url: url,
@@ -539,15 +570,22 @@ class Download implements GlobalConfig {
   }
 
   Chunk _buildChunk(ChunkSnapshot snap, bool acceptsRanges) {
+    // Segment chunks (HLS) download their own URI into their own file from
+    // byte 0, never split, and don't use Range (optimistic resume restarts).
+    final isSegment = snap.isSegment == true;
     return Chunk(ChunkParams(
       id: snap.id,
       downloadId: id,
-      url: _probe?.finalUrl ?? url,
-      targetFilePath: partFilePath,
+      url: isSegment ? (snap.uri ?? url) : (_probe?.finalUrl ?? url),
+      targetFilePath:
+          isSegment ? (snap.targetFilePath ?? partFilePath) : partFilePath,
       offset: snap.offset,
       length: snap.length,
       initialDownloadedBytes: snap.downloadedBytes,
-      acceptsRanges: acceptsRanges,
+      acceptsRanges: isSegment ? false : acceptsRanges,
+      isSegment: isSegment,
+      uri: isSegment ? snap.uri : null,
+      durationSec: isSegment ? snap.durationSec?.toDouble() : null,
       etag: _probe?.etag,
       lastModified: _probe?.lastModified,
       global: this,
@@ -665,45 +703,122 @@ class Download implements GlobalConfig {
     }
   }
 
+  /// HLS download via the unified chunk pipeline. Each segment is an isSegment
+  /// Chunk written to its own file; segments download through [_driveChunks]
+  /// (with concurrency capped at targetChunkCount), then are concatenated into
+  /// the final output. The playlist is re-resolved every run so resume picks up
+  /// fresh segment URIs and skips already-downloaded segment files.
   Future<void> _runHls() async {
-    _setState(DownloadState.downloading);
-    _startedAt = _nowMs();
-
     final baseFilename = filename;
     final outputPath = targetFilePath;
-    final session = HlsSession(
-      id: id,
-      context: _context,
-      throttle: _throttle,
-      onProgress: (done, total) {
-        _hlsSegmentsDone = done;
-        _hlsTotalSegments = total;
-        emitter.emit(ProgressEvent(
-          id,
-          totalBytes: null,
-          downloadedBytes: done,
-          totalSpeed: 0,
-          activeChunks: 1,
-          percent: total > 0 ? (done / total) * 100 : null,
-          etaMs: null,
-          hlsSegmentsDone: done,
-          hlsTotalSegments: total,
-        ));
-      },
-      isCancelled: () => _cancelRequested,
-      isPaused: () => _pauseRequested,
-    );
+    final session = HlsSession(id: id, context: _context);
 
     try {
       await _ensureTargetDirs();
-      final result = await session.run(url, outputPath, baseFilename);
+      final resolution = await session.resolve(url);
 
-      if (result is HlsMultiStreamResult) {
+      if (resolution is HlsMultiStreamResult) {
+        await session.registerStreams(resolution.streams, baseFilename, outputPath);
         _setState(DownloadState.completed);
         _meta.completedAt = _nowMs();
         await _persistCurrentMeta().catchError((_) {});
         return;
       }
+
+      final segments = (resolution as HlsMediaResolution).playlist.segments;
+      final segDir = session.segDir();
+      await io.mkdir(segDir);
+
+      // Plan each segment as an isSegment chunk. Already-downloaded segment
+      // files (present + non-empty) are marked completed so resume skips them.
+      final fileSize = io.fileSize;
+      final snapshots = <ChunkSnapshot>[];
+      for (var i = 0; i < segments.length; i++) {
+        final seg = segments[i];
+        final segPath = session.segPath(i);
+        var done = 0;
+        var status = ChunkStatus.pending;
+        if (await io.exists(segPath)) {
+          int? size;
+          if (fileSize != null) {
+            try {
+              size = await fileSize(segPath);
+            } catch (_) {
+              size = null;
+            }
+          }
+          if (size != null && size > 0) {
+            done = size;
+            status = ChunkStatus.completed;
+          }
+        }
+        snapshots.add(ChunkSnapshot(
+          id: '$id-c$i',
+          offset: 0,
+          length: status == ChunkStatus.completed ? done : unknownSizeLength,
+          downloadedBytes: done,
+          status: status,
+          quality: ChunkQuality.good,
+          retries: 0,
+          isSegment: true,
+          targetFilePath: segPath,
+          uri: seg.uri,
+          durationSec: seg.durationSec,
+        ));
+      }
+
+      _meta.isHls = true;
+      final probe = _probe;
+      if (probe != null) {
+        applyProbeToMeta(_meta, probe, snapshots);
+      } else {
+        _meta.chunks = snapshots;
+      }
+      _chunkSeq = _chunkSeq > snapshots.length ? _chunkSeq : snapshots.length;
+      _chunks = snapshots.map((snap) => _buildChunk(snap, false)).toList();
+      await _persistCurrentMeta().catchError((_) {});
+
+      if (_cancelRequested) {
+        _setState(DownloadState.cancelled);
+        await _persistCurrentMeta().catchError((_) {});
+        return;
+      }
+
+      _setState(DownloadState.downloading);
+      _startedAt = _nowMs();
+      _startProgressTimer();
+      await _driveChunks();
+      _stopProgressTimer();
+
+      if (_cancelRequested) {
+        _setState(DownloadState.cancelled);
+        await _persistCurrentMeta().catchError((_) {});
+        return;
+      }
+      if (_pauseRequested) {
+        _setState(DownloadState.paused);
+        await _persistCurrentMeta().catchError((_) {});
+        return;
+      }
+      final failed =
+          _chunks.where((c) => c.status == ChunkStatus.failed).toList();
+      if (failed.isNotEmpty) {
+        _setState(DownloadState.error);
+        _meta.errorMessage =
+            failed.first.lastError ?? 'segment download failed';
+        await _persistCurrentMeta().catchError((_) {});
+        emitter.emit(ErrorEvent(
+          id,
+          error: Exception(_meta.errorMessage),
+          fatal: true,
+        ));
+        return;
+      }
+
+      // All segments downloaded — concat into the final output and clean up.
+      final segmentPaths = List.generate(_chunks.length, session.segPath);
+      await session.concat(segmentPaths, outputPath);
+      await session.cleanup(segDir);
 
       _setState(DownloadState.completed);
       _meta.completedAt = _nowMs();
@@ -715,6 +830,7 @@ class Download implements GlobalConfig {
         durationMs: _startedAt == 0 ? 0 : _nowMs() - _startedAt,
       ));
     } catch (err) {
+      _stopProgressTimer();
       if (_cancelRequested) {
         _setState(DownloadState.cancelled);
         await _persistCurrentMeta().catchError((_) {});
@@ -817,10 +933,44 @@ class Download implements GlobalConfig {
     _emitProgress();
   }
 
+  /// True when this download is running in HLS segment mode.
+  bool get _isSegmentMode =>
+      _chunks.isNotEmpty && _chunks.any((c) => c.isSegment);
+
   void _emitProgress() {
-    final total = totalBytes;
     final downloaded = downloadedBytes;
     final speed = _aggregate.totalSpeed;
+
+    if (_isSegmentMode) {
+      // HLS: progress is segment-based, not byte-based (total size unknown).
+      final totalSegments = _chunks.length;
+      final doneSegments = _chunks
+          .where((c) =>
+              c.status == ChunkStatus.completed ||
+              c.status == ChunkStatus.reassigned)
+          .length;
+      _hlsSegmentsDone = doneSegments;
+      _hlsTotalSegments = totalSegments;
+      final elapsed = _startedAt == 0 ? 0 : _nowMs() - _startedAt;
+      emitter.emit(ProgressEvent(
+        id,
+        totalBytes: null,
+        downloadedBytes: downloaded,
+        totalSpeed: speed,
+        activeChunks:
+            _chunks.where((c) => c.status == ChunkStatus.downloading).length,
+        percent:
+            totalSegments > 0 ? doneSegments / totalSegments * 100 : null,
+        etaMs: doneSegments > 0 && doneSegments < totalSegments
+            ? (elapsed / doneSegments * (totalSegments - doneSegments)).round()
+            : null,
+        hlsSegmentsDone: doneSegments,
+        hlsTotalSegments: totalSegments,
+      ));
+      return;
+    }
+
+    final total = totalBytes;
     emitter.emit(ProgressEvent(
       id,
       totalBytes: total,

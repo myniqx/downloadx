@@ -304,6 +304,15 @@ class MockIo extends DownloadxIo {
   /// Injectable concat callback — set in tests to verify it's called.
   Future<void> Function(List<String> segments, String output)? concatSegmentsOverride;
 
+  /// Optional fetch interceptor — wraps every [fetch] call. Set in tests to
+  /// observe concurrency or inject delays. Receives the URL and a `proceed`
+  /// callback that performs the real fetch.
+  Future<FetchResponse> Function(
+    String url,
+    FetchInit? init,
+    Future<FetchResponse> Function() proceed,
+  )? fetchHook;
+
   MockIo({
     MockFetch? fetcher,
     this.enableTruncate = true,
@@ -316,8 +325,11 @@ class MockIo extends DownloadxIo {
       concatSegmentsOverride;
 
   @override
-  Future<FetchResponse> fetch(String url, [FetchInit? init]) =>
-      fetcher.call(url, init);
+  Future<FetchResponse> fetch(String url, [FetchInit? init]) {
+    final hook = fetchHook;
+    if (hook != null) return hook(url, init, () => fetcher.call(url, init));
+    return fetcher.call(url, init);
+  }
 
   @override
   Future<void> writeChunk(String path, int offset, List<int> buffer) async {

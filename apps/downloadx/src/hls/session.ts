@@ -1,23 +1,12 @@
 import path from 'node:path';
-import { withRetry, HttpStatusError } from '../retry.js';
-import { Throttle } from '../throttle.js';
-import type { DlxContext, FetchInit } from '../types.js';
+import type { DlxContext } from '../types.js';
 import { parsePlaylist } from './parser.js';
-import type { HlsMediaPlaylist, HlsSegment, HlsStream } from './types.js';
+import type { HlsMediaPlaylist, HlsStream } from './types.js';
 
-export interface HlsSessionCallbacks {
-  onProgress(downloadedSegments: number, totalSegments: number): void;
-  onError(msg: string): void;
-  isCancelled(): boolean;
-  isPaused(): boolean;
-}
-
-export interface HlsSessionResult {
-  /** Ordered list of local segment file paths ready to be concatenated. */
-  segmentPaths: string[];
+/** Resolved media playlist — segments ready to be planned as chunks. */
+export interface HlsMediaResolution {
+  type: 'media';
   playlist: HlsMediaPlaylist;
-  /** Final concatenated output file path. */
-  outputPath: string;
 }
 
 /** Returned when a master playlist has multiple streams — caller should present
@@ -27,54 +16,40 @@ export interface HlsMultiStreamResult {
   streams: HlsStream[];
 }
 
-const MAX_PARALLEL_SEGMENTS = 4;
+export type HlsResolution = HlsMediaResolution | HlsMultiStreamResult;
 
+/**
+ * HLS playlist resolver + segment concatenator. Downloading is no longer the
+ * session's job — each segment is downloaded as an `isSegment` Chunk by the
+ * owning Download. The session only:
+ *   - resolves a playlist URL into a media playlist or a multi-stream list,
+ *   - registers child downloads for multi-stream master playlists,
+ *   - concatenates downloaded segment files into the final output,
+ *   - cleans up segment files.
+ */
 export class HlsSession {
   constructor(
     private readonly id: string,
     private readonly context: DlxContext,
-    private readonly throttle: Throttle,
-    private readonly callbacks: HlsSessionCallbacks,
   ) {}
-
-  /** Run the HLS session.
-   *  - Single stream → downloads segments and returns HlsSessionResult.
-   *  - Multiple streams → registers each as a separate idle Download via
-   *    context.addUrl() and returns HlsMultiStreamResult. */
-  async run(
-    masterUrl: string,
-    outputPath: string,
-    baseFilename: string,
-  ): Promise<HlsSessionResult | HlsMultiStreamResult> {
-    const resolution = await this.resolvePlaylist(masterUrl);
-
-    if (resolution.type === 'multi-stream') {
-      await this.registerStreams(resolution.streams, baseFilename, outputPath);
-      return resolution;
-    }
-
-    const playlist = resolution.playlist;
-    if (playlist.isLive) {
-      throw new Error('Live HLS streams are not supported');
-    }
-
-    const segDir = this.context.io.joinPath(this.context.cachePath, `${this.id}-hls`);
-    await this.context.io.mkdir(segDir);
-
-    const segmentPaths = await this.downloadSegments(playlist, segDir);
-    await this.concatSegments(segmentPaths, outputPath);
-    return { segmentPaths, playlist, outputPath };
-  }
 
   // ---- playlist resolution -------------------------------------------------
 
-  private async resolvePlaylist(
-    url: string,
-  ): Promise<{ type: 'media'; playlist: HlsMediaPlaylist } | HlsMultiStreamResult> {
+  /** Fetch and parse the playlist at `url`.
+   *  - media playlist → { type: 'media', playlist }
+   *  - master with >1 stream → { type: 'multi-stream', streams }
+   *  - master with 1 stream → resolves that stream's media playlist
+   *  Throws on live streams (no #EXT-X-ENDLIST). */
+  async resolve(url: string): Promise<HlsResolution> {
     const text = await this.fetchText(url);
     const result = parsePlaylist(text, url);
 
-    if (result.type === 'media') return { type: 'media', playlist: result.playlist };
+    if (result.type === 'media') {
+      if (result.playlist.isLive) {
+        throw new Error('Live HLS streams are not supported');
+      }
+      return { type: 'media', playlist: result.playlist };
+    }
 
     const streams = result.playlist.streams;
     if (streams.length === 0) throw new Error('HLS master playlist has no streams');
@@ -89,10 +64,14 @@ export class HlsSession {
     if (mediaResult.type !== 'media') {
       throw new Error('Expected media playlist, got another master playlist');
     }
+    if (mediaResult.playlist.isLive) {
+      throw new Error('Live HLS streams are not supported');
+    }
     return { type: 'media', playlist: mediaResult.playlist };
   }
 
-  private async registerStreams(
+  /** Register each stream of a multi-stream master as a separate idle download. */
+  async registerStreams(
     streams: HlsStream[],
     baseFilename: string,
     outputPath: string,
@@ -116,80 +95,21 @@ export class HlsSession {
     }
   }
 
-  // ---- segment download ----------------------------------------------------
-
-  private async downloadSegments(
-    playlist: HlsMediaPlaylist,
-    segDir: string,
-  ): Promise<string[]> {
-    const segments = playlist.segments;
-    const total = segments.length;
-    const paths: string[] = [];
-    let completedCount = 0;
-
-    // Process in windows of MAX_PARALLEL_SEGMENTS.
-    for (let i = 0; i < total; i += MAX_PARALLEL_SEGMENTS) {
-      if (this.callbacks.isCancelled()) throw new Error('cancelled');
-
-      // Pause: spin-wait until unpaused or cancelled.
-      while (this.callbacks.isPaused()) {
-        if (this.callbacks.isCancelled()) throw new Error('cancelled');
-        await sleep(200);
-      }
-
-      const batch = segments.slice(i, i + MAX_PARALLEL_SEGMENTS);
-      const batchPaths = await Promise.all(
-        batch.map((seg, batchIdx) =>
-          this.downloadSegment(seg, i + batchIdx, segDir),
-        ),
-      );
-
-      paths.push(...batchPaths);
-
-      completedCount += batch.length;
-      this.callbacks.onProgress(completedCount, total);
-    }
-
-    return paths;
+  /** Directory where this download's segment files live. */
+  segDir(): string {
+    return this.context.io.joinPath(this.context.cachePath, `${this.id}-hls`);
   }
 
-  private async downloadSegment(
-    seg: HlsSegment,
-    index: number,
-    segDir: string,
-  ): Promise<string> {
-    const path = this.context.io.joinPath(segDir, `seg-${String(index).padStart(6, '0')}.ts`);
-
-    await withRetry(
-      async () => {
-        const init: FetchInit = {};
-        if (seg.byteRange) {
-          const end = seg.byteRange.offset + seg.byteRange.length - 1;
-          init.headers = { Range: `bytes=${seg.byteRange.offset}-${end}` };
-        }
-
-        const res = await this.context.io.fetch(seg.uri, init);
-        if (!res.ok) throw new HttpStatusError(res.status, res.statusText ?? '');
-
-        const buf = await res.arrayBuffer();
-
-        await this.throttle.consume(buf.byteLength);
-
-        await this.context.io.writeFile(path, new Uint8Array(buf));
-      },
-      {
-        maxRetries: this.context.maxRetries,
-        retryDelay: this.context.retryDelay,
-        retryBackoff: this.context.retryBackoff,
-      },
-    );
-
-    return path;
+  /** Local file path for segment `index`. */
+  segPath(index: number): string {
+    return this.context.io.joinPath(this.segDir(), `seg-${String(index).padStart(6, '0')}.ts`);
   }
 
   // ---- concat --------------------------------------------------------------
 
-  private async concatSegments(segments: string[], output: string): Promise<void> {
+  /** Concatenate ordered segment files into `output`. Uses io.concatSegments
+   *  (e.g. ffmpeg) when available, otherwise a binary append fallback. */
+  async concat(segments: string[], output: string): Promise<void> {
     const io = this.context.io;
     if (io.concatSegments) {
       await io.concatSegments(segments, output);
@@ -234,8 +154,4 @@ export class HlsSession {
       // ignore
     }
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }

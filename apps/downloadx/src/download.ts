@@ -196,15 +196,7 @@ export class Download implements GlobalConfig {
   start(): Promise<void> {
     if (this._state === 'completed') return Promise.resolve();
 
-    // HLS pause leaves runningPromise alive (session is spin-waiting on
-    // isPaused()). Clear the flag so the session exits the loop and resumes
-    // naturally — no need to start a new execute().
     if (this.runningPromise !== null) {
-      if (this._state === 'paused' && this._probe?.isHls === true) {
-        this.pauseRequested = false;
-        this.cancelRequested = false;
-        this.setState('downloading');
-      }
       return this.runningPromise;
     }
 
@@ -221,14 +213,6 @@ export class Download implements GlobalConfig {
     if (this._state !== 'downloading' && this._state !== 'probing') return;
     this.pauseRequested = true;
     for (const c of this.chunks) c.pause();
-    // HLS session spin-waits on isPaused() and never throws, so the catch
-    // block that calls setState('paused') is never reached. Set state
-    // immediately so callers see the correct state without waiting for the
-    // next segment boundary. Use probe.isHls as the guard — hlsSegmentsDone
-    // is undefined until the first batch finishes, missing an early pause.
-    if (this._probe?.isHls === true) {
-      this.setState('paused');
-    }
   }
 
   cancel(): void {
@@ -257,15 +241,9 @@ export class Download implements GlobalConfig {
     }).catch(() => undefined);
     await this.safeUnlink(this.journalPath());
     // HLS writes segments to {cachePath}/{id}-hls/ — clean up the directory.
-    if (this._probe?.isHls === true) {
-      const segDir = this.io.joinPath(this.cachePath, `${this.id}-hls`);
-      const session = new HlsSession(this.id, this._context, this.throttle, {
-        onProgress: () => undefined,
-        onError: () => undefined,
-        isCancelled: () => true,
-        isPaused: () => false,
-      });
-      await session.cleanup(segDir);
+    if (this._probe?.isHls === true || this._meta.isHls === true) {
+      const session = new HlsSession(this.id, this._context);
+      await session.cleanup(session.segDir());
     }
   }
 
@@ -327,6 +305,51 @@ export class Download implements GlobalConfig {
     const speed = this.aggregate.totalSpeed;
     const snaps = this.getChunkSnapshots();
     const live = snaps.filter((s) => s.status !== 'completed' && s.status !== 'reassigned');
+
+    // HLS: percent/ETA are segment-based since total bytes are unknown.
+    if (this.isSegmentMode) {
+      const totalSegments = snaps.length;
+      const doneSegments = snaps.filter(
+        (s) => s.status === 'completed' || s.status === 'reassigned',
+      ).length;
+      const elapsed = this.startedAt === 0 ? 0 : Date.now() - this.startedAt;
+      return {
+        id: this.id,
+        url: this.url,
+        filename: this.filename,
+        targetPath: this.meta.targetPath,
+        addedAt: this.meta.addedAt,
+        completedAt: this.meta.completedAt,
+        errorMessage: this.meta.errorMessage,
+        description: this.meta.description,
+        metadata: this.meta.metadata,
+        state: this._state,
+        totalBytes: null,
+        downloadedBytes: downloaded,
+        percent: totalSegments > 0 ? Math.round((doneSegments / totalSegments) * 1000) / 10 : null,
+        totalSpeedBps: Math.round(speed),
+        etaMs:
+          doneSegments > 0 && doneSegments < totalSegments
+            ? Math.round((elapsed / doneSegments) * (totalSegments - doneSegments))
+            : null,
+        elapsedMs: elapsed,
+        activeChunks: snaps.filter((s) => s.status === 'downloading').length,
+        totalChunks: totalSegments,
+        chunks: live.map((s) => ({
+          id: s.id,
+          status: s.status,
+          quality: s.quality,
+          offset: s.offset,
+          length: s.length,
+          downloadedBytes: s.downloadedBytes,
+          retries: s.retries,
+        })),
+        recentDiagnostics: [...this.recentDiagnostics],
+        hlsSegmentsDone: doneSegments,
+        hlsTotalSegments: totalSegments,
+      };
+    }
+
     return {
       id: this.id,
       url: this.url,
@@ -571,15 +594,21 @@ export class Download implements GlobalConfig {
   }
 
   private buildChunk(snap: ChunkSnapshot, acceptsRanges: boolean): Chunk {
+    // Segment chunks (HLS) download their own URI into their own file from
+    // byte 0, never split, and don't use Range (optimistic resume restarts).
+    const isSegment = snap.isSegment === true;
     return new Chunk({
       id: snap.id,
       downloadId: this.id,
-      url: this._probe?.finalUrl ?? this.url,
-      targetFilePath: this.partFilePath,
+      url: isSegment ? (snap.uri ?? this.url) : (this._probe?.finalUrl ?? this.url),
+      targetFilePath: isSegment ? (snap.targetFilePath ?? this.partFilePath) : this.partFilePath,
       offset: snap.offset,
       length: snap.length,
       initialDownloadedBytes: snap.downloadedBytes,
-      acceptsRanges,
+      acceptsRanges: isSegment ? false : acceptsRanges,
+      ...(isSegment ? { isSegment: true } : {}),
+      ...(isSegment && snap.uri !== undefined ? { uri: snap.uri } : {}),
+      ...(isSegment && snap.durationSec !== undefined ? { durationSec: snap.durationSec } : {}),
       etag: this._probe?.etag ?? null,
       lastModified: this._probe?.lastModified ?? null,
       global: this,
@@ -697,49 +726,112 @@ export class Download implements GlobalConfig {
     }
   }
 
+  /**
+   * HLS download via the unified chunk pipeline. Each segment is an isSegment
+   * Chunk written to its own file; segments download through driveChunks (with
+   * concurrency capped at targetChunkCount), then are concatenated into the
+   * final output. The playlist is re-resolved every run so resume picks up
+   * fresh segment URIs and skips already-downloaded segment files.
+   */
   private async runHls(): Promise<void> {
-    this.setState('downloading');
-    this.startedAt = Date.now();
-
     const baseFilename = this.filename;
     const outputPath = this.targetFilePath;
-    const session = new HlsSession(
-      this.id,
-      this._context,
-      this.throttle,
-      {
-        onProgress: (done, total) => {
-          this.hlsSegmentsDone = done;
-          this.hlsTotalSegments = total;
-          this.emitter.emit('progress', {
-            downloadId: this.id,
-            totalBytes: null,
-            downloadedBytes: done,
-            totalSpeed: 0,
-            activeChunks: 1,
-            percent: total > 0 ? (done / total) * 100 : null,
-            etaMs: null,
-            hlsSegmentsDone: done,
-            hlsTotalSegments: total,
-          });
-        },
-        onError: (msg) => this.diag('error', 'hls-error', msg),
-        isCancelled: () => this.cancelRequested,
-        isPaused: () => this.pauseRequested,
-      },
-    );
+    const session = new HlsSession(this.id, this._context);
 
     try {
       await this.ensureTargetDirs();
-      const result = await session.run(this.url, outputPath, baseFilename);
+      const resolution = await session.resolve(this.url);
 
-      if ('type' in result && result.type === 'multi-stream') {
+      if (resolution.type === 'multi-stream') {
         // Multiple streams registered as idle downloads — this download is done.
+        await session.registerStreams(resolution.streams, baseFilename, outputPath);
         this.setState('completed');
         this._meta.completedAt = Date.now();
         await this.persistCurrentMeta().catch(() => undefined);
         return;
       }
+
+      const segments = resolution.playlist.segments;
+      const segDir = session.segDir();
+      await this.io.mkdir(segDir);
+
+      // Plan each segment as an isSegment chunk. Already-downloaded segment
+      // files (present + non-empty) are marked completed so resume skips them.
+      const fileSize = this.io.fileSize;
+      const snapshots: ChunkSnapshot[] = [];
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i]!;
+        const segPath = session.segPath(i);
+        let done = 0;
+        let status: ChunkSnapshot['status'] = 'pending';
+        if (await this.io.exists(segPath)) {
+          const size = fileSize ? await fileSize(segPath).catch(() => 0) : 0;
+          if (size !== null && size > 0) {
+            done = size;
+            status = 'completed';
+          }
+        }
+        snapshots.push({
+          id: `${this.id}-c${i}`,
+          offset: 0,
+          length: status === 'completed' ? done : UNKNOWN_SIZE_LENGTH,
+          downloadedBytes: done,
+          status,
+          quality: 'good',
+          retries: 0,
+          isSegment: true,
+          targetFilePath: segPath,
+          uri: seg.uri,
+          durationSec: seg.durationSec,
+        });
+      }
+
+      this._meta.isHls = true;
+      if (this._probe !== null) applyProbeToMeta(this._meta, this._probe, snapshots);
+      else this._meta.chunks = snapshots;
+      this.chunkSeq = Math.max(this.chunkSeq, snapshots.length);
+      this.chunks = snapshots.map((snap) => this.buildChunk(snap, false));
+      await this.persistCurrentMeta().catch(() => undefined);
+
+      if (this.cancelRequested) {
+        this.setState('cancelled');
+        await this.persistCurrentMeta().catch(() => undefined);
+        return;
+      }
+
+      this.setState('downloading');
+      this.startedAt = Date.now();
+      this.startProgressTimer();
+      await this.driveChunks();
+      this.stopProgressTimer();
+
+      if (this.cancelRequested) {
+        this.setState('cancelled');
+        await this.persistCurrentMeta().catch(() => undefined);
+        return;
+      }
+      if (this.pauseRequested) {
+        this.setState('paused');
+        await this.persistCurrentMeta().catch(() => undefined);
+        return;
+      }
+      const failed = this.chunks.find((c) => c.status === 'failed');
+      if (failed) {
+        this.setState('error');
+        this._meta.errorMessage = failed.lastError ?? 'segment download failed';
+        await this.persistCurrentMeta().catch(() => undefined);
+        this.emitter.emit('error', {
+          downloadId: this.id,
+          error: new Error(this._meta.errorMessage),
+          fatal: true,
+        });
+        return;
+      }
+
+      // All segments downloaded — concat into the final output and clean up.
+      const segmentPaths = this.chunks.map((_, i) => session.segPath(i));
+      await session.concat(segmentPaths, outputPath);
+      await session.cleanup(segDir);
 
       this.setState('completed');
       this._meta.completedAt = Date.now();
@@ -751,6 +843,7 @@ export class Download implements GlobalConfig {
         durationMs: this.startedAt === 0 ? 0 : Date.now() - this.startedAt,
       });
     } catch (err) {
+      this.stopProgressTimer();
       if (this.cancelRequested) {
         this.setState('cancelled');
         await this.persistCurrentMeta().catch(() => undefined);
@@ -862,10 +955,44 @@ export class Download implements GlobalConfig {
     this.emitProgress();
   }
 
+  /** True when this download is running in HLS segment mode. */
+  private get isSegmentMode(): boolean {
+    return this.chunks.length > 0 && this.chunks.some((c) => c.isSegment);
+  }
+
   private emitProgress(): void {
-    const total = this.totalBytes;
     const downloaded = this.downloadedBytes;
     const speed = this.aggregate.totalSpeed;
+
+    if (this.isSegmentMode) {
+      // HLS: progress is segment-based, not byte-based (total size unknown).
+      const totalSegments = this.chunks.length;
+      const doneSegments = this.chunks.filter(
+        (c) => c.status === 'completed' || c.status === 'reassigned',
+      ).length;
+      this.hlsSegmentsDone = doneSegments;
+      this.hlsTotalSegments = totalSegments;
+      // ETA = remaining segments × average elapsed per completed segment.
+      const elapsed = this.startedAt === 0 ? 0 : Date.now() - this.startedAt;
+      const etaMs =
+        doneSegments > 0 && doneSegments < totalSegments
+          ? Math.round((elapsed / doneSegments) * (totalSegments - doneSegments))
+          : null;
+      this.emitter.emit('progress', {
+        downloadId: this.id,
+        totalBytes: null,
+        downloadedBytes: downloaded,
+        totalSpeed: speed,
+        activeChunks: this.chunks.filter((c) => c.status === 'downloading').length,
+        percent: totalSegments > 0 ? (doneSegments / totalSegments) * 100 : null,
+        etaMs,
+        hlsSegmentsDone: doneSegments,
+        hlsTotalSegments: totalSegments,
+      });
+      return;
+    }
+
+    const total = this.totalBytes;
     this.emitter.emit('progress', {
       downloadId: this.id,
       totalBytes: total,

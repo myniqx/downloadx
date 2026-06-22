@@ -40,6 +40,10 @@ export interface ChunkParams {
    * speed tracking and resume all behave exactly as for a normal chunk.
    */
   isSegment?: boolean;
+  /** HLS segment: resolved source segment URI (for snapshot persistence). */
+  uri?: string;
+  /** HLS segment: segment duration in seconds (from #EXTINF), for ETA. */
+  durationSec?: number;
   emitter: TypedEventEmitter<DownloadEventMap>;
   /** Optional throttle hook — called with bytes-just-read before write. */
   throttle?: (bytes: number, signal?: AbortSignal) => Promise<void>;
@@ -141,6 +145,13 @@ export class Chunk {
       retries: this._retries,
     };
     if (this._lastError !== undefined) snap.lastError = this._lastError;
+    // Segment chunks carry extra fields so they can be rebuilt on resume.
+    if (this.params.isSegment) {
+      snap.isSegment = true;
+      snap.targetFilePath = this.params.targetFilePath;
+      if (this.params.uri !== undefined) snap.uri = this.params.uri;
+      if (this.params.durationSec !== undefined) snap.durationSec = this.params.durationSec;
+    }
     return snap;
   }
 
