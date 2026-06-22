@@ -88,9 +88,6 @@ class _HoverState extends InheritedWidget {
   final bool hovered;
   const _HoverState({required this.hovered, required super.child});
 
-  static bool of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_HoverState>()?.hovered ?? false;
-
   @override
   bool updateShouldNotify(_HoverState old) => old.hovered != hovered;
 }

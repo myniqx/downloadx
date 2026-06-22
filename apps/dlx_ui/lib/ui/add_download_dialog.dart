@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../services/download_service.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
+import 'widgets/folder_path_field.dart';
+import 'widgets/key_value_editor.dart';
 
 Future<void> showAddDownloadDialog(
   BuildContext context,
@@ -28,12 +30,18 @@ class _AddDownloadDialog extends StatefulWidget {
 class _AddDownloadDialogState extends State<_AddDownloadDialog> {
   late final _url = TextEditingController(text: widget.initialUrl ?? '');
   final _filename = TextEditingController();
+  final _targetPath = TextEditingController();
+  final _description = TextEditingController();
   final _chunkCount = TextEditingController();
   final _speedLimit = TextEditingController();
   ChunkMode _mode = ChunkMode.auto;
   bool _autoStart = true;
+  bool _journal = false;
   bool _showAdvanced = false;
   String? _error;
+
+  final _headersCtrl = KeyValueEditorController();
+  final _metadataCtrl = KeyValueEditorController();
 
   @override
   void initState() {
@@ -64,8 +72,12 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     _url.removeListener(_onUrlChanged);
     _url.dispose();
     _filename.dispose();
+    _targetPath.dispose();
+    _description.dispose();
     _chunkCount.dispose();
     _speedLimit.dispose();
+    _headersCtrl.dispose();
+    _metadataCtrl.dispose();
     super.dispose();
   }
 
@@ -83,11 +95,18 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
         return;
       }
     }
+    final headers = _headersCtrl.read();
+    final metadata = _metadataCtrl.read();
     final options = DownloadOptions(
       filename: _filename.text.trim().isEmpty ? null : _filename.text.trim(),
+      targetPath: _targetPath.text.trim().isEmpty ? null : _targetPath.text.trim(),
+      description: _description.text.trim().isEmpty ? null : _description.text.trim(),
       chunkMode: _mode,
       targetChunkCount: int.tryParse(_chunkCount.text.trim()),
       speedLimit: speedLimit,
+      journal: _journal ? true : null,
+      headers: headers.isEmpty ? null : headers,
+      metadata: metadata.isEmpty ? null : metadata,
     );
     widget.service.addUrl(url, options: options, autoStart: _autoStart);
     Navigator.of(context).pop();
@@ -155,6 +174,18 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
+                FolderPathField(
+                  controller: _targetPath,
+                  label: 'Save to folder (optional)',
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: _description,
+                  decoration: const InputDecoration(
+                    labelText: 'Description (optional)',
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
                 DropdownMenu<ChunkMode>(
                   initialSelection: _mode,
                   label: const Text('Chunk mode'),
@@ -179,6 +210,27 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
                     labelText: 'Speed limit (optional)',
                     hintText: 'e.g. 2M, 500k — empty = unlimited',
                   ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Write diagnostic journal'),
+                  value: _journal,
+                  onChanged: (v) => setState(() => _journal = v),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                KeyValueEditor(
+                  controller: _headersCtrl,
+                  label: 'HTTP Headers',
+                  keyHint: 'Header name',
+                  valueHint: 'Value',
+                ),
+                const SizedBox(height: AppSpacing.md),
+                KeyValueEditor(
+                  controller: _metadataCtrl,
+                  label: 'Metadata',
+                  keyHint: 'Key',
+                  valueHint: 'Value',
                 ),
               ],
               if (_error != null)
