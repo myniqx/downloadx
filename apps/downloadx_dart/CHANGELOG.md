@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.0
 
 - **HLS unified into the chunk pipeline.** Each HLS segment is now downloaded as
   an `isSegment` `Chunk` through the normal `driveChunks` path (parallelism

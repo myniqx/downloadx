@@ -56,7 +56,7 @@ void main() {
 
       const id = 'vid';
       // Stale part: 300 bytes of the WRONG content (zeros).
-      await io.writeFile('/downloads/file.bin$tempExt', Uint8List(300));
+      await io.writeFile('/cache/vid$tempExt', Uint8List(300));
       await persistMeta(
         io,
         MetaLocator(dir: '/cache', id: id),
@@ -81,7 +81,7 @@ void main() {
 
       const id = 'lmid';
       await io.writeFile(
-          '/downloads/file.bin$tempExt', Uint8List.sublistView(body, 0, 400));
+          '/cache/lmid$tempExt', Uint8List.sublistView(body, 0, 400));
       await persistMeta(
         io,
         MetaLocator(dir: '/cache', id: id),

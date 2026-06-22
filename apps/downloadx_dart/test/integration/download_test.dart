@@ -22,7 +22,7 @@ void main() {
       expect(dl.state, DownloadState.completed);
       expect(h.io.files['/downloads/file.bin'], equals(body));
       // Part file renamed away.
-      expect(h.io.files.containsKey('/downloads/file.bin$tempExt'), isFalse);
+      expect(h.io.files.keys.any((k) => k.endsWith(tempExt)), isFalse);
       // More than one chunk was actually used.
       final getCount =
           h.io.fetcher.requests.where((r) => r.method == 'GET').length;
@@ -88,7 +88,7 @@ void main() {
       // Seed a half-finished download: part file with the first 500 bytes and a
       // paused meta describing a single 1000-byte chunk at 500/1000.
       await io.writeFile(
-          '/downloads/file.bin$tempExt', Uint8List.sublistView(body, 0, 500));
+          '/cache/fixedid$tempExt', Uint8List.sublistView(body, 0, 500));
       final meta = createMeta(
         id: id,
         url: _url,
