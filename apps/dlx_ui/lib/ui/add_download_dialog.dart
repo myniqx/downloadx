@@ -6,49 +6,92 @@ import '../util/format.dart';
 import '../util/palette.dart';
 import 'widgets/folder_path_field.dart';
 import 'widgets/key_value_editor.dart';
+import 'widgets/slider_number_field.dart';
 
 Future<void> showAddDownloadDialog(
   BuildContext context,
   DownloadService service, {
   String? initialUrl,
+  DownloadOptions? initialOptions,
 }) {
   return showDialog<void>(
     context: context,
-    builder: (_) => _AddDownloadDialog(service: service, initialUrl: initialUrl),
+    builder: (_) => _AddDownloadDialog(
+      service: service,
+      initialUrl: initialUrl,
+      initialOptions: initialOptions,
+    ),
   );
 }
 
 class _AddDownloadDialog extends StatefulWidget {
   final DownloadService service;
   final String? initialUrl;
-  const _AddDownloadDialog({required this.service, this.initialUrl});
+  final DownloadOptions? initialOptions;
+
+  const _AddDownloadDialog({
+    required this.service,
+    this.initialUrl,
+    this.initialOptions,
+  });
 
   @override
   State<_AddDownloadDialog> createState() => _AddDownloadDialogState();
 }
 
 class _AddDownloadDialogState extends State<_AddDownloadDialog> {
-  late final _url = TextEditingController(text: widget.initialUrl ?? '');
-  final _filename = TextEditingController();
-  final _targetPath = TextEditingController();
-  final _description = TextEditingController();
-  final _chunkCount = TextEditingController();
-  final _speedLimit = TextEditingController();
-  ChunkMode _mode = ChunkMode.auto;
-  bool _autoStart = true;
-  bool _journal = false;
+  late final TextEditingController _url;
+  late final TextEditingController _filename;
+  late final TextEditingController _targetPath;
+  late final TextEditingController _description;
+  late int _chunkCount;
+  late int _speedLimit;
+  late ChunkMode _mode;
+  late bool _autoStart;
+  late bool _journal;
   bool _showAdvanced = false;
   String? _error;
 
-  final _headersCtrl = KeyValueEditorController();
-  final _metadataCtrl = KeyValueEditorController();
+  late final KeyValueEditorController _headersCtrl;
+  late final KeyValueEditorController _metadataCtrl;
+
+  static const int _maxSpeedBytes = 100 * 1024 * 1024;
+  static const int _speedStep = 256 * 1024;
+  static const int _maxChunks = 32;
+
+  DownloadOptions? get _opts => widget.initialOptions;
 
   @override
   void initState() {
     super.initState();
+    _url = TextEditingController(text: widget.initialUrl ?? '');
+    _filename = TextEditingController(text: _opts?.filename ?? '');
+    _targetPath = TextEditingController(text: _opts?.targetPath ?? '');
+    _description = TextEditingController(text: _opts?.description ?? '');
+    _chunkCount = _opts?.targetChunkCount ?? 4;
+    _speedLimit = _opts?.speedLimit ?? 0;
+    _mode = _opts?.chunkMode ?? ChunkMode.auto;
+    _autoStart = _opts?.autoStart ?? true;
+    _journal = _opts?.journal ?? false;
+    _headersCtrl = KeyValueEditorController();
+    _metadataCtrl = KeyValueEditorController();
+
     _url.addListener(_onUrlChanged);
     if (widget.initialUrl != null) _prefillFilenameIfHls(widget.initialUrl!);
+
+    if (_opts != null && _hasAnyAdvanced(_opts!)) _showAdvanced = true;
   }
+
+  static bool _hasAnyAdvanced(DownloadOptions o) =>
+      o.filename != null ||
+      o.targetPath != null ||
+      o.description != null ||
+      o.chunkMode != null ||
+      o.targetChunkCount != null ||
+      o.speedLimit != null ||
+      o.journal != null ||
+      (o.headers?.isNotEmpty ?? false) ||
+      (o.metadata?.isNotEmpty ?? false);
 
   void _onUrlChanged() => _prefillFilenameIfHls(_url.text.trim());
 
@@ -74,8 +117,6 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
     _filename.dispose();
     _targetPath.dispose();
     _description.dispose();
-    _chunkCount.dispose();
-    _speedLimit.dispose();
     _headersCtrl.dispose();
     _metadataCtrl.dispose();
     super.dispose();
@@ -87,14 +128,6 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       setState(() => _error = 'Enter a valid URL (http/https).');
       return;
     }
-    int? speedLimit;
-    if (_speedLimit.text.trim().isNotEmpty) {
-      speedLimit = parseSpeedLimit(_speedLimit.text);
-      if (speedLimit == null) {
-        setState(() => _error = 'Speed limit looks invalid (try "2M", "500k").');
-        return;
-      }
-    }
     final headers = _headersCtrl.read();
     final metadata = _metadataCtrl.read();
     final options = DownloadOptions(
@@ -102,8 +135,8 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
       targetPath: _targetPath.text.trim().isEmpty ? null : _targetPath.text.trim(),
       description: _description.text.trim().isEmpty ? null : _description.text.trim(),
       chunkMode: _mode,
-      targetChunkCount: int.tryParse(_chunkCount.text.trim()),
-      speedLimit: speedLimit,
+      targetChunkCount: _chunkCount,
+      speedLimit: _speedLimit == 0 ? null : _speedLimit,
       journal: _journal ? true : null,
       headers: headers.isEmpty ? null : headers,
       metadata: metadata.isEmpty ? null : metadata,
@@ -196,20 +229,29 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
                       .toList(),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                TextField(
-                  controller: _chunkCount,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Target chunk count (optional)',
-                  ),
+                Text('Target chunk count',
+                    style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface)),
+                const SizedBox(height: AppSpacing.xs),
+                SliderNumberField(
+                  value: _chunkCount,
+                  min: 1,
+                  max: _maxChunks,
+                  step: 1,
+                  labelBuilder: (v) => '$v',
+                  onChanged: (v) => setState(() => _chunkCount = v),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                TextField(
-                  controller: _speedLimit,
-                  decoration: const InputDecoration(
-                    labelText: 'Speed limit (optional)',
-                    hintText: 'e.g. 2M, 500k — empty = unlimited',
-                  ),
+                Text('Speed limit',
+                    style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface)),
+                const SizedBox(height: AppSpacing.xs),
+                SliderNumberField(
+                  value: _speedLimit,
+                  min: 0,
+                  max: _maxSpeedBytes,
+                  step: _speedStep,
+                  labelBuilder: (v) => v == 0 ? 'Unlimited' : formatSpeedLimit(v),
+                  inputParser: (s) => s.trim().toLowerCase() == 'unlimited' ? 0 : parseSpeedLimit(s),
+                  onChanged: (v) => setState(() => _speedLimit = v),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 SwitchListTile(
@@ -224,6 +266,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
                   label: 'HTTP Headers',
                   keyHint: 'Header name',
                   valueHint: 'Value',
+                  initialValues: _opts?.headers,
                 ),
                 const SizedBox(height: AppSpacing.md),
                 KeyValueEditor(
@@ -231,6 +274,7 @@ class _AddDownloadDialogState extends State<_AddDownloadDialog> {
                   label: 'Metadata',
                   keyHint: 'Key',
                   valueHint: 'Value',
+                  initialValues: _opts?.metadata,
                 ),
               ],
               if (_error != null)

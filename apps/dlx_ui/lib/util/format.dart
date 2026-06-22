@@ -25,6 +25,15 @@ String formatDuration(int ms) {
 String formatPercent(double? percent) =>
     percent == null ? '—' : '${percent.toStringAsFixed(1)}%';
 
+/// Format bytes/sec back into a compact string suitable for the speed-limit field.
+String formatSpeedLimit(int bytesPerSec) {
+  if (bytesPerSec == 0) return '0';
+  if (bytesPerSec % (1024 * 1024 * 1024) == 0) return '${bytesPerSec ~/ (1024 * 1024 * 1024)}G';
+  if (bytesPerSec % (1024 * 1024) == 0) return '${bytesPerSec ~/ (1024 * 1024)}M';
+  if (bytesPerSec % 1024 == 0) return '${bytesPerSec ~/ 1024}k';
+  return '$bytesPerSec';
+}
+
 /// Parse a speed-limit string like "2", "2M", "500k", "1.5g" into bytes/sec.
 /// Returns null on empty, 0 for an explicit 0 (= unlimited).
 int? parseSpeedLimit(String raw) {

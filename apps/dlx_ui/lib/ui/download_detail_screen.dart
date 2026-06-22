@@ -7,6 +7,10 @@ import '../util/format.dart';
 import '../util/palette.dart';
 import 'widgets/chunk_speed_panel.dart';
 import 'widgets/chunk_viz.dart';
+import 'widgets/editable_field.dart';
+import 'widgets/folder_path_field.dart';
+import 'widgets/key_value_editor.dart';
+import 'widgets/slider_number_field.dart';
 
 class DownloadDetailScreen extends StatelessWidget {
   final DownloadVm vm;
@@ -171,23 +175,36 @@ class _MobileLayout extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _displayName(d.filename, d.url),
-                style: AppTextStyles.headlineLgMobile
-                    .copyWith(color: AppColors.onSurface),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              EditableField(
+                viewBuilder: () => Text(
+                  _displayName(d.filename, d.url),
+                  style: AppTextStyles.headlineLgMobile
+                      .copyWith(color: AppColors.onSurface),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                editBuilder: (confirm, cancel) {
+                  final ctrl = TextEditingController(text: d.filename ?? '');
+                  return _InlineTextEdit(
+                    controller: ctrl,
+                    onConfirm: () {
+                      vm.download.setFilename(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                      confirm();
+                    },
+                    onCancel: cancel,
+                  );
+                },
               ),
-              if (d.targetPath != null) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Row(
+              const SizedBox(height: AppSpacing.xs),
+              EditableField(
+                viewBuilder: () => Row(
                   children: [
                     const Icon(Icons.folder_open_outlined,
                         size: 14, color: AppColors.onSurfaceVariant),
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
                       child: Text(
-                        d.targetPath!,
+                        d.targetPath ?? '—',
                         style: AppTextStyles.labelSm
                             .copyWith(color: AppColors.onSurfaceVariant),
                         maxLines: 1,
@@ -196,7 +213,18 @@ class _MobileLayout extends StatelessWidget {
                     ),
                   ],
                 ),
-              ],
+                editBuilder: (confirm, cancel) {
+                  final ctrl = TextEditingController(text: d.targetPath ?? '');
+                  return _InlineFolderEdit(
+                    controller: ctrl,
+                    onConfirm: () {
+                      vm.download.setTargetPath(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                      confirm();
+                    },
+                    onCancel: cancel,
+                  );
+                },
+              ),
               const SizedBox(height: AppSpacing.xs),
               Row(
                 children: [
@@ -314,6 +342,10 @@ class _MobileLayout extends StatelessWidget {
 
         // Controls
         _ControlButtons(vm: vm, service: service),
+        const SizedBox(height: AppSpacing.md),
+
+        // Settings
+        _DownloadSettingsCard(vm: vm),
 
         // Diagnostics
         if (d.recentDiagnostics.isNotEmpty) ...[
@@ -370,23 +402,37 @@ class _DesktopLayout extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            _displayName(d.filename, d.url),
-                            style: AppTextStyles.headlineLgMobile
-                                .copyWith(color: AppColors.onSurface),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          EditableField(
+                            viewBuilder: () => Text(
+                              _displayName(d.filename, d.url),
+                              style: AppTextStyles.headlineLgMobile
+                                  .copyWith(color: AppColors.onSurface),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            editBuilder: (confirm, cancel) {
+                              final ctrl = TextEditingController(text: d.filename ?? '');
+                              return _InlineTextEdit(
+                                controller: ctrl,
+                                onConfirm: () {
+                                  vm.download.setFilename(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                                  vm.refresh();
+                                  confirm();
+                                },
+                                onCancel: cancel,
+                              );
+                            },
                           ),
                           const SizedBox(height: AppSpacing.xs),
-                          if (d.targetPath != null)
-                            Row(
+                          EditableField(
+                            viewBuilder: () => Row(
                               children: [
                                 const Icon(Icons.folder_open_outlined,
                                     size: 14, color: AppColors.onSurfaceVariant),
                                 const SizedBox(width: AppSpacing.xs),
                                 Expanded(
                                   child: Text(
-                                    d.targetPath!,
+                                    d.targetPath ?? '—',
                                     style: AppTextStyles.labelSm.copyWith(
                                         color: AppColors.onSurfaceVariant),
                                     maxLines: 1,
@@ -395,6 +441,19 @@ class _DesktopLayout extends StatelessWidget {
                                 ),
                               ],
                             ),
+                            editBuilder: (confirm, cancel) {
+                              final ctrl = TextEditingController(text: d.targetPath ?? '');
+                              return _InlineFolderEdit(
+                                controller: ctrl,
+                                onConfirm: () {
+                                  vm.download.setTargetPath(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                                  vm.refresh();
+                                  confirm();
+                                },
+                                onCancel: cancel,
+                              );
+                            },
+                          ),
                           const SizedBox(height: AppSpacing.xs),
                           Row(
                             children: [
@@ -512,6 +571,10 @@ class _DesktopLayout extends StatelessWidget {
                 ),
               ),
 
+              // Settings
+              const SizedBox(height: AppSpacing.lg),
+              _DownloadSettingsCard(vm: vm),
+
               // Diagnostics
               if (d.recentDiagnostics.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
@@ -570,25 +633,10 @@ class _DesktopLayout extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Actions',
-                            style: AppTextStyles.labelSm.copyWith(
-                                color: AppColors.onSurfaceVariant,
-                                letterSpacing: 0.8)),
-                        TextButton.icon(
-                          icon: const Icon(Icons.tune_rounded, size: 14),
-                          label: const Text('Limit Speed'),
-                          style: TextButton.styleFrom(
-                            textStyle: AppTextStyles.labelSm,
-                            foregroundColor: AppColors.onSurfaceVariant,
-                            padding: EdgeInsets.zero,
-                          ),
-                          onPressed: () {},
-                        ),
-                      ],
-                    ),
+                    Text('Actions',
+                        style: AppTextStyles.labelSm.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                            letterSpacing: 0.8)),
                     const SizedBox(height: AppSpacing.sm),
                     _ControlButtons(vm: vm, service: service, dense: true),
                   ],
@@ -1074,6 +1122,333 @@ String _displayName(String? filename, String url) {
   if (filename != null && filename.isNotEmpty) return filename;
   final path = Uri.tryParse(url)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull;
   return path ?? url;
+}
+
+// ---------------------------------------------------------------------------
+// Download settings card
+// ---------------------------------------------------------------------------
+
+class _DownloadSettingsCard extends StatefulWidget {
+  final DownloadVm vm;
+  const _DownloadSettingsCard({required this.vm});
+
+  @override
+  State<_DownloadSettingsCard> createState() => _DownloadSettingsCardState();
+}
+
+class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
+  static const int _maxSpeedBytes = 100 * 1024 * 1024;
+  static const int _speedStep = 256 * 1024;
+  static const int _maxChunks = 32;
+
+  DownloadVm get vm => widget.vm;
+
+  void _refresh() => vm.refresh();
+
+  @override
+  Widget build(BuildContext context) {
+    final d = vm.desc;
+    final dl = vm.download;
+    final currentSpeed = dl.speedLimit > 0 ? dl.speedLimit.toInt() : 0;
+    final currentChunks = dl.targetChunkCount.clamp(1, _maxChunks);
+    final currentJournal = dl.journal;
+    final currentHeaders = Map<String, String>.from(dl.headers);
+    final currentMetadata = d.metadata ?? {};
+
+    return _GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(title: 'Settings', icon: Icons.tune_rounded),
+          const SizedBox(height: AppSpacing.md),
+
+          // Description
+          EditableField(
+            label: 'Description',
+            viewBuilder: () => Text(
+              d.description?.isNotEmpty == true ? d.description! : '—',
+              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            editBuilder: (confirm, cancel) {
+              final ctrl = TextEditingController(text: d.description ?? '');
+              return _InlineTextEdit(
+                controller: ctrl,
+                onConfirm: () {
+                  dl.setDescription(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                  _refresh();
+                  confirm();
+                },
+                onCancel: cancel,
+              );
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // Speed limit
+          EditableField(
+            label: 'Speed limit',
+            viewBuilder: () => Text(
+              currentSpeed == 0 ? 'Unlimited' : formatSpeedLimit(currentSpeed),
+              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+            ),
+            editBuilder: (confirm, cancel) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Speed limit',
+                    style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface)),
+                const SizedBox(height: AppSpacing.xs),
+                SliderNumberField(
+                  value: currentSpeed,
+                  min: 0,
+                  max: _maxSpeedBytes,
+                  step: _speedStep,
+                  labelBuilder: (v) => v == 0 ? 'Unlimited' : formatSpeedLimit(v),
+                  inputParser: (s) =>
+                      s.trim().toLowerCase() == 'unlimited' ? 0 : parseSpeedLimit(s),
+                  onChanged: (v) {
+                    dl.setSpeedLimit(v == 0 ? null : v);
+                    _refresh();
+                  },
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(onPressed: confirm, child: const Text('Done')),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // Target chunk count
+          EditableField(
+            label: 'Target chunk count',
+            viewBuilder: () => Text(
+              '$currentChunks',
+              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+            ),
+            editBuilder: (confirm, cancel) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Target chunk count',
+                    style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface)),
+                const SizedBox(height: AppSpacing.xs),
+                SliderNumberField(
+                  value: currentChunks,
+                  min: 1,
+                  max: _maxChunks,
+                  step: 1,
+                  labelBuilder: (v) => '$v',
+                  onChanged: (v) {
+                    dl.setTargetChunkCount(v);
+                    _refresh();
+                  },
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(onPressed: confirm, child: const Text('Done')),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // Journal
+          EditableField(
+            label: 'Write diagnostic journal',
+            viewBuilder: () => Text(
+              currentJournal ? 'Enabled' : 'Disabled',
+              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+            ),
+            editBuilder: (confirm, cancel) => Row(
+              children: [
+                Expanded(
+                  child: Text('Write diagnostic journal',
+                      style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface)),
+                ),
+                Switch(
+                  value: currentJournal,
+                  onChanged: (v) {
+                    dl.setJournal(v);
+                    _refresh();
+                    confirm();
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // Headers
+          EditableField(
+            label: 'HTTP Headers',
+            viewBuilder: () => Text(
+              currentHeaders.isEmpty ? 'none' : '${currentHeaders.length} entries',
+              style: AppTextStyles.bodyMd.copyWith(
+                color: currentHeaders.isEmpty ? AppColors.outlineVariant : AppColors.onSurfaceVariant,
+              ),
+            ),
+            editBuilder: (confirm, cancel) {
+              final ctrl = KeyValueEditorController();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  KeyValueEditor(
+                    controller: ctrl,
+                    label: 'HTTP Headers',
+                    keyHint: 'Header name',
+                    valueHint: 'Value',
+                    initialValues: currentHeaders,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(onPressed: cancel, child: const Text('Cancel')),
+                      const SizedBox(width: AppSpacing.xs),
+                      FilledButton(
+                        onPressed: () {
+                          final newMap = ctrl.read();
+                          dl.clearHeaders();
+                          if (newMap.isNotEmpty) dl.setHeaders(newMap.map((k, v) => MapEntry(k, v)));
+                          _refresh();
+                          confirm();
+                        },
+                        child: const Text('Confirm'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // Metadata
+          EditableField(
+            label: 'Metadata',
+            viewBuilder: () => Text(
+              currentMetadata.isEmpty ? 'none' : '${currentMetadata.length} entries',
+              style: AppTextStyles.bodyMd.copyWith(
+                color: currentMetadata.isEmpty ? AppColors.outlineVariant : AppColors.onSurfaceVariant,
+              ),
+            ),
+            editBuilder: (confirm, cancel) {
+              final ctrl = KeyValueEditorController();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  KeyValueEditor(
+                    controller: ctrl,
+                    label: 'Metadata',
+                    keyHint: 'Key',
+                    valueHint: 'Value',
+                    initialValues: currentMetadata,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(onPressed: cancel, child: const Text('Cancel')),
+                      const SizedBox(width: AppSpacing.xs),
+                      FilledButton(
+                        onPressed: () {
+                          final newMap = ctrl.read();
+                          dl.clearMetadata();
+                          if (newMap.isNotEmpty) dl.setMetadata(newMap.map((k, v) => MapEntry(k, v)));
+                          _refresh();
+                          confirm();
+                        },
+                        child: const Text('Confirm'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineTextEdit extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onConfirm;
+  final VoidCallback onCancel;
+
+  const _InlineTextEdit({
+    required this.controller,
+    required this.onConfirm,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(isDense: true),
+            onSubmitted: (_) => onConfirm(),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.check_rounded, size: 18),
+          color: AppColors.primary,
+          tooltip: 'Confirm',
+          onPressed: onConfirm,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          padding: EdgeInsets.zero,
+        ),
+        IconButton(
+          icon: const Icon(Icons.close_rounded, size: 18),
+          color: AppColors.onSurfaceVariant,
+          tooltip: 'Cancel',
+          onPressed: onCancel,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          padding: EdgeInsets.zero,
+        ),
+      ],
+    );
+  }
+}
+
+class _InlineFolderEdit extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onConfirm;
+  final VoidCallback onCancel;
+
+  const _InlineFolderEdit({
+    required this.controller,
+    required this.onConfirm,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FolderPathField(controller: controller),
+        const SizedBox(height: AppSpacing.xs),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(onPressed: onCancel, child: const Text('Cancel')),
+            const SizedBox(width: AppSpacing.xs),
+            FilledButton(onPressed: onConfirm, child: const Text('Confirm')),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 String _stateLabel(DownloadState s) => switch (s) {

@@ -27,6 +27,7 @@ class KeyValueEditor extends StatefulWidget {
   final String keyHint;
   final String valueHint;
   final KeyValueEditorController? controller;
+  final Map<String, String>? initialValues;
 
   const KeyValueEditor({
     super.key,
@@ -34,6 +35,7 @@ class KeyValueEditor extends StatefulWidget {
     this.keyHint = 'Key',
     this.valueHint = 'Value',
     this.controller,
+    this.initialValues,
   });
 
   @override
@@ -41,12 +43,23 @@ class KeyValueEditor extends StatefulWidget {
 }
 
 class _KeyValueEditorState extends State<KeyValueEditor> {
-  final _entries = <_KvEntry>[_KvEntry()];
+  late final List<_KvEntry> _entries;
 
   @override
   void initState() {
     super.initState();
     widget.controller?._state = this;
+    final initial = widget.initialValues;
+    if (initial != null && initial.isNotEmpty) {
+      _entries = initial.entries.map((e) {
+        final entry = _KvEntry();
+        entry.key.text = e.key;
+        entry.value.text = e.value;
+        return entry;
+      }).toList();
+    } else {
+      _entries = [_KvEntry()];
+    }
   }
 
   @override
@@ -89,8 +102,6 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(widget.label, style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(height: AppSpacing.xs),
         ...List.generate(_entries.length, (i) {
           final e = _entries[i];
           final partial = _hasPartial(e);
