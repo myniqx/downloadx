@@ -159,8 +159,8 @@ export class DownloadX implements DlxContext {
   }
 
   /** Manager-wide bandwidth cap in bytes/sec shared by all downloads. 0 = unlimited. */
-  setSpeedLimit(bytesPerSec: number): void {
-    this._sharedThrottle.setCapacity(bytesPerSec);
+  setSpeedLimit(bytesPerSec: number | null): void {
+    this._sharedThrottle.setCapacity(bytesPerSec ?? DEFAULT_CONFIG.speedLimit);
   }
 
   get speedLimit(): number {
@@ -191,11 +191,12 @@ export class DownloadX implements DlxContext {
 
   /** Upper bound on live chunks per download; takes effect on the next split decision.
    *  Only updates downloads that still carry the old global value; pass `override` to force all. */
-  setTargetChunkCount(n: number, override = false): void {
+  setTargetChunkCount(n: number | null, override = false): void {
+    const effective = n ?? DEFAULT_CONFIG.targetChunkCount;
     const old = this.baseConfig.targetChunkCount ?? DEFAULT_CONFIG.targetChunkCount;
-    this.baseConfig.targetChunkCount = n;
+    this.baseConfig.targetChunkCount = effective;
     for (const dl of this.downloads.values()) {
-      if (override || dl.targetChunkCount === old) dl.setTargetChunkCount(n);
+      if (override || dl.targetChunkCount === old) dl.setTargetChunkCount(effective);
     }
   }
 
@@ -205,11 +206,12 @@ export class DownloadX implements DlxContext {
 
   /** Minimum bytes remaining before a chunk can be split; takes effect on the next split decision.
    *  Only updates downloads that still carry the old global value; pass `override` to force all. */
-  setMinChunkSize(bytes: number, override = false): void {
+  setMinChunkSize(bytes: number | null, override = false): void {
+    const effective = bytes ?? DEFAULT_CONFIG.minChunkSize;
     const old = this.baseConfig.minChunkSize ?? DEFAULT_CONFIG.minChunkSize;
-    this.baseConfig.minChunkSize = bytes;
+    this.baseConfig.minChunkSize = effective;
     for (const dl of this.downloads.values()) {
-      if (override || dl.minChunkSize === old) dl.setMinChunkSize(bytes);
+      if (override || dl.minChunkSize === old) dl.setMinChunkSize(effective);
     }
   }
 
@@ -219,11 +221,12 @@ export class DownloadX implements DlxContext {
 
   /** Toggle NDJSON journal writing; takes effect on the next diagnostic event.
    *  Only updates downloads that still carry the old global value; pass `override` to force all. */
-  setJournal(enabled: boolean, override = false): void {
+  setJournal(enabled: boolean | null, override = false): void {
+    const effective = enabled ?? false;
     const old = this.baseConfig.journal ?? false;
-    this.baseConfig.journal = enabled;
+    this.baseConfig.journal = effective;
     for (const dl of this.downloads.values()) {
-      if (override || dl.journal === old) dl.setJournal(enabled);
+      if (override || dl.journal === old) dl.setJournal(effective);
     }
   }
 

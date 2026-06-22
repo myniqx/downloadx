@@ -9,8 +9,9 @@ const HELP = `
 downloadx — download manager CLI
 
 Usage:
-  downloadx add --url <url> [--filename <name>] [--speedLimit <n>] [--targetPath <dir>]
-                [--targetChunkCount <n>] [--minChunkSize <n>] [--journal true|false]
+  downloadx add --url <url> [--filename <name>] [--description <text>] [--speedLimit <n>]
+                [--targetPath <dir>] [--targetChunkCount <n>] [--minChunkSize <n>]
+                [--journal true|false] [--metadata.key <val>] [--header.Key <val>]
   downloadx list                                          List all downloads
   downloadx status --id <#|id> [--json]                  Detailed status for a download
   downloadx pause  --id <#|id> | --all                   Pause one or all downloads
@@ -26,8 +27,11 @@ Usage:
   downloadx set <key> <value> [--id <#|id>] [--override]  Set a config value (--override forces all downloads)
   downloadx get [key] [--id <#|id>]                      Get one or all config values
 
-  Config keys: maxParallel, speedLimit, targetPath, targetChunkCount, minChunkSize, journal
-  Per-download keys (--id): speedLimit, targetPath, targetChunkCount, minChunkSize, journal
+  Config keys: maxParallel, speedLimit, targetPath, targetChunkCount, minChunkSize, journal, headers
+  Per-download keys (--id): speedLimit, targetPath, targetChunkCount, minChunkSize, journal,
+                             filename, description, metadata, headers
+  Dot-notation: set metadata.key value --id <#>   set headers.Authorization "Bearer x"
+  Null value:   set speedLimit null --id <#>       (clears per-download override)
   <#> refers to the index shown by 'list' (e.g. 1, 2, #1, #2)
 `.trim();
 
@@ -72,10 +76,10 @@ export async function runCli(argv: string[]): Promise<void> {
 
   switch (cmd) {
     case 'add': {
-      const { url, filename, options: addOpts } = parseAddOptions(args);
+      const { url, options: addOpts } = parseAddOptions(args);
       if (!url) cliError('Usage: downloadx add --url <url> [--filename <name>] [--speedLimit <n>] ...');
       try {
-        await cmdAdd(url, filename, addOpts);
+        await cmdAdd(url, addOpts);
       } catch (e) {
         cliError(`Could not add download: ${e instanceof Error ? e.message : e}`);
       }
@@ -83,7 +87,7 @@ export async function runCli(argv: string[]): Promise<void> {
     }
     case 'list': {
       try {
-        await cmdList();
+        await cmdList(json);
       } catch (e) {
         cliError(`Could not list downloads: ${e instanceof Error ? e.message : e}`);
       }
@@ -157,18 +161,24 @@ export async function runCli(argv: string[]): Promise<void> {
       const value = positional[1];
       try {
         await ensureDaemon();
-        const result = await sendRequest<string | null>({
+        const result = await sendRequest<{ key: string; description: string }[] | { key: string; description: string } | null>({
           cmd: 'set',
           key,
           value,
           ...(overlayId ? { id: overlayId } : {}),
           ...(override ? { override } : {}),
         });
-        if (result) console.log(result);
-        else if (key && value)
-          console.log(
-            `Set ${key} = ${value}${overlayId ? ` for download ${overlayId}` : ''}${override ? ' (override)' : ''}`,
-          );
+        if (result === null) {
+          if (key && value)
+            console.log(`Set ${key} = ${value}${overlayId ? ` for download ${overlayId}` : ''}${override ? ' (override)' : ''}`);
+        } else if (json) {
+          console.log(JSON.stringify(result, null, 2));
+        } else if (Array.isArray(result)) {
+          const colW = Math.max(...result.map((r) => r.key.length)) + 2;
+          for (const r of result) console.log(`  ${r.key.padEnd(colW)} ${r.description}`);
+        } else {
+          console.log(`${result.key}: ${result.description}`);
+        }
       } catch (e) {
         cliError(`${e instanceof Error ? e.message : e}`);
       }
@@ -183,7 +193,9 @@ export async function runCli(argv: string[]): Promise<void> {
           key,
           ...(overlayId ? { id: overlayId } : {}),
         });
-        if (key) {
+        if (json) {
+          console.log(JSON.stringify(key ? { [key]: result } : result, null, 2));
+        } else if (key) {
           console.log(`${key} = ${result}`);
         } else {
           for (const [k, v] of Object.entries(result as Record<string, unknown>)) {

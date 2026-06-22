@@ -1,5 +1,6 @@
 import { describe, it, afterEach } from 'vitest';
 
+import { DEFAULT_CONFIG } from '../../src/daemon/config.ts';
 import { createTestEnv, type TestEnv } from '../helpers/env.ts';
 
 const TEST_URL = 'http://localhost/test-file.bin';
@@ -14,13 +15,12 @@ describe('per-download config', () => {
     }
   });
 
-  it('fresh download has null overrides (inherits global)', async () => {
+  it('fresh download inherits global config values', async () => {
     env = await createTestEnv();
     await env.dx('add', '--url', TEST_URL);
     await env.assertDownloadConfig('#1', {
-      speedLimit: null,
-      targetPath: null,
-      targetChunkCount: null,
+      speedLimit: DEFAULT_CONFIG.speedLimit,
+      targetChunkCount: DEFAULT_CONFIG.targetChunkCount,
     });
   });
 
@@ -48,7 +48,7 @@ describe('per-download config', () => {
     });
   });
 
-  it('per-download config is independent from global config', async () => {
+  it('per-download override is independent from global config', async () => {
     env = await createTestEnv();
     await env.dx('add', '--url', TEST_URL);
     await env.dx('set', 'speedLimit', '500kb', '--id', '#1');

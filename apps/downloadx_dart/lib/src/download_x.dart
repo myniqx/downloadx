@@ -142,8 +142,8 @@ class DownloadX implements DlxContext {
       list().map((d) => d.describe()).toList();
 
   /// Manager-wide bandwidth cap shared by all downloads. 0 = unlimited.
-  void setSpeedLimit(int bytesPerSec) =>
-      _sharedThrottle.setCapacity(bytesPerSec);
+  void setSpeedLimit(int? bytesPerSec) =>
+      _sharedThrottle.setCapacity(bytesPerSec ?? DefaultConfig.speedLimit);
 
   @override
   num get speedLimit => _sharedThrottle.capacityBytesPerSec;
@@ -169,11 +169,12 @@ class DownloadX implements DlxContext {
 
   /// Upper bound on live chunks per download. Only updates downloads still
   /// carrying the old global value; pass `override` to force all.
-  void setTargetChunkCount(int n, {bool override = false}) {
+  void setTargetChunkCount(int? n, {bool override = false}) {
+    final effective = n ?? DefaultConfig.targetChunkCount;
     final old = _baseConfig.targetChunkCount ?? DefaultConfig.targetChunkCount;
-    _baseConfig.targetChunkCount = n;
+    _baseConfig.targetChunkCount = effective;
     for (final dl in _downloads.values) {
-      if (override || dl.targetChunkCount == old) dl.setTargetChunkCount(n);
+      if (override || dl.targetChunkCount == old) dl.setTargetChunkCount(effective);
     }
   }
 
@@ -183,11 +184,12 @@ class DownloadX implements DlxContext {
 
   /// Minimum bytes remaining before a chunk can be split. Only updates
   /// downloads still carrying the old global value; pass `override` to force all.
-  void setMinChunkSize(int bytes, {bool override = false}) {
+  void setMinChunkSize(int? bytes, {bool override = false}) {
+    final effective = bytes ?? DefaultConfig.minChunkSize;
     final old = _baseConfig.minChunkSize ?? DefaultConfig.minChunkSize;
-    _baseConfig.minChunkSize = bytes;
+    _baseConfig.minChunkSize = effective;
     for (final dl in _downloads.values) {
-      if (override || dl.minChunkSize == old) dl.setMinChunkSize(bytes);
+      if (override || dl.minChunkSize == old) dl.setMinChunkSize(effective);
     }
   }
 
@@ -197,11 +199,12 @@ class DownloadX implements DlxContext {
 
   /// Toggle NDJSON journal writing. Only updates downloads still carrying the
   /// old global value; pass `override` to force all.
-  void setJournal(bool enabled, {bool override = false}) {
+  void setJournal(bool? enabled, {bool override = false}) {
+    final effective = enabled ?? false;
     final old = _baseConfig.journal ?? false;
-    _baseConfig.journal = enabled;
+    _baseConfig.journal = effective;
     for (final dl in _downloads.values) {
-      if (override || dl.journal == old) dl.setJournal(enabled);
+      if (override || dl.journal == old) dl.setJournal(effective);
     }
   }
 

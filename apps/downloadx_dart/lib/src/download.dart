@@ -49,7 +49,7 @@ class Download implements GlobalConfig {
   @override
   int get maxParallel => _context.maxParallel;
   @override
-  num get speedLimit => _context.speedLimit;
+  num get speedLimit => _meta.speedLimit ?? _context.speedLimit;
   @override
   Throttle get sharedThrottle => _context.sharedThrottle;
 
@@ -170,7 +170,7 @@ class Download implements GlobalConfig {
   String get targetFilePath => io.joinPath([targetPath, filename]);
 
   /// Absolute path of the in-progress `.part` file.
-  String get partFilePath => '$targetFilePath$tempExt';
+  String get partFilePath => io.joinPath([cachePath, '$id$tempExt']);
 
   /// Start (or resume) the download. Completes on finish/pause/error.
   Future<void> start() {

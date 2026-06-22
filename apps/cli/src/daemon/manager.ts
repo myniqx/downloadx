@@ -144,8 +144,12 @@ export async function setGlobalConfig(
   rawValue: string,
   override: boolean,
 ): Promise<void> {
-  const def = resolveConfigKey(key, false);
-  def.setGlobalValue(getManager(), rawValue, override);
+  const dotIdx = key.indexOf('.');
+  const baseKey = dotIdx !== -1 ? key.slice(0, dotIdx) : key;
+  const subKey = dotIdx !== -1 ? key.slice(dotIdx + 1) : undefined;
+  const def = resolveConfigKey(baseKey, false);
+  const raw = subKey ? `${subKey}=${rawValue}` : rawValue;
+  def.setGlobalValue(getManager(), raw, override);
   await saveConfig(getGlobalConfig() as DaemonConfig);
 }
 
@@ -223,21 +227,16 @@ function attachListeners(dl: Download): void {
   });
 }
 
-/*
 export function setDownloadConfig(id: string, key: string, rawValue: string): void {
-  const dl = getManager().get(id);
-  if (!dl) throw new Error(`Download ${id} not active`);
-  const def = resolveConfigKey(key, true);
-  def.setLocalValue(dl, def.parse(rawValue));
+  const dl = resolveDownload(id);
+  if (!dl) throw new Error(`Download '${id}' not found`);
+  const dotIdx = key.indexOf('.');
+  const baseKey = dotIdx !== -1 ? key.slice(0, dotIdx) : key;
+  const subKey = dotIdx !== -1 ? key.slice(dotIdx + 1) : undefined;
+  const def = resolveConfigKey(baseKey, true);
+  const raw = subKey ? `${subKey}=${rawValue}` : rawValue;
+  def.setLocalValue(dl, raw);
 }
-
-export function getDownloadConfig(id: string, key: string): unknown {
-  const dl = getManager().get(id);
-  if (!dl) throw new Error(`Download ${id} not active`);
-  const def = resolveConfigKey(key, true);
-  return def.getValue(dl);
-}
-*/
 export async function addDownload(
   url: string,
   options: DownloadOptions,

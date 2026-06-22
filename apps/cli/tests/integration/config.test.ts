@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 
-import { CONFIG_KEYS, LOCAL_KEYS } from '../../src/daemon/config-keys.ts';
+import { CONFIG_KEYS, LOCAL_KEYS, LOCAL_KEY_MAP } from '../../src/daemon/config-keys.ts';
 import { DEFAULT_CONFIG } from '../../src/daemon/config.ts';
 import { createTestEnv, type TestEnv } from '../helpers/env.ts';
 
@@ -52,9 +52,10 @@ describe('daemon config persistence', () => {
 
   it('all global config keys are gettable', async () => {
     env = await createTestEnv();
-    const { stdout } = await env.dx('get');
-    for (const def of CONFIG_KEYS) {
-      expect(stdout, `key '${def.canonical}' missing from get output`).toContain(def.canonical);
+    const { stdout } = await env.dx('get', '--json');
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    for (const def of CONFIG_KEYS.filter((d) => !d.localOnly)) {
+      expect(Object.keys(parsed), `key '${def.canonical}' missing from get output`).toContain(def.canonical);
     }
   });
 
@@ -77,19 +78,21 @@ describe('daemon config persistence', () => {
       targetChunkCount: '6',
       minChunkSize: '512kb',
       journal: 'false',
+      'headers.X-Test': 'hello',
     };
 
-    const expectedParsed: Record<string, string | number | boolean> = {
+    const expectedParsed: Record<string, unknown> = {
       maxParallel: 8,
       speedLimit: 1024 * 1024,
       targetPath: `${env.workingDir}/custom-downloads`,
       targetChunkCount: 6,
       minChunkSize: 512 * 1024,
       journal: false,
+      headers: { 'X-Test': 'hello' },
     };
 
-    for (const def of CONFIG_KEYS) {
-      await env.dx('set', def.canonical, customValues[def.canonical]!);
+    for (const [key, value] of Object.entries(customValues)) {
+      await env.dx('set', key, value);
     }
 
     await env.dx('stop');

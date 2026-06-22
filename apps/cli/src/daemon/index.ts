@@ -18,6 +18,7 @@ import {
   onAutoShutdown,
   initManager,
   setGlobalConfig,
+  setDownloadConfig,
   getGlobalConfig,
   getDownloads,
   getAllIds,
@@ -49,11 +50,21 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
   switch (req.cmd) {
     case 'add': {
       const options: Record<string, unknown> = {};
-      if (req.filename !== undefined) options.filename = req.filename;
       if (req.options) {
         for (const [key, raw] of Object.entries(req.options)) {
-          const def = LOCAL_KEYS.find((d) => d.canonical.toLowerCase() === key.toLowerCase());
-          if (def) options[def.canonical] = def.parse(raw);
+          const dotIdx = key.indexOf('.');
+          const baseKey = dotIdx !== -1 ? key.slice(0, dotIdx).toLowerCase() : key.toLowerCase();
+          const subKey = dotIdx !== -1 ? key.slice(dotIdx + 1) : undefined;
+          const def = LOCAL_KEYS.find((d) => d.canonical.toLowerCase() === baseKey);
+          if (def) {
+            const rawForParse = subKey ? `${subKey}=${raw}` : raw;
+            const parsed = def.parse(rawForParse);
+            if (subKey && parsed !== null && typeof parsed === 'object') {
+              options[def.canonical] = { ...(options[def.canonical] as object ?? {}), ...parsed as object };
+            } else {
+              options[def.canonical] = parsed;
+            }
+          }
         }
       }
       const desc = await addDownload(req.url, options);
@@ -113,29 +124,24 @@ async function handleRequest(socket: Socket, req: IpcRequest): Promise<void> {
       const activeKeys = isLocal ? LOCAL_KEYS : CONFIG_KEYS;
 
       if (!req.key) {
-        const colW = Math.max(...activeKeys.map((d) => d.canonical.length)) + 2;
-        const lines = activeKeys
-          .map(
-            (d) =>
-              `  ${d.canonical.padEnd(colW)} ${isLocal ? (d.localDescription ?? d.description) : d.description}`,
-          )
-          .join('\n');
-        send(socket, { ok: true, data: lines });
+        const list = activeKeys.map((d) => ({
+          key: d.canonical,
+          description: isLocal ? (d.localDescription ?? d.description) : d.description,
+        }));
+        send(socket, { ok: true, data: list });
         break;
       }
 
-      const def = resolveConfigKey(req.key, isLocal);
+      const baseKey = req.key.includes('.') ? req.key.slice(0, req.key.indexOf('.')) : req.key;
+      const def = resolveConfigKey(baseKey, isLocal);
 
       if (!req.value) {
-        const desc = isLocal ? (def.localDescription ?? def.description) : def.description;
-        send(socket, { ok: true, data: `${def.canonical}: ${desc}` });
+        send(socket, { ok: true, data: { key: def.canonical, description: isLocal ? (def.localDescription ?? def.description) : def.description } });
         break;
       }
 
       if (isLocal) {
-        const dl = resolveDownload(resolveId(req.id!));
-        if (!dl) throw new Error(`No download matching '${req.id}'`);
-        def.setLocalValue(dl, req.value);
+        setDownloadConfig(resolveId(req.id!), req.key, req.value);
       } else {
         await setGlobalConfig(req.key, req.value, req.override === true);
       }

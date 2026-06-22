@@ -33,9 +33,14 @@ async function fileExists(p: string): Promise<boolean> {
   }
 }
 
-export async function cmdList(): Promise<void> {
+export async function cmdList(asJson = false): Promise<void> {
   await ensureDaemon();
   const downloads = await sendRequest<DownloadDescription[]>({ cmd: 'list' });
+
+  if (asJson) {
+    console.log(JSON.stringify(downloads, null, 2));
+    return;
+  }
 
   if (downloads.length === 0) {
     console.log('No downloads.');

@@ -67,7 +67,7 @@ export class Download implements GlobalConfig {
   get io(): InjectedFunctions { return this._context.io; }
   get cachePath(): string { return this._context.cachePath; }
   get maxParallel(): number { return this._context.maxParallel; }
-  get speedLimit(): number { return this._context.speedLimit; }
+  get speedLimit(): number { return this._meta.speedLimit ?? this._context.speedLimit; }
   get sharedThrottle(): GlobalConfig['sharedThrottle'] { return this._context.sharedThrottle; }
 
   get maxRetries(): number { return this._context.maxRetries; }
@@ -190,7 +190,7 @@ export class Download implements GlobalConfig {
   }
 
   get partFilePath(): string {
-    return `${this.targetFilePath}${TEMP_EXT}`;
+    return this.io.joinPath(this.cachePath, `${this.id}${TEMP_EXT}`);
   }
 
   /** Start (or resume) the download. Returns a promise that resolves on finish/pause/error. */

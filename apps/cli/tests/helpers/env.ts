@@ -14,19 +14,13 @@ export interface ExecResult {
   stderr: string;
 }
 
-export interface ListEntry {
-  index: number;
-  status: string;
-  nameOrUrl: string;
-}
-
 export type ConfigValue = string | number | boolean | null;
 
 export interface TestEnv {
   workingDir: string;
   dx: (...args: string[]) => Promise<ExecResult>;
   assertGet: (key: string, expected: string | number | boolean) => Promise<void>;
-  assertConfig: (expected: Record<string, ConfigValue>) => Promise<void>;
+  assertConfig: (expected: Record<string, unknown>) => Promise<void>;
   assertDownloadConfig: (id: string, expected: Record<string, ConfigValue>) => Promise<void>;
   assertList: (checks: { url?: string; status?: string }[]) => Promise<void>;
   cleanup: () => Promise<void>;
@@ -41,15 +35,19 @@ function parseValue(raw: string): ConfigValue {
 }
 
 function parseConfigOutput(stdout: string): Record<string, ConfigValue> {
-  const result: Record<string, ConfigValue> = {};
-  for (const line of stdout.split('\n')) {
-    const eq = line.indexOf(' = ');
-    if (eq === -1) continue;
-    const key = line.slice(0, eq).trim();
-    const val = line.slice(eq + 3).trim();
-    result[key] = parseValue(val);
+  try {
+    return JSON.parse(stdout) as Record<string, ConfigValue>;
+  } catch {
+    const result: Record<string, ConfigValue> = {};
+    for (const line of stdout.split('\n')) {
+      const eq = line.indexOf(' = ');
+      if (eq === -1) continue;
+      const key = line.slice(0, eq).trim();
+      const val = line.slice(eq + 3).trim();
+      result[key] = parseValue(val);
+    }
+    return result;
   }
-  return result;
 }
 
 export async function createTestEnv(): Promise<TestEnv> {
@@ -65,16 +63,16 @@ export async function createTestEnv(): Promise<TestEnv> {
   };
 
   const assertGet = async (key: string, expected: string | number | boolean): Promise<void> => {
-    const { stdout } = await dx('get', key);
-    const parsed = parseConfigOutput(stdout);
+    const { stdout } = await dx('get', key, '--json');
+    const parsed = JSON.parse(stdout) as Record<string, ConfigValue>;
     expect(parsed[key]).toBe(expected);
   };
 
-  const assertConfig = async (expected: Record<string, ConfigValue>): Promise<void> => {
-    const { stdout } = await dx('get');
-    const parsed = parseConfigOutput(stdout);
+  const assertConfig = async (expected: Record<string, unknown>): Promise<void> => {
+    const { stdout } = await dx('get', '--json');
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
     for (const [key, val] of Object.entries(expected)) {
-      expect(parsed[key], `config key '${key}'`).toBe(val);
+      expect(parsed[key], `config key '${key}'`).toEqual(val);
     }
   };
 
@@ -82,38 +80,22 @@ export async function createTestEnv(): Promise<TestEnv> {
     id: string,
     expected: Record<string, ConfigValue>,
   ): Promise<void> => {
-    const { stdout } = await dx('get', '--id', id);
-    const parsed = parseConfigOutput(stdout);
+    const { stdout } = await dx('get', '--id', id, '--json');
+    const parsed = JSON.parse(stdout) as Record<string, ConfigValue>;
     for (const [key, val] of Object.entries(expected)) {
       expect(parsed[key], `download config key '${key}'`).toBe(val);
     }
   };
 
-  const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
-
-  function parseList(stdout: string): ListEntry[] {
-    if (stdout === 'No downloads.') return [];
-    return stdout
-      .split('\n')
-      .filter((l) => l.trim())
-      .map((line) => {
-        const clean = stripAnsi(line);
-        const m = /^#(\d+)\s+\[(\w+)\s*\]\s+.+?\s{2}(.+)$/.exec(clean);
-        if (!m) return null;
-        return { index: Number(m[1]), status: m[2]!.toLowerCase(), nameOrUrl: m[3]!.trim() };
-      })
-      .filter((e): e is ListEntry => e !== null);
-  }
-
   const assertList = async (checks: { url?: string; status?: string }[]): Promise<void> => {
-    const { stdout } = await dx('list');
-    const entries = parseList(stdout);
+    const { stdout } = await dx('list', '--json');
+    const entries = JSON.parse(stdout) as { url: string; state: string }[];
     expect(entries.length, `expected ${checks.length} entries, got ${entries.length}`).toBe(checks.length);
     for (let i = 0; i < checks.length; i++) {
       const check = checks[i]!;
       const entry = entries[i]!;
-      if (check.url) expect(entry.nameOrUrl, `entry #${i + 1} url`).toContain(check.url);
-      if (check.status) expect(entry.status, `entry #${i + 1} status`).toBe(check.status);
+      if (check.url) expect(entry.url, `entry #${i + 1} url`).toContain(check.url);
+      if (check.status) expect(entry.state, `entry #${i + 1} status`).toBe(check.status);
     }
   };
 
