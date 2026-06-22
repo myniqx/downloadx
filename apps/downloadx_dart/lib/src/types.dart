@@ -579,6 +579,40 @@ class MetaFile {
 // Diagnostic / description payloads
 // ---------------------------------------------------------------------------
 
+/// A structured log entry stored in `{id}-log.json`.
+class LogEntry {
+  final DiagnosticLevel level;
+  final String code;
+  final Map<String, dynamic>? params;
+  final int timestamp;
+
+  const LogEntry({
+    this.level = DiagnosticLevel.info,
+    required this.code,
+    this.params,
+    required this.timestamp,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'level': level.name,
+    'code': code,
+    if (params != null) 'params': params,
+    'timestamp': timestamp,
+  };
+
+  factory LogEntry.fromJson(Map<String, dynamic> json) => LogEntry(
+    level: DiagnosticLevel.values.firstWhere(
+      (e) => e.name == json['level'],
+      orElse: () => DiagnosticLevel.info,
+    ),
+    code: json['code'] as String,
+    params: json['params'] as Map<String, dynamic>?,
+    timestamp: json['timestamp'] as int,
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 /// Machine-readable diagnostic record. Mirrors what the NDJSON journal stores,
 /// so log consumers and event consumers see identical data.
 class DiagnosticPayload {

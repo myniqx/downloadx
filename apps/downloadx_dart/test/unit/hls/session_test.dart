@@ -89,6 +89,8 @@ class _MockContext implements DlxContext {
   Map<String, String> get headers => _base.headers;
   @override
   DownloadxIo get io => _base.io;
+  @override
+  void addLog({DiagnosticLevel level = DiagnosticLevel.info, required String code, Map<String, dynamic>? params}) {}
 }
 
 ({HlsSession session, _MockContext ctx}) makeSession(Harness h) {

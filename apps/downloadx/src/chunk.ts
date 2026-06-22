@@ -216,6 +216,10 @@ export class Chunk {
     }
 
     this.setStatus('downloading');
+    this.params.global.addLog({
+      code: 'chunk.initialized',
+      params: { id: this.id, offset: this.offset, end: this.offset + this._length },
+    });
 
     try {
       await withRetry(
@@ -229,6 +233,11 @@ export class Chunk {
           onRetry: (info) => {
             this._retries += 1;
             this._lastError = toMessage(info.error);
+            this.params.global.addLog({
+              level: 'warn',
+              code: 'chunk.retry',
+              params: { id: this.id, attempt: info.attempt, message: this._lastError },
+            });
             this.params.emitter.emit('diagnostic', {
               downloadId: this.downloadId,
               chunkId: this.id,
@@ -242,12 +251,21 @@ export class Chunk {
         },
       );
       if (this._status === 'downloading') {
+        this.params.global.addLog({
+          code: 'chunk.completed',
+          params: { id: this.id, bytes: this._downloadedBytes },
+        });
         this.setStatus('completed');
       }
     } catch (err) {
       if (this._status === 'paused' || this._status === 'reassigned') return;
       if (err instanceof RangeNotHonoredError) this._failureCode = 'range-not-honored';
       this._lastError = toMessage(err);
+      this.params.global.addLog({
+        level: 'error',
+        code: 'chunk.failed',
+        params: { id: this.id, message: this._lastError },
+      });
       this.setStatus('failed');
       this.params.emitter.emit('error', {
         downloadId: this.downloadId,
@@ -266,6 +284,11 @@ export class Chunk {
     // partial progress cannot be resumed — discard it before re-requesting,
     // otherwise start-of-file bytes get written into the middle of the file.
     if (!this.params.acceptsRanges && this._downloadedBytes > 0) {
+      this.params.global.addLog({
+        level: 'warn',
+        code: 'chunk.no-range-restart',
+        params: { id: this.id, discarded: this._downloadedBytes },
+      });
       this.params.emitter.emit('diagnostic', {
         downloadId: this.downloadId,
         chunkId: this.id,
@@ -312,6 +335,10 @@ export class Chunk {
           headers['If-Range'] = validator;
         }
       }
+      this.params.global.addLog({
+        code: 'chunk.fetch.started',
+        params: { id: this.id, url: this.params.url, range: headers.Range ?? 'none' },
+      });
       armIdle();
       const res = await this.params.global.io.fetch(this.params.url, {
         method: 'GET',

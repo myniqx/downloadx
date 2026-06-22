@@ -9,6 +9,7 @@ import 'constants.dart';
 import 'events.dart';
 import 'hls/session.dart';
 import 'io.dart';
+import 'key2log.dart';
 import 'meta.dart';
 import 'probe.dart';
 import 'speed_tracker.dart';
@@ -39,6 +40,7 @@ class Download implements GlobalConfig {
   bool _rangeFallbackDone = false;
   final Map<String, int> _stalledSince = {};
   final List<DiagnosticPayload> _recentDiagnostics = [];
+  final List<LogEntry> _logs = [];
 
   // ---- GlobalConfig delegation -------------------------------------------
 
@@ -82,15 +84,18 @@ class Download implements GlobalConfig {
 
   // ------------------------------------------------------------------------
 
-  factory Download.fromMeta(MetaFile meta, DlxContext context) =>
-      Download._(meta.id, meta.url, const DownloadOptions(), context, meta);
+  factory Download.fromMeta(MetaFile meta, DlxContext context,
+          [List<LogEntry> initialLogs = const []]) =>
+      Download._(meta.id, meta.url, const DownloadOptions(), context, meta,
+          initialLogs);
 
   Download(String id, String url, DownloadOptions options, DlxContext context)
-      : this._(id, url, options, context, null);
+      : this._(id, url, options, context, null, const []);
 
-  Download._(
-      this.id, this.url, this.options, this._context, MetaFile? initialMeta) {
+  Download._(this.id, this.url, this.options, this._context,
+      MetaFile? initialMeta, List<LogEntry> initialLogs) {
     _throttle = Throttle(options.speedLimit ?? 0);
+    _logs.addAll(initialLogs);
     if (initialMeta != null) {
       _meta = initialMeta;
       if (initialMeta.speedLimit != null) {
@@ -108,6 +113,7 @@ class Download implements GlobalConfig {
       if (options.description != null) _meta.description = options.description;
       if (options.metadata != null) _meta.metadata = options.metadata;
       if (options.headers != null) _meta.headers = options.headers;
+      addLog(code: 'download.created', params: {'url': url, 'options': options.toString()});
     }
     emitter.onType<ChunkLifecycleEvent>((payload) {
       if (payload.status == ChunkStatus.completed ||
@@ -172,6 +178,25 @@ class Download implements GlobalConfig {
   /// Absolute path of the in-progress `.part` file.
   String get partFilePath => io.joinPath([cachePath, '$id$tempExt']);
 
+  /// The persistent log entries for this download.
+  List<LogEntry> get logs => List.unmodifiable(_logs);
+
+  @override
+  void addLog({
+    DiagnosticLevel level = DiagnosticLevel.info,
+    required LogCode code,
+    Map<String, dynamic>? params,
+  }) {
+    final timestamp = _nowMs();
+    _logs.add(LogEntry(level: level, code: code, params: params, timestamp: timestamp));
+    emitter.emit(LogEvent(
+      id,
+      timestamp: timestamp,
+      level: level,
+      message: renderLog(code, params),
+    ));
+  }
+
   /// Start (or resume) the download. Completes on finish/pause/error.
   Future<void> start() {
     if (_state == DownloadState.completed) return Future.value();
@@ -225,6 +250,7 @@ class Download implements GlobalConfig {
     await _safeUnlink(partFilePath);
     await deleteMeta(io, MetaLocator(dir: cachePath, id: id))
         .catchError((_) {});
+    await deleteLog(io, MetaLocator(dir: cachePath, id: id)).catchError((_) {});
     await _safeUnlink(_journalPath());
     // HLS writes segments to {cachePath}/{id}-hls/ — clean up the directory.
     if (_probe?.isHls == true || _meta.isHls == true) {
@@ -236,27 +262,53 @@ class Download implements GlobalConfig {
   /// Change the speed limit mid-download. 0 = unlimited. null clears the
   /// per-download override.
   void setSpeedLimit(int? bytesPerSec) {
+    final old = _meta.speedLimit;
     _throttle.setCapacity(bytesPerSec ?? 0);
     _meta.speedLimit = bytesPerSec;
+    addLog(code: 'config.speedLimit', params: {'old': old ?? 0, 'new': bytesPerSec ?? 0, 'scope': ''});
   }
 
   /// Upper bound on live chunks; takes effect on the next split decision.
-  void setTargetChunkCount(int? n) => _meta.targetChunkCount = n;
+  void setTargetChunkCount(int? n) {
+    final old = _meta.targetChunkCount;
+    _meta.targetChunkCount = n;
+    addLog(code: 'config.targetChunkCount', params: {'old': old ?? 0, 'new': n ?? 0, 'scope': ''});
+  }
 
   /// Override the target directory for this download's final file.
-  void setTargetPath(String? path) => _meta.targetPath = path;
+  void setTargetPath(String? path) {
+    final old = _meta.targetPath;
+    _meta.targetPath = path;
+    addLog(code: 'config.targetPath', params: {'old': old ?? '', 'new': path ?? '', 'scope': ' (overridden)'});
+  }
 
   /// Minimum bytes remaining before a chunk can be split.
-  void setMinChunkSize(int? bytes) => _meta.minChunkSize = bytes;
+  void setMinChunkSize(int? bytes) {
+    final old = _meta.minChunkSize;
+    _meta.minChunkSize = bytes;
+    addLog(code: 'config.minChunkSize', params: {'old': old ?? 0, 'new': bytes ?? 0, 'scope': ''});
+  }
 
   /// Toggle NDJSON journal writing; takes effect on the next diagnostic event.
-  void setJournal(bool? enabled) => _meta.journal = enabled;
+  void setJournal(bool? enabled) {
+    final old = _meta.journal;
+    _meta.journal = enabled;
+    addLog(code: 'config.journal', params: {'old': '${old ?? false}', 'new': '${enabled ?? false}', 'scope': ''});
+  }
 
   /// Override the filename. null clears the override (falls back to probe then URL).
-  void setFilename(String? name) => _meta.filename = name;
+  void setFilename(String? name) {
+    final old = _meta.filename;
+    _meta.filename = name;
+    addLog(code: 'config.filename', params: {'old': old ?? '', 'new': name ?? ''});
+  }
 
   /// Set or clear the free-form description.
-  void setDescription(String? text) => _meta.description = text;
+  void setDescription(String? text) {
+    final old = _meta.description;
+    _meta.description = text;
+    addLog(code: 'config.description', params: {'old': old ?? '', 'new': text ?? ''});
+  }
 
   /// Merge key/value pairs into per-download metadata. null clears all metadata.
   /// Pass {key: null} to remove a single key.
@@ -270,10 +322,14 @@ class Download implements GlobalConfig {
       }
     }
     _meta.metadata = current.isEmpty ? null : current;
+    addLog(code: 'config.metadata', params: {'patch': patch.toString()});
   }
 
   /// Clear all metadata.
-  void clearMetadata() => _meta.metadata = null;
+  void clearMetadata() {
+    _meta.metadata = null;
+    addLog(code: 'config.metadata', params: {'patch': 'cleared'});
+  }
 
   /// Merge HTTP headers into per-download headers (merged on top of global).
   /// null value for a key removes that header from the local override.
@@ -287,10 +343,14 @@ class Download implements GlobalConfig {
       }
     }
     _meta.headers = current.isEmpty ? null : current;
+    addLog(code: 'config.headers', params: {'patch': patch.toString()});
   }
 
   /// Clear all per-download header overrides (reverts to global headers).
-  void clearHeaders() => _meta.headers = null;
+  void clearHeaders() {
+    _meta.headers = null;
+    addLog(code: 'config.headers', params: {'patch': 'cleared'});
+  }
 
   /// Pre-allocate the part file to its final size. Requires `io.truncate` and a
   /// known total size; silently no-ops otherwise.
@@ -300,7 +360,9 @@ class Download implements GlobalConfig {
     if (truncate == null || total == null || total <= 0) return;
     try {
       await truncate(partFilePath, total);
+      addLog(code: 'alloc.completed', params: {'bytes': total});
     } catch (err) {
+      addLog(level: DiagnosticLevel.warn, code: 'alloc.failed', params: {'message': err.toString()});
       _diag('warn', 'prealloc-failed', 'disk pre-allocation failed: $err');
     }
   }
@@ -444,12 +506,23 @@ class Download implements GlobalConfig {
     try {
       if (_probe == null) {
         _setState(DownloadState.probing);
-        _probe = await probeUrl(ProbeOptions(
-          fetch: io.fetch,
-          url: url,
-          headers: headers,
-          filenameHint: _meta.filename,
-        ));
+        addLog(code: 'probe.started', params: {'url': url});
+        try {
+          _probe = await probeUrl(ProbeOptions(
+            fetch: io.fetch,
+            url: url,
+            headers: headers,
+            filenameHint: _meta.filename,
+          ));
+        } catch (err) {
+          addLog(level: DiagnosticLevel.error, code: 'probe.error', params: {'message': err.toString()});
+          rethrow;
+        }
+        addLog(code: 'probe.completed', params: {
+          'size': _probe!.totalSize ?? -1,
+          'ranges': _probe!.acceptsRanges ? 'yes' : 'no',
+          'filename': _probe!.filename ?? '',
+        });
       }
 
       if (_probe!.isHls) {
@@ -496,6 +569,7 @@ class Download implements GlobalConfig {
             c.failureCode == 'range-not-honored');
         if (rangeNotHonored && !_rangeFallbackDone && _probe != null) {
           _rangeFallbackDone = true;
+          addLog(level: DiagnosticLevel.warn, code: 'range.fallback');
           _diag('warn', 'range-fallback',
               'server ignored Range header — restarting as a single-chunk download');
           _probe = _probe!.copyWith(acceptsRanges: false);
@@ -721,6 +795,12 @@ class Download implements GlobalConfig {
         _chunkSeq += 1;
         final newChunk = _buildChunk(newSnap, _probe?.acceptsRanges ?? false);
         _chunks.add(newChunk);
+        addLog(code: 'chunk.split', params: {
+          'source': candidate.chunk.id,
+          'id': newChunk.id,
+          'offset': candidate.newRange.offset,
+          'end': candidate.newRange.offset + candidate.newRange.length,
+        });
         emitter.emit(ChunkSplitEvent(
           id,
           sourceChunkId: candidate.chunk.id,
@@ -760,7 +840,9 @@ class Download implements GlobalConfig {
       final resolution = await session.resolve(url);
 
       if (resolution is HlsMultiStreamResult) {
+        addLog(code: 'hls.multi-stream', params: {'count': resolution.streams.length});
         await session.registerStreams(resolution.streams, baseFilename, outputPath);
+        addLog(code: 'hls.streams-registered', params: {'count': resolution.streams.length});
         _setState(DownloadState.completed);
         _meta.completedAt = _nowMs();
         await _persistCurrentMeta().catchError((_) {});
@@ -809,6 +891,8 @@ class Download implements GlobalConfig {
         ));
       }
 
+      final alreadyDone = snapshots.where((s) => s.status == ChunkStatus.completed).length;
+      addLog(code: 'hls.segments-planned', params: {'total': segments.length, 'done': alreadyDone});
       _meta.isHls = true;
       final probe = _probe;
       if (probe != null) {
@@ -859,8 +943,10 @@ class Download implements GlobalConfig {
 
       // All segments downloaded — concat into the final output and clean up.
       final segmentPaths = List.generate(_chunks.length, session.segPath);
+      addLog(code: 'hls.concat-started', params: {'segments': segmentPaths.length, 'output': outputPath});
       await session.concat(segmentPaths, outputPath);
       await session.cleanup(segDir);
+      addLog(code: 'hls.concat-completed', params: {'output': outputPath});
 
       _setState(DownloadState.completed);
       _meta.completedAt = _nowMs();
@@ -901,6 +987,7 @@ class Download implements GlobalConfig {
         actual = null;
       }
       if (actual != null && actual != expected) {
+        addLog(level: DiagnosticLevel.error, code: 'finalize.size-mismatch', params: {'expected': expected, 'actual': actual});
         _diag('error', 'size-mismatch',
             'assembled file is $actual bytes, expected $expected');
         final msg =
@@ -913,6 +1000,7 @@ class Download implements GlobalConfig {
       }
     }
     await io.rename(partFilePath, targetFilePath);
+    addLog(code: 'finalize.completed', params: {'path': targetFilePath});
     _setState(DownloadState.completed);
     _meta.completedAt = _nowMs();
     await _persistCurrentMeta().catchError((_) {});
@@ -937,6 +1025,17 @@ class Download implements GlobalConfig {
     _state = next;
     _meta.state = dehydrateState(next);
     emitter.emit(StateChangeEvent(id, previous: prev, current: next));
+    if (next == DownloadState.downloading && prev == DownloadState.paused) {
+      addLog(code: 'download.resumed');
+    } else if (next == DownloadState.downloading) {
+      addLog(code: 'download.started');
+    } else if (next == DownloadState.paused) {
+      addLog(code: 'download.paused');
+    } else if (next == DownloadState.cancelled) {
+      addLog(code: 'download.cancelled');
+    } else if (next == DownloadState.error) {
+      addLog(level: DiagnosticLevel.error, code: 'download.error', params: {'message': _meta.errorMessage ?? 'unknown error'});
+    }
   }
 
   void _startProgressTimer() {
@@ -957,6 +1056,7 @@ class Download implements GlobalConfig {
           _stalledSince[c.id] = now;
         } else if (now - since >= stallRecoveryMs) {
           _stalledSince.remove(c.id);
+          addLog(level: DiagnosticLevel.warn, code: 'chunk.stall', params: {'id': c.id, 'duration': now - since});
           _diag('warn', 'stall-recovery',
               'chunk stalled for ${now - since}ms — reissuing request', c.id);
           c.restart('stalled');
@@ -1052,9 +1152,11 @@ class Download implements GlobalConfig {
   }
 
   Future<void> _persistCurrentMeta() async {
+    final locator = MetaLocator(dir: cachePath, id: id);
     _meta.state = dehydrateState(_state);
     if (_chunks.isNotEmpty) _meta.chunks = getChunkSnapshots();
-    await persistMeta(io, MetaLocator(dir: cachePath, id: id), _meta);
+    await persistMeta(io, locator, _meta);
+    await persistLogs(io, locator, _logs).catchError((_) {});
   }
 
   Future<void> _safeUnlink(String path) async {

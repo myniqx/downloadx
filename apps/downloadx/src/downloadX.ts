@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG } from './constants.js';
 import { Download } from './download.js';
 import { TypedEventEmitter } from './events.js';
-import { listMetaFiles, persistMeta } from './meta.js';
+import { listMetaFiles, loadLogs, persistMeta } from './meta.js';
 import { Throttle } from './throttle.js';
 import type {
   DlxContext,
@@ -10,6 +10,7 @@ import type {
   DownloadEventName,
   DownloadOptions,
   DownloadXConfig,
+  LogEntry,
 } from './types.js';
 
 const RELAYED_EVENTS: readonly DownloadEventName[] = [
@@ -22,6 +23,7 @@ const RELAYED_EVENTS: readonly DownloadEventName[] = [
   'error',
   'completed',
   'diagnostic',
+  'log',
 ];
 
 export class DownloadX implements DlxContext {
@@ -56,7 +58,8 @@ export class DownloadX implements DlxContext {
     const metas = await listMetaFiles(this.baseConfig.io, this._cachePath);
     for (const meta of metas) {
       if (this.downloads.has(meta.id)) continue;
-      const download = Download.fromMeta(meta, this);
+      const logs = await loadLogs(this.baseConfig.io, { dir: this._cachePath, id: meta.id });
+      const download = Download.fromMeta(meta, this, logs);
       const unrelay = download.emitter.pipeTo(this.emitter, RELAYED_EVENTS);
       this.downloads.set(meta.id, download);
       this.unrelay.set(meta.id, unrelay);
@@ -274,6 +277,10 @@ export class DownloadX implements DlxContext {
 
   get requestTimeout(): number {
     return this.baseConfig.requestTimeout ?? DEFAULT_CONFIG.requestTimeout;
+  }
+
+  addLog(_entry: LogEntry): void {
+    // stub — manager-level context has no single download log
   }
 
   /** Returns the shared throttle instance used by all downloads. */

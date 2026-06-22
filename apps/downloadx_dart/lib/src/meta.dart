@@ -140,6 +140,44 @@ Future<void> deleteMeta(DownloadxIo io, MetaLocator locator) async {
   await io.unlink(metaPath(io, locator));
 }
 
+const _logExt = '-log.json';
+
+String _logPath(DownloadxIo io, MetaLocator locator) =>
+    io.joinPath([locator.dir, '${locator.id}$_logExt']);
+
+Future<List<LogEntry>> loadLogs(
+    DownloadxIo io, MetaLocator locator) async {
+  final path = _logPath(io, locator);
+  if (!await io.exists(path)) return [];
+  try {
+    final buf = await io.readFile(path);
+    final text = utf8.decode(buf);
+    final parsed = jsonDecode(text);
+    if (parsed is! List) return [];
+    return parsed
+        .whereType<Map<String, dynamic>>()
+        .map(LogEntry.fromJson)
+        .toList();
+  } catch (_) {
+    return [];
+  }
+}
+
+Future<void> persistLogs(
+    DownloadxIo io, MetaLocator locator, List<LogEntry> logs) async {
+  await io.mkdir(locator.dir);
+  final target = _logPath(io, locator);
+  final tmp = _tmpPath(target);
+  final encoded = utf8.encode(_jsonEncoder.convert(logs.map((e) => e.toJson()).toList()));
+  await io.writeFile(tmp, encoded);
+  await io.rename(tmp, target);
+}
+
+Future<void> deleteLog(DownloadxIo io, MetaLocator locator) async {
+  final path = _logPath(io, locator);
+  if (await io.exists(path)) await io.unlink(path);
+}
+
 /// Decides whether a meta file represents the same remote resource a fresh
 /// probe describes. ETag first (strong), then Last-Modified, then total size.
 bool canResumeAgainst(MetaFile meta, ProbeResult probe) {

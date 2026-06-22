@@ -67,6 +67,7 @@ export function makeHarness(overrides: HarnessOverrides = {}): TestHarness {
     headers: overrides.headers ?? {},
     journal: overrides.journal ?? false,
     sharedThrottle: new Throttle(overrides.speedLimit ?? 0),
+    addLog: () => undefined,
   };
   return { fs, fetch, io, config, global };
 }

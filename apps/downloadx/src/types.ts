@@ -76,6 +76,12 @@ export interface InjectedFunctions {
 // to avoid snapshot copies and circular imports.
 // ---------------------------------------------------------------------------
 
+export interface LogEntry {
+  level?: 'info' | 'warn' | 'error';
+  code: import('./key2log.js').LogCode;
+  params?: Record<string, string | number>;
+}
+
 export interface DownloadConfig {
   readonly maxRetries: number;
   readonly retryDelay: number;
@@ -84,6 +90,7 @@ export interface DownloadConfig {
   readonly requestTimeout: number;
   readonly headers: Record<string, string>;
   readonly io: InjectedFunctions;
+  addLog(entry: LogEntry): void;
 }
 
 export interface GlobalConfig extends DownloadConfig {
@@ -427,6 +434,13 @@ export interface DownloadDescription {
   hlsTotalSegments?: number;
 }
 
+export interface LogEventPayload {
+  downloadId: string;
+  timestamp: number;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
 /** Strict event map shared by Download and DownloadX emitters. */
 export interface DownloadEventMap {
   progress: DownloadProgressPayload;
@@ -438,6 +452,7 @@ export interface DownloadEventMap {
   error: DownloadErrorPayload;
   completed: DownloadCompletedPayload;
   diagnostic: DiagnosticPayload;
+  log: LogEventPayload;
 }
 
 export type DownloadEventName = keyof DownloadEventMap;

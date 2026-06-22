@@ -3,9 +3,12 @@ import type {
   ChunkSnapshot,
   DownloadState,
   InjectedFunctions,
+  LogEntry,
   MetaFile,
   ProbeResult,
 } from './types.js';
+
+const LOG_EXT = '-log.json';
 
 /**
  * Sidecar JSON persisted under the cache directory:
@@ -172,6 +175,49 @@ export async function persistMeta(
 export async function deleteMeta(io: InjectedFunctions, locator: MetaLocator): Promise<void> {
   const target = metaPath(io, locator);
   await io.unlink(target);
+}
+
+export interface PersistedLogEntry extends LogEntry {
+  timestamp: number;
+}
+
+function logPath(io: InjectedFunctions, locator: MetaLocator): string {
+  return io.joinPath(locator.dir, `${locator.id}${LOG_EXT}`);
+}
+
+export async function loadLogs(
+  io: InjectedFunctions,
+  locator: MetaLocator,
+): Promise<PersistedLogEntry[]> {
+  const path = logPath(io, locator);
+  if (!(await io.exists(path))) return [];
+  try {
+    const buf = await io.readFile(path);
+    const text = textDecoder.decode(buf);
+    const parsed: unknown = JSON.parse(text);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as PersistedLogEntry[];
+  } catch {
+    return [];
+  }
+}
+
+export async function persistLogs(
+  io: InjectedFunctions,
+  locator: MetaLocator,
+  logs: PersistedLogEntry[],
+): Promise<void> {
+  await io.mkdir(locator.dir);
+  const target = logPath(io, locator);
+  const tmp = tmpPath(target);
+  const encoded = textEncoder.encode(JSON.stringify(logs, null, 2));
+  await io.writeFile(tmp, encoded);
+  await io.rename(tmp, target);
+}
+
+export async function deleteLog(io: InjectedFunctions, locator: MetaLocator): Promise<void> {
+  const path = logPath(io, locator);
+  if (await io.exists(path)) await io.unlink(path);
 }
 
 /** Updates an existing meta object in place and returns it for chaining. */

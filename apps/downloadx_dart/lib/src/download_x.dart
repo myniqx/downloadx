@@ -3,6 +3,7 @@ import 'constants.dart';
 import 'download.dart';
 import 'events.dart';
 import 'io.dart';
+import 'key2log.dart';
 import 'meta.dart';
 import 'native_io.dart';
 import 'throttle.dart';
@@ -43,7 +44,8 @@ class DownloadX implements DlxContext {
     final metas = await listMetaFiles(_io, _cachePath);
     for (final meta in metas) {
       if (_downloads.containsKey(meta.id)) continue;
-      final download = Download.fromMeta(meta, this);
+      final logs = await loadLogs(_io, MetaLocator(dir: _cachePath, id: meta.id));
+      final download = Download.fromMeta(meta, this, logs);
       final unrelay = download.emitter.pipeTo(emitter);
       _downloads[meta.id] = download;
       _unrelay[meta.id] = unrelay;
@@ -254,6 +256,15 @@ class DownloadX implements DlxContext {
 
   @override
   Throttle get sharedThrottle => _sharedThrottle;
+
+  @override
+  void addLog({
+    DiagnosticLevel level = DiagnosticLevel.info,
+    required LogCode code,
+    Map<String, dynamic>? params,
+  }) {
+    // stub — manager-level context has no single download log
+  }
 
   /// Returns the current effective global config as a JSON-compatible map.
   Map<String, Object?> getConfig() => {

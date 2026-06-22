@@ -1,4 +1,5 @@
 import 'io.dart';
+import 'key2log.dart';
 import 'throttle.dart';
 import 'types.dart';
 
@@ -25,6 +26,13 @@ abstract class DownloadConfig {
 
   /// The I/O abstraction providing network and file access.
   DownloadxIo get io;
+
+  /// Add a structured log entry to this download's persistent log.
+  void addLog({
+    DiagnosticLevel level = DiagnosticLevel.info,
+    required LogCode code,
+    Map<String, dynamic>? params,
+  });
 }
 
 /// The full manager-level configuration surface, implemented by both

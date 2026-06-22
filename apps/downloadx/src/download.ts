@@ -14,10 +14,14 @@ import {
   canResumeAgainst,
   createEmptyMeta,
   deleteMeta,
+  deleteLog,
   dehydrateState,
+  persistLogs,
   persistMeta,
   updateMeta,
+  type PersistedLogEntry,
 } from './meta.js';
+import { renderLog } from './key2log.js';
 import { probeUrl } from './probe.js';
 import { AggregateSpeed } from './speedTracker.js';
 import { Throttle } from './throttle.js';
@@ -31,6 +35,7 @@ import type {
   DownloadState,
   GlobalConfig,
   InjectedFunctions,
+  LogEntry,
   MetaFile,
   ProbeResult,
 } from './types.js';
@@ -58,6 +63,7 @@ export class Download implements GlobalConfig {
   private rangeFallbackDone = false;
   private readonly stalledSince = new Map<string, number>();
   private readonly recentDiagnostics: DiagnosticPayload[] = [];
+  private readonly _logs: PersistedLogEntry[] = [];
 
   // ---------------------------------------------------------------------------
   // GlobalConfig implementation — delegates to _global, with per-download
@@ -95,8 +101,8 @@ export class Download implements GlobalConfig {
 
   // ---------------------------------------------------------------------------
 
-  static fromMeta(meta: MetaFile, context: DlxContext): Download {
-    return new Download(meta.id, meta.url, {}, context, meta);
+  static fromMeta(meta: MetaFile, context: DlxContext, logs: PersistedLogEntry[] = []): Download {
+    return new Download(meta.id, meta.url, {}, context, meta, logs);
   }
 
   constructor(
@@ -105,12 +111,14 @@ export class Download implements GlobalConfig {
     options: DownloadOptions,
     context: DlxContext,
     initialMeta?: MetaFile,
+    initialLogs: PersistedLogEntry[] = [],
   ) {
     this.id = id;
     this.url = url;
     this.options = options;
     this._context = context;
     this.throttle = new Throttle(options.speedLimit ?? 0);
+    this._logs.push(...initialLogs);
     if (initialMeta !== undefined) {
       this._meta = initialMeta;
       if (initialMeta.speedLimit !== null) this.throttle.setCapacity(initialMeta.speedLimit);
@@ -126,6 +134,7 @@ export class Download implements GlobalConfig {
       if (options.description !== undefined) this._meta.description = options.description;
       if (options.metadata !== undefined) this._meta.metadata = options.metadata;
       if (options.headers !== undefined) this._meta.headers = options.headers;
+      this.addLog({ code: 'download.created', params: { url, options: JSON.stringify(options) } });
     }
     this.emitter.on('chunkLifecycle', (payload) => {
       if (
@@ -193,6 +202,22 @@ export class Download implements GlobalConfig {
     return this.io.joinPath(this.cachePath, `${this.id}${TEMP_EXT}`);
   }
 
+  get logs(): readonly PersistedLogEntry[] {
+    return this._logs;
+  }
+
+  addLog(entry: LogEntry): void {
+    const level = entry.level ?? 'info';
+    const timestamp = Date.now();
+    this._logs.push({ ...entry, level, timestamp });
+    this.emitter.emit('log', {
+      downloadId: this.id,
+      timestamp,
+      level,
+      message: renderLog(entry.code, entry.params),
+    });
+  }
+
   /** Start (or resume) the download. Returns a promise that resolves on finish/pause/error. */
   start(): Promise<void> {
     if (this._state === 'completed') return Promise.resolve();
@@ -240,6 +265,7 @@ export class Download implements GlobalConfig {
       dir: this.cachePath,
       id: this.id,
     }).catch(() => undefined);
+    await deleteLog(this.io, { dir: this.cachePath, id: this.id }).catch(() => undefined);
     await this.safeUnlink(this.journalPath());
     // HLS writes segments to {cachePath}/{id}-hls/ — clean up the directory.
     if (this._probe?.isHls === true || this._meta.isHls === true) {
@@ -250,39 +276,53 @@ export class Download implements GlobalConfig {
 
   /** Change the speed limit mid-download. 0 = unlimited. null clears the per-download override. */
   setSpeedLimit(bytesPerSec: number | null): void {
+    const old = this._meta.speedLimit;
     const effective = bytesPerSec ?? 0;
     this.throttle.setCapacity(effective);
     this._meta.speedLimit = bytesPerSec;
+    this.addLog({ code: 'config.speedLimit', params: { old: old ?? 0, new: bytesPerSec ?? 0, scope: '' } });
   }
 
   /** Upper bound on live chunks; takes effect on the next split decision. */
   setTargetChunkCount(n: number | null): void {
+    const old = this._meta.targetChunkCount;
     this._meta.targetChunkCount = n;
+    this.addLog({ code: 'config.targetChunkCount', params: { old: old ?? 0, new: n ?? 0, scope: '' } });
   }
 
   /** Override the target directory for this download's final file. null clears the override. */
   setTargetPath(path: string | null): void {
+    const old = this._meta.targetPath;
     this._meta.targetPath = path;
+    this.addLog({ code: 'config.targetPath', params: { old: old ?? '', new: path ?? '', scope: ' (overridden)' } });
   }
 
   /** Minimum bytes remaining before a chunk can be split; takes effect on the next split decision. */
   setMinChunkSize(bytes: number | null): void {
+    const old = this._meta.minChunkSize;
     this._meta.minChunkSize = bytes;
+    this.addLog({ code: 'config.minChunkSize', params: { old: old ?? 0, new: bytes ?? 0, scope: '' } });
   }
 
   /** Toggle NDJSON journal writing; takes effect on the next diagnostic event. */
   setJournal(enabled: boolean | null): void {
+    const old = this._meta.journal;
     this._meta.journal = enabled;
+    this.addLog({ code: 'config.journal', params: { old: String(old ?? false), new: String(enabled ?? false), scope: '' } });
   }
 
   /** Override the filename. null clears the override (falls back to probe then URL). */
   setFilename(name: string | null): void {
+    const old = this._meta.filename;
     this._meta.filename = name;
+    this.addLog({ code: 'config.filename', params: { old: old ?? '', new: name ?? '' } });
   }
 
   /** Set or clear the free-form description. */
   setDescription(text: string | null): void {
+    const old = this._meta.description;
     this._meta.description = text;
+    this.addLog({ code: 'config.description', params: { old: old ?? '', new: text ?? '' } });
   }
 
   /**
@@ -290,13 +330,18 @@ export class Download implements GlobalConfig {
    * To remove a single key, pass { key: null } — null values are deleted from the map.
    */
   setMetadata(patch: Record<string, string | null> | null): void {
-    if (patch === null) { this._meta.metadata = null; return; }
+    if (patch === null) {
+      this._meta.metadata = null;
+      this.addLog({ code: 'config.metadata', params: { patch: 'cleared' } });
+      return;
+    }
     const current = this._meta.metadata ?? {};
     for (const [k, v] of Object.entries(patch)) {
       if (v === null) delete current[k];
       else current[k] = v;
     }
     this._meta.metadata = Object.keys(current).length > 0 ? current : null;
+    this.addLog({ code: 'config.metadata', params: { patch: JSON.stringify(patch) } });
   }
 
   /**
@@ -305,13 +350,18 @@ export class Download implements GlobalConfig {
    * To remove a single header, pass { Key: null } — null values are deleted.
    */
   setHeaders(patch: Record<string, string | null> | null): void {
-    if (patch === null) { this._meta.headers = null; return; }
+    if (patch === null) {
+      this._meta.headers = null;
+      this.addLog({ code: 'config.headers', params: { patch: 'cleared' } });
+      return;
+    }
     const current = this._meta.headers ?? {};
     for (const [k, v] of Object.entries(patch)) {
       if (v === null) delete current[k];
       else current[k] = v;
     }
     this._meta.headers = Object.keys(current).length > 0 ? current : null;
+    this.addLog({ code: 'config.headers', params: { patch: JSON.stringify(patch) } });
   }
 
   /**
@@ -325,12 +375,11 @@ export class Download implements GlobalConfig {
     if (truncate === undefined || total === null || total <= 0) return;
     try {
       await truncate(this.partFilePath, total);
+      this.addLog({ code: 'alloc.completed', params: { bytes: total } });
     } catch (err) {
-      this.diag(
-        'warn',
-        'prealloc-failed',
-        `disk pre-allocation failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      this.addLog({ level: 'warn', code: 'alloc.failed', params: { message } });
+      this.diag('warn', 'prealloc-failed', `disk pre-allocation failed: ${message}`);
     }
   }
 
@@ -459,13 +508,28 @@ export class Download implements GlobalConfig {
     try {
       if (this._probe === null) {
         this.setState('probing');
-        const probe = await probeUrl({
-          fetch: this.io.fetch,
-          url: this.url,
-          headers: this.headers,
-          ...(this._meta.filename !== null ? { filenameHint: this._meta.filename } : {}),
-        });
+        this.addLog({ code: 'probe.started', params: { url: this.url } });
+        let probe: ProbeResult;
+        try {
+          probe = await probeUrl({
+            fetch: this.io.fetch,
+            url: this.url,
+            headers: this.headers,
+            ...(this._meta.filename !== null ? { filenameHint: this._meta.filename } : {}),
+          });
+        } catch (err) {
+          this.addLog({ level: 'error', code: 'probe.error', params: { message: err instanceof Error ? err.message : String(err) } });
+          throw err;
+        }
         this._probe = probe;
+        this.addLog({
+          code: 'probe.completed',
+          params: {
+            size: probe.totalSize ?? -1,
+            ranges: probe.acceptsRanges ? 'yes' : 'no',
+            filename: probe.filename ?? '',
+          },
+        });
       }
 
       if (this._probe.isHls) {
@@ -513,6 +577,7 @@ export class Download implements GlobalConfig {
         );
         if (rangeNotHonored && !this.rangeFallbackDone && this._probe !== null) {
           this.rangeFallbackDone = true;
+          this.addLog({ level: 'warn', code: 'range.fallback' });
           this.diag(
             'warn',
             'range-fallback',
@@ -740,6 +805,15 @@ export class Download implements GlobalConfig {
         this.chunkSeq += 1;
         const newChunk = this.buildChunk(newSnap, this._probe?.acceptsRanges ?? false);
         this.chunks.push(newChunk);
+        this.addLog({
+          code: 'chunk.split',
+          params: {
+            source: candidate.chunk.id,
+            id: newChunk.id,
+            offset: candidate.newRange.offset,
+            end: candidate.newRange.offset + candidate.newRange.length,
+          },
+        });
         this.emitter.emit('chunkSplit', {
           downloadId: this.id,
           sourceChunkId: candidate.chunk.id,
@@ -781,8 +855,9 @@ export class Download implements GlobalConfig {
       const resolution = await session.resolve(this.url);
 
       if (resolution.type === 'multi-stream') {
-        // Multiple streams registered as idle downloads — this download is done.
+        this.addLog({ code: 'hls.multi-stream', params: { count: resolution.streams.length } });
         await session.registerStreams(resolution.streams, baseFilename, outputPath);
+        this.addLog({ code: 'hls.streams-registered', params: { count: resolution.streams.length } });
         this.setState('completed');
         this._meta.completedAt = Date.now();
         await this.persistCurrentMeta().catch(() => undefined);
@@ -824,6 +899,11 @@ export class Download implements GlobalConfig {
         });
       }
 
+      const alreadyDone = snapshots.filter((s) => s.status === 'completed').length;
+      this.addLog({
+        code: 'hls.segments-planned',
+        params: { total: segments.length, done: alreadyDone },
+      });
       this._meta.isHls = true;
       if (this._probe !== null) applyProbeToMeta(this._meta, this._probe, snapshots);
       else this._meta.chunks = snapshots;
@@ -868,8 +948,10 @@ export class Download implements GlobalConfig {
 
       // All segments downloaded — concat into the final output and clean up.
       const segmentPaths = this.chunks.map((_, i) => session.segPath(i));
+      this.addLog({ code: 'hls.concat-started', params: { segments: segmentPaths.length, output: outputPath } });
       await session.concat(segmentPaths, outputPath);
       await session.cleanup(segDir);
+      this.addLog({ code: 'hls.concat-completed', params: { output: outputPath } });
 
       this.setState('completed');
       this._meta.completedAt = Date.now();
@@ -908,6 +990,7 @@ export class Download implements GlobalConfig {
     if (expected !== null && expected > 0 && fileSize !== undefined) {
       const actual = await fileSize(this.partFilePath).catch(() => null);
       if (actual !== null && actual !== expected) {
+        this.addLog({ level: 'error', code: 'finalize.size-mismatch', params: { expected, actual } });
         this.diag(
           'error',
           'size-mismatch',
@@ -926,6 +1009,7 @@ export class Download implements GlobalConfig {
       }
     }
     await this.io.rename(this.partFilePath, this.targetFilePath);
+    this.addLog({ code: 'finalize.completed', params: { path: this.targetFilePath } });
     this.setState('completed');
     this._meta.completedAt = Date.now();
     await this.persistCurrentMeta().catch(() => undefined);
@@ -952,6 +1036,17 @@ export class Download implements GlobalConfig {
       previous: prev,
       current: next,
     });
+    if (next === 'downloading' && prev === 'paused') {
+      this.addLog({ code: 'download.resumed' });
+    } else if (next === 'downloading') {
+      this.addLog({ code: 'download.started' });
+    } else if (next === 'paused') {
+      this.addLog({ code: 'download.paused' });
+    } else if (next === 'cancelled') {
+      this.addLog({ code: 'download.cancelled' });
+    } else if (next === 'error') {
+      this.addLog({ level: 'error', code: 'download.error', params: { message: this._meta.errorMessage ?? 'unknown error' } });
+    }
   }
 
   private startProgressTimer(): void {
@@ -971,6 +1066,7 @@ export class Download implements GlobalConfig {
           this.stalledSince.set(c.id, now);
         } else if (now - since >= STALL_RECOVERY_MS) {
           this.stalledSince.delete(c.id);
+          this.addLog({ level: 'warn', code: 'chunk.stall', params: { id: c.id, duration: now - since } });
           this.diag(
             'warn',
             'stall-recovery',
@@ -1075,18 +1171,13 @@ export class Download implements GlobalConfig {
   }
 
   private async persistCurrentMeta(): Promise<void> {
+    const locator = { dir: this.cachePath, id: this.id };
     updateMeta(this._meta, {
       state: dehydrateState(this._state),
       chunks: this.chunks.length > 0 ? this.getChunkSnapshots() : this._meta.chunks,
     });
-    await persistMeta(
-      this.io,
-      {
-        dir: this.cachePath,
-        id: this.id,
-      },
-      this._meta,
-    );
+    await persistMeta(this.io, locator, this._meta);
+    await persistLogs(this.io, locator, this._logs).catch(() => undefined);
   }
 
   private async safeUnlink(path: string): Promise<void> {

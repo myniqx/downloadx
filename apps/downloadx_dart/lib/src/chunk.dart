@@ -221,6 +221,11 @@ class Chunk {
     }
 
     _setStatus(ChunkStatus.downloading);
+    _params.global.addLog(code: 'chunk.initialized', params: {
+      'id': id,
+      'offset': offset,
+      'end': offset + _length,
+    });
 
     try {
       await withRetry<void>(
@@ -234,6 +239,11 @@ class Chunk {
           onRetry: (info) {
             _retries += 1;
             _lastError = _toMessage(info.error);
+            _params.global.addLog(
+              level: DiagnosticLevel.warn,
+              code: 'chunk.retry',
+              params: {'id': id, 'attempt': info.attempt, 'message': _lastError},
+            );
             _params.emitter.emit(DiagnosticEvent(
               downloadId,
               DiagnosticPayload(
@@ -250,6 +260,7 @@ class Chunk {
         ),
       );
       if (_status == ChunkStatus.downloading) {
+        _params.global.addLog(code: 'chunk.completed', params: {'id': id, 'bytes': _downloadedBytes});
         _setStatus(ChunkStatus.completed);
       }
     } catch (err) {
@@ -258,6 +269,11 @@ class Chunk {
       }
       if (err is RangeNotHonoredError) _failureCode = 'range-not-honored';
       _lastError = _toMessage(err);
+      _params.global.addLog(
+        level: DiagnosticLevel.error,
+        code: 'chunk.failed',
+        params: {'id': id, 'message': _lastError},
+      );
       _setStatus(ChunkStatus.failed);
       _params.emitter.emit(ErrorEvent(
         downloadId,
@@ -275,6 +291,11 @@ class Chunk {
     // Servers without range support always send the body from byte zero, so
     // partial progress cannot be resumed — discard it before re-requesting.
     if (!_params.acceptsRanges && _downloadedBytes > 0) {
+      _params.global.addLog(
+        level: DiagnosticLevel.warn,
+        code: 'chunk.no-range-restart',
+        params: {'id': id, 'discarded': _downloadedBytes},
+      );
       _params.emitter.emit(DiagnosticEvent(
         downloadId,
         DiagnosticPayload(
@@ -323,6 +344,11 @@ class Chunk {
           headers['If-Range'] = validator;
         }
       }
+      _params.global.addLog(code: 'chunk.fetch.started', params: {
+        'id': id,
+        'url': _params.url,
+        'range': headers['Range'] ?? 'none',
+      });
       armIdle();
       final res = await _awaitOrAbort(
         _params.global.io.fetch(

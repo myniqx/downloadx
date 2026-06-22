@@ -183,6 +183,19 @@ class DiagnosticEvent extends DownloadEvent {
   const DiagnosticEvent(super.downloadId, this.payload);
 }
 
+class LogEvent extends DownloadEvent {
+  final int timestamp;
+  final DiagnosticLevel level;
+  final String message;
+
+  const LogEvent(
+    super.downloadId, {
+    required this.timestamp,
+    required this.level,
+    required this.message,
+  });
+}
+
 /// Zero-dependency, synchronous event dispatcher.
 ///
 /// Listeners are dispatched synchronously in registration order. Errors thrown

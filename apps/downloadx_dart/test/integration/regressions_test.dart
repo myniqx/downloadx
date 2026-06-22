@@ -25,6 +25,8 @@ class _Cfg implements DownloadConfig {
   int get requestTimeout => 5000;
   @override
   Map<String, String> get headers => const {};
+  @override
+  void addLog({DiagnosticLevel level = DiagnosticLevel.info, required String code, Map<String, dynamic>? params}) {}
 }
 
 void main() {
