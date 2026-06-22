@@ -186,28 +186,42 @@ they were first written.
 
 - `addUrl(url, options?)` → `Promise<Download>` — `options.targetPath`
   overrides the manager's `targetPath` for this download only; other
-  per-download overrides include `filename`, `chunkMode`, `targetChunkCount`,
-  `speedLimit`, `headers`, `id`, `autoStart`.
+  per-download overrides include `filename`, `description`, `metadata`,
+  `headers`, `chunkMode`, `targetChunkCount`, `speedLimit`, `id`, `autoStart`.
 - `start(id?)` / `pause(id?)` / `clear(id?)`
 - `list()` / `get(id)`
 - `describeAll()` — compact status reports for every download
 - `setMaxParallel(n)` / `setTargetPath(p)`
-- `setSpeedLimit(bytesPerSec)` — manager-wide cap **shared by all downloads**
-  (per-download `speedLimit` still applies on top); 0 = unlimited
-- `setTargetChunkCount(n, override?)` / `setMinChunkSize(bytes, override?)` /
-  `setJournal(enabled, override?)` — pass `override: true` to force the new
-  value onto every download, otherwise only downloads still carrying the old
-  global value are updated
+- `setSpeedLimit(bytesPerSec | null)` — manager-wide cap **shared by all
+  downloads** (per-download `speedLimit` still applies on top); `0` or `null`
+  = unlimited
+- `setTargetChunkCount(n | null, override?)` / `setMinChunkSize(bytes | null, override?)` /
+  `setJournal(enabled | null, override?)` — pass `override: true` to force the
+  new value onto every download; `null` resets to the built-in default. Without
+  `override`, only downloads still carrying the old global value are updated.
+- `setHeaders(patch | null)` — merge HTTP headers into the global config;
+  `null` values in the patch remove that key; pass `null` to clear all global headers
 
 ### `Download` methods
 
 - `start()` / `pause()` / `cancel()` / `clear()`
 - `setSpeedLimit(bytesPerSec | null)` — `null` clears the per-download
-  override; `0` disables the cap live
-- `setTargetPath(path | null)` — override the final directory for this
-  download; `null` clears the override and falls back to the manager value
+  override and falls back to the manager value; `0` disables the cap
+- `setTargetPath(path | null)` — `null` clears the override and falls back to
+  the manager value
 - `setTargetChunkCount(n | null)` / `setMinChunkSize(bytes | null)` /
-  `setJournal(enabled | null)` — per-download overrides; `null` clears
+  `setJournal(enabled | null)` — per-download overrides; `null` clears and
+  reverts to the global value
+- `setFilename(name | null)` — override the final filename; `null` reverts to
+  the probe/URL-derived name
+- `setDescription(text | null)` — attach a free-form note to this download
+- `setMetadata(patch | null)` — merge arbitrary key/value pairs; `null` values
+  in the patch remove individual keys; pass `null` to clear all metadata
+- `setHeaders(patch | null)` — merge HTTP headers for this download on top of
+  the global headers (`effective = {...global, ...local}`); `null` values in
+  the patch remove individual keys; pass `null` to clear all local overrides.
+  Only the local portion is persisted — global header changes are reflected
+  automatically on the next request.
 - `alloc()` — pre-allocate the part file to its final size (automatic at
   start when `io.truncate` is provided)
 - `getChunkSnapshots()` — the exact state persisted to disk
@@ -215,6 +229,11 @@ they were first written.
   live chunk table, recent diagnostics); `describeText()` renders the same
   as a short plain-text block, safe to paste into a prompt or log
 - `.emitter` — typed EventEmitter for this download
+
+> **Part file location:** the in-progress `.part` file is always written to
+> `{cachePath}/{id}.part`, not next to the final target. This means renaming
+> or changing the filename mid-download never loses the downloaded bytes.
+> The file is only moved to `{targetPath}/{filename}` on successful completion.
 
 ### Injected I/O
 

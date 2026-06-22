@@ -27,10 +27,11 @@ automatically on the first command and shuts down with `downloadx stop`.
 ## Commands
 
 ```
-downloadx add --url <url> [--filename <name>]
+downloadx add --url <url> [--filename <name>] [--description <text>]
               [--speedLimit <n>] [--targetPath <dir>]
               [--targetChunkCount <n>] [--minChunkSize <n>] [--journal true|false]
-downloadx list                                        List all downloads
+              [--metadata.key <val>] [--headers.Key <val>]
+downloadx list [--json]                               List all downloads
 downloadx status  --id <#|id> [--json]                Detailed status for a download
 downloadx pause   --id <#|id> | --all                 Pause one or all downloads
 downloadx resume  --id <#|id> | --all                 Resume one or all downloads
@@ -43,7 +44,7 @@ downloadx watch [--simple|--json]                     Live progress view
 downloadx stop                                        Shut down the daemon
 
 downloadx set <key> <value> [--id <#|id>] [--override]   Set a config value
-downloadx get [key] [--id <#|id>]                        Get one or all config values
+downloadx get [key] [--id <#|id>] [--json]               Get one or all config values
 ```
 
 `<#>` refers to the index shown by `list` (e.g. `1`, `2`, `#1`, `#2`).
@@ -74,31 +75,70 @@ without restarting the daemon.
 | `minChunkSize`     | `1mb`                                | Minimum chunk size before splitting stops. Accepts `500kb`, `1mb`, etc. Takes effect on the next split decision    |
 | `journal`          | `true`                               | Write an NDJSON diagnostic log (`.downloadx.log`) next to each download. Takes effect on the next diagnostic event |
 
-Per-download overrides can be set at add time as flags (`--speedLimit`,
-`--targetPath`, `--targetChunkCount`, `--minChunkSize`, `--journal`) or later
-via `set --id`: `speedLimit`, `targetPath`, `targetChunkCount`, `minChunkSize`,
-`journal`. Flag names are case-insensitive and size values accept the same
-units as the global keys (`500kb`, `3mb`, etc.).
+### Global keys
 
-The daemon's cache directory (`~/.local/share/downloadx/cache`) is fixed at
-daemon startup and is not a runtime-configurable key.
+| Key                | Default                              | Description                                                                                                        |
+| ------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `maxParallel`      | `3`                                  | Max concurrent active downloads                                                                                    |
+| `speedLimit`       | `0`                                  | Global speed cap shared by all downloads. `0` = unlimited. Accepts `500kb`, `3mb`, `1.5gb` or raw bytes            |
+| `targetPath`       | `~/.local/share/downloadx/downloads` | Default directory for completed files                                                                              |
+| `targetChunkCount` | `4`                                  | Target number of parallel chunks per download                                                                      |
+| `minChunkSize`     | `1mb`                                | Minimum chunk size before splitting stops. Accepts `500kb`, `1mb`, etc.                                            |
+| `journal`          | `true`                               | Write an NDJSON diagnostic log (`.downloadx.log`) next to each download                                            |
+| `headers`          | `{}`                                 | Default HTTP headers sent with every request. Use dot-notation: `set headers.Authorization "Bearer x"`             |
+
+### Per-download keys (`set --id`)
+
+The following keys can be overridden per download. Set at add time as flags or
+later via `set --id`. Setting a key to `null` clears the override and reverts
+to the global value.
+
+| Key                | Description                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `speedLimit`       | Per-download speed cap. `null` = follow global                                                        |
+| `targetPath`       | Override the destination directory for this download. `null` = follow global                          |
+| `targetChunkCount` | Override chunk count. `null` = follow global                                                          |
+| `minChunkSize`     | Override minimum chunk size. `null` = follow global                                                   |
+| `journal`          | Override journal setting. `null` = follow global                                                      |
+| `filename`         | Override the final filename. `null` = use probe/URL-derived name                                      |
+| `description`      | Free-form note attached to this download. `null` = clear                                              |
+| `metadata`         | Arbitrary key/value data. Use dot-notation: `set metadata.tag anime --id #1`. `null` = clear all     |
+| `headers`          | Per-download HTTP headers merged on top of global (`effective = {...global, ...local}`). Use dot-notation. `null` = clear local overrides |
+
+### Global propagation
 
 When you change a global key like `targetChunkCount` or `minChunkSize`,
-existing downloads that still carry the old global value pick up the new
-value on their next split decision. Downloads that already have a
-per-download override are left alone unless you pass `--override`, which
+downloads that still carry the old global value pick up the new value. Downloads
+with a per-download override are left alone unless you pass `--override`, which
 forces the new value onto every download.
+
+When `get --id` is used, the returned value is the **effective** value (global
+fallback when no override is set). Use `get --id --json` for machine-readable output.
+
+### JSON output
+
+`list`, `get`, and `set` (when listing keys) all support `--json` to emit
+raw JSON instead of formatted text — useful for scripts and agent consumers.
 
 ```bash
 downloadx set maxParallel 5
 downloadx set speedLimit 3mb
 downloadx set targetPath ~/Downloads
-downloadx set speedLimit 1mb --id 2       # limit only download #2
-downloadx set minChunkSize 2mb --override # force onto every download
-downloadx get                              # show all config values
-downloadx get speedLimit                   # show one value
-downloadx get speedLimit --id 2           # per-download override value
+downloadx set headers.Authorization "Bearer token"     # global header
+downloadx set speedLimit 1mb --id 2                    # limit only download #2
+downloadx set headers.X-Custom myval --id 2            # per-download header
+downloadx set speedLimit null --id 2                   # clear override → follow global
+downloadx set minChunkSize 2mb --override              # force onto every download
+downloadx get                                          # show all config values
+downloadx get --json                                   # machine-readable
+downloadx get speedLimit                               # show one value
+downloadx get --id 2 --json                            # per-download effective values
 ```
+
+The daemon's cache directory (`~/.local/share/downloadx/cache`) is fixed at
+daemon startup and is not a runtime-configurable key. In-progress `.part`
+files are stored there as `{id}.part` — independent of the filename — so
+renaming a download mid-flight never loses progress.
 
 ## Development
 

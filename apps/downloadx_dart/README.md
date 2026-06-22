@@ -105,22 +105,45 @@ autostart).
 
 ### Manager (`DownloadX`)
 
-- `addUrl(url, [options])` → `Future<Download>`
+- `addUrl(url, [options])` → `Future<Download>` — options include `filename`,
+  `description`, `metadata`, `headers`, `targetPath`, `speedLimit`,
+  `targetChunkCount`, `minChunkSize`, `journal`, `id`, `autoStart`
 - `start([id])` / `pause([id])` / `clear([id])`
 - `list()` / `getDownload(id)` / `describeAll()`
-- `setMaxParallel(n)` / `setTargetPath(p)` / `setSpeedLimit(bytesPerSec)`
-- `setTargetChunkCount(n, {override})` / `setMinChunkSize(bytes, {override})` /
-  `setJournal(enabled, {override})`
+- `setMaxParallel(n)` / `setTargetPath(p)`
+- `setSpeedLimit(int?)` — manager-wide cap shared by all downloads; `null` or
+  `0` = unlimited
+- `setTargetChunkCount(int?, {override})` / `setMinChunkSize(int?, {override})` /
+  `setJournal(bool?, {override})` — `null` resets to the built-in default;
+  `override: true` forces the value onto every download regardless of their
+  current per-download setting
+- `setHeaders(Map<String, String?>?)` — merge HTTP headers into the global
+  config; `null` values in the map remove that key; pass `null` to clear all
 
 ### `Download`
 
 - `start()` / `pause()` / `cancel()` / `clear()`
 - `setSpeedLimit(int?)` / `setTargetPath(String?)` /
-  `setTargetChunkCount(int?)` / `setMinChunkSize(int?)` / `setJournal(bool?)`
+  `setTargetChunkCount(int?)` / `setMinChunkSize(int?)` / `setJournal(bool?)` —
+  `null` clears the per-download override and reverts to the global value
+- `setFilename(String?)` — override the final filename; `null` reverts to the
+  probe/URL-derived name
+- `setDescription(String?)` — attach a free-form note; `null` clears it
+- `setMetadata(Map<String, String?>)` — merge key/value pairs; `null` values
+  remove individual keys. Use `clearMetadata()` to remove all metadata.
+- `setHeaders(Map<String, String?>)` — merge HTTP headers on top of global
+  (`effective = {...global, ...local}`); `null` values remove individual keys.
+  Use `clearHeaders()` to remove all local overrides. Only the local portion is
+  persisted — global header changes are reflected automatically on the next request.
 - `alloc()` — pre-allocate the part file (automatic at start when
   `io.truncate` is available)
 - `describe()` / `describeText()`
 - `emitter` — the typed event API
+
+> **Part file location:** the in-progress `.part` file is written to
+> `{cachePath}/{id}.part`. Changing the filename mid-download never loses
+> the downloaded bytes. The file is moved to `{targetPath}/{filename}` only
+> on successful completion.
 
 ### Events
 
