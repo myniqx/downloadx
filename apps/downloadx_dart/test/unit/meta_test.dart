@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:downloadx/downloadx.dart';
 import 'package:test/test.dart';
 
@@ -72,6 +74,110 @@ void main() {
       // downloading state is dehydrated to paused only when the engine persists;
       // here we persisted as-is, so it remains downloading.
       expect(loaded.chunks.first.status, ChunkStatus.downloading);
+    });
+
+    test('persists and reloads isHls / description / metadata round trip',
+        () async {
+      final io = MockIo();
+      final m = createMeta(
+        id: 'd1',
+        url: 'https://x/stream.m3u8',
+        probe: const ProbeResult(
+          url: 'https://x/stream.m3u8',
+          finalUrl: 'https://x/stream.m3u8',
+          totalSize: null,
+          acceptsRanges: true,
+          etag: null,
+          lastModified: null,
+          contentType: null,
+          filename: 'stream.m3u8',
+          isHls: true,
+        ),
+        chunks: [],
+      )
+        ..description = 'my note'
+        ..metadata = {'sourceLink': 'https://page', 'fromExtension': 'true'};
+      final loc = MetaLocator(dir: '/cache', id: 'd1');
+      await persistMeta(io, loc, m);
+      final loaded = await loadMeta(io, loc);
+      expect(loaded!.isHls, isTrue);
+      expect(loaded.description, 'my note');
+      expect(loaded.metadata,
+          {'sourceLink': 'https://page', 'fromExtension': 'true'});
+    });
+
+    test('persists and reloads HLS segment chunk fields', () async {
+      final io = MockIo();
+      final m = createMeta(
+        id: 'd1',
+        url: 'https://x/stream.m3u8',
+        probe: const ProbeResult(
+          url: 'https://x/stream.m3u8',
+          finalUrl: 'https://x/stream.m3u8',
+          totalSize: null,
+          acceptsRanges: true,
+          etag: null,
+          lastModified: null,
+          contentType: null,
+          filename: 'stream.m3u8',
+          isHls: true,
+        ),
+        chunks: [
+          ChunkSnapshot(
+            id: 'd1-c0',
+            offset: 0,
+            length: 0,
+            downloadedBytes: 0,
+            status: ChunkStatus.pending,
+            quality: ChunkQuality.good,
+            retries: 0,
+            isSegment: true,
+            targetFilePath: '/cache/d1-hls/seg-000000.ts',
+            uri: 'https://x/seg0.ts',
+            durationSec: 6,
+          ),
+        ],
+      );
+      final loc = MetaLocator(dir: '/cache', id: 'd1');
+      await persistMeta(io, loc, m);
+      final loaded = await loadMeta(io, loc);
+      final c = loaded!.chunks.first;
+      expect(c.isSegment, isTrue);
+      expect(c.targetFilePath, '/cache/d1-hls/seg-000000.ts');
+      expect(c.uri, 'https://x/seg0.ts');
+      expect(c.durationSec, 6);
+    });
+
+    test('loads legacy meta without isHls/description/metadata using defaults',
+        () async {
+      final io = MockIo();
+      final loc = MetaLocator(dir: '/cache', id: 'old');
+      final m = createMeta(
+        id: 'old',
+        url: 'https://x/y.bin',
+        probe: const ProbeResult(
+          url: 'https://x/y.bin',
+          finalUrl: 'https://x/y.bin',
+          totalSize: 100,
+          acceptsRanges: true,
+          etag: null,
+          lastModified: null,
+          contentType: null,
+          filename: 'y.bin',
+          isHls: false,
+        ),
+        chunks: [],
+      );
+      final raw = m.toJson();
+      raw.remove('isHls');
+      raw.remove('description');
+      raw.remove('metadata');
+      await io.writeFile(metaPath(io, loc), utf8.encode(jsonEncode(raw)));
+      final loaded = await loadMeta(io, loc);
+      expect(loaded, isNotNull);
+      expect(loaded!.isHls, isFalse);
+      expect(loaded.description, isNull);
+      expect(loaded.metadata, isNull);
     });
 
     test('listMetaFiles finds only matching sidecars', () async {

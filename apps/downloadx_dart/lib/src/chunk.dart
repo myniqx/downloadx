@@ -39,6 +39,12 @@ class ChunkParams {
 
   /// Live reference to download config — values read per-retry, not snapshotted.
   final DownloadConfig global;
+
+  /// HLS segment mode. A segment chunk downloads a whole segment file from byte
+  /// 0 into its own [targetFilePath] (offset is always 0), is never split, and
+  /// — when the segment size is unknown — streams until EOF. Retry, throttle,
+  /// speed tracking and resume all behave exactly as for a normal chunk.
+  final bool isSegment;
   final EventEmitter emitter;
 
   /// Optional throttle hook — called with bytes-just-read before write.
@@ -63,6 +69,7 @@ class ChunkParams {
     this.etag,
     this.lastModified,
     required this.global,
+    this.isSegment = false,
     required this.emitter,
     this.throttle,
     required this.medianSpeedRef,
@@ -127,6 +134,9 @@ class Chunk {
   /// Machine-readable failure code set on permanent failure (e.g. `'range-not-honored'`).
   String? get failureCode => _failureCode;
 
+  /// True for HLS segment chunks — never split, written from byte 0.
+  bool get isSegment => _params.isSegment;
+
   /// Human-readable description of the last error, or null.
   String? get lastError => _lastError;
 
@@ -145,6 +155,8 @@ class Chunk {
   /// Shrink this chunk so the tail portion can be given to another chunk.
   /// Returns the byte range removed, or null if too close to completion.
   ByteRange? truncateTail(int minRemaining) {
+    // Segment chunks map 1:1 to a segment file and are never split.
+    if (isSegment) return null;
     final remaining = remainingBytes;
     if (remaining < minRemaining * 2) return null;
     // Cut the unclaimed half — leave at least `minRemaining` for ourselves.

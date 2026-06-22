@@ -73,6 +73,9 @@ export function createEmptyMeta(input: CreateEmptyMetaInput): MetaFile {
     targetPath: null,
     minChunkSize: null,
     journal: null,
+    isHls: false,
+    description: null,
+    metadata: null,
   };
 }
 
@@ -107,6 +110,7 @@ export function applyProbeToMeta(
   meta.etag = probe.etag;
   meta.lastModified = probe.lastModified;
   meta.contentType = probe.contentType;
+  meta.isHls = probe.isHls;
   meta.chunks = chunks;
   meta.updatedAt = Date.now();
   return meta;
@@ -180,8 +184,13 @@ export function updateMeta(
       | 'speedLimit'
       | 'targetChunkCount'
       | 'targetPath'
+      | 'minChunkSize'
+      | 'journal'
       | 'completedAt'
       | 'errorMessage'
+      | 'isHls'
+      | 'description'
+      | 'metadata'
     >
   >,
 ): MetaFile {
@@ -190,8 +199,13 @@ export function updateMeta(
   if ('speedLimit' in patch) meta.speedLimit = patch.speedLimit ?? null;
   if ('targetChunkCount' in patch) meta.targetChunkCount = patch.targetChunkCount ?? null;
   if ('targetPath' in patch) meta.targetPath = patch.targetPath ?? null;
+  if ('minChunkSize' in patch) meta.minChunkSize = patch.minChunkSize ?? null;
+  if ('journal' in patch) meta.journal = patch.journal ?? null;
   if ('completedAt' in patch) meta.completedAt = patch.completedAt ?? null;
   if ('errorMessage' in patch) meta.errorMessage = patch.errorMessage ?? null;
+  if ('isHls' in patch) meta.isHls = patch.isHls ?? false;
+  if ('description' in patch) meta.description = patch.description ?? null;
+  if ('metadata' in patch) meta.metadata = patch.metadata ?? null;
   meta.updatedAt = Date.now();
   return meta;
 }
@@ -250,11 +264,17 @@ function validate(value: unknown): MetaFile {
   assertNullableString(v, 'targetPath');
   const minChunkSize = 'minChunkSize' in v ? v['minChunkSize'] : null;
   const journal = 'journal' in v ? v['journal'] : null;
+  const isHls = 'isHls' in v ? v['isHls'] : false;
+  const description = 'description' in v ? v['description'] : null;
+  const metadata = 'metadata' in v ? v['metadata'] : null;
   return {
     ...(v as unknown as MetaFile),
     chunks,
     minChunkSize: typeof minChunkSize === 'number' ? minChunkSize : null,
     journal: typeof journal === 'boolean' ? journal : null,
+    isHls: typeof isHls === 'boolean' ? isHls : false,
+    description: typeof description === 'string' ? description : null,
+    metadata: isStringRecord(metadata) ? metadata : null,
   };
 }
 
@@ -270,7 +290,34 @@ function validateChunk(value: unknown, index: number): ChunkSnapshot {
   assertString(c, 'status');
   assertString(c, 'quality');
   assertNumber(c, 'retries');
+  // Optional HLS segment fields — validated only when present so old metas and
+  // normal chunks remain valid.
+  if ('isSegment' in c && c['isSegment'] !== undefined && typeof c['isSegment'] !== 'boolean') {
+    throw new Error(`meta: chunk[${index}].isSegment must be boolean`);
+  }
+  if (
+    'targetFilePath' in c &&
+    c['targetFilePath'] !== undefined &&
+    typeof c['targetFilePath'] !== 'string'
+  ) {
+    throw new Error(`meta: chunk[${index}].targetFilePath must be string`);
+  }
+  if ('uri' in c && c['uri'] !== undefined && typeof c['uri'] !== 'string') {
+    throw new Error(`meta: chunk[${index}].uri must be string`);
+  }
+  if ('durationSec' in c && c['durationSec'] !== undefined && typeof c['durationSec'] !== 'number') {
+    throw new Error(`meta: chunk[${index}].durationSec must be number`);
+  }
   return value as ChunkSnapshot;
+}
+
+/** True when value is a plain object whose values are all strings. */
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  for (const v of Object.values(value)) {
+    if (typeof v !== 'string') return false;
+  }
+  return true;
 }
 
 function assertString(obj: Record<string, unknown>, key: string): void {

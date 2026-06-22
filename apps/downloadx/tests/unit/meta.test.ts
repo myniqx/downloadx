@@ -23,6 +23,7 @@ function exampleProbe(over: Partial<ProbeResult> = {}): ProbeResult {
     lastModified: null,
     contentType: null,
     filename: 'y.bin',
+    isHls: false,
     ...over,
   };
 }
@@ -97,6 +98,71 @@ describe('meta persistence', () => {
     await persistMeta(io, { dir: '/dl', id: 'd1' }, meta);
     await deleteMeta(io, { dir: '/dl', id: 'd1' });
     expect(fs.hasFile(metaPath(io, { dir: '/dl', id: 'd1' }))).toBe(false);
+  });
+
+  it('persists and reloads isHls / description / metadata round-trip', async () => {
+    const { io } = makeHarness();
+    const meta = createMeta({
+      id: 'd1',
+      url: 'https://x/stream.m3u8',
+      probe: exampleProbe({ isHls: true, totalSize: null }),
+      chunks: [exampleSnap()],
+    });
+    meta.description = 'my note';
+    meta.metadata = { sourceLink: 'https://page', fromExtension: 'true' };
+    await persistMeta(io, { dir: '/dl', id: 'd1' }, meta);
+    const loaded = await loadMeta(io, { dir: '/dl', id: 'd1' });
+    expect(loaded?.isHls).toBe(true);
+    expect(loaded?.description).toBe('my note');
+    expect(loaded?.metadata).toEqual({ sourceLink: 'https://page', fromExtension: 'true' });
+  });
+
+  it('persists and reloads HLS segment chunk fields', async () => {
+    const { io } = makeHarness();
+    const meta = createMeta({
+      id: 'd1',
+      url: 'https://x/stream.m3u8',
+      probe: exampleProbe({ isHls: true }),
+      chunks: [
+        exampleSnap({
+          isSegment: true,
+          targetFilePath: '/cache/d1-hls/seg-000000.ts',
+          uri: 'https://x/seg0.ts',
+          durationSec: 6,
+        }),
+      ],
+    });
+    await persistMeta(io, { dir: '/dl', id: 'd1' }, meta);
+    const loaded = await loadMeta(io, { dir: '/dl', id: 'd1' });
+    const c = loaded?.chunks[0];
+    expect(c?.isSegment).toBe(true);
+    expect(c?.targetFilePath).toBe('/cache/d1-hls/seg-000000.ts');
+    expect(c?.uri).toBe('https://x/seg0.ts');
+    expect(c?.durationSec).toBe(6);
+  });
+
+  it('loads legacy meta without isHls/description/metadata using defaults', async () => {
+    const { fs, io } = makeHarness();
+    const meta = createMeta({
+      id: 'old',
+      url: 'https://x/y.bin',
+      probe: exampleProbe(),
+      chunks: [exampleSnap()],
+    });
+    // Simulate an older meta file that predates the new fields.
+    const raw = JSON.parse(JSON.stringify(meta)) as Record<string, unknown>;
+    delete raw['isHls'];
+    delete raw['description'];
+    delete raw['metadata'];
+    await fs.writeFile(
+      metaPath(io, { dir: '/dl', id: 'old' }),
+      new TextEncoder().encode(JSON.stringify(raw)),
+    );
+    const loaded = await loadMeta(io, { dir: '/dl', id: 'old' });
+    expect(loaded).not.toBeNull();
+    expect(loaded?.isHls).toBe(false);
+    expect(loaded?.description).toBeNull();
+    expect(loaded?.metadata).toBeNull();
   });
 
   it('updateMeta merges state/chunks and bumps updatedAt', () => {

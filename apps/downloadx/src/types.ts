@@ -205,6 +205,15 @@ export interface DownloadOptions {
 
   /** Start the download immediately after addUrl. */
   autoStart?: boolean;
+
+  /** Free-form note attached to this download. Persisted and returned in
+   *  `describe()`; has no behavioural effect. */
+  description?: string;
+
+  /** Arbitrary key/value data attached to this download (e.g. sourceLink,
+   *  fromExtension). Persisted and returned in `describe()`; has no
+   *  behavioural effect. Intended for apps consuming the core. */
+  metadata?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +250,15 @@ export interface ChunkSnapshot {
   quality: ChunkQuality;
   retries: number;
   lastError?: string;
+  /** HLS segment mode: chunk writes from byte 0 into its own file rather than
+   *  at an offset within a shared part file. Undefined for normal chunks. */
+  isSegment?: boolean;
+  /** HLS segment: the dedicated file this segment is written to. */
+  targetFilePath?: string;
+  /** HLS segment: source segment URI (resolved). */
+  uri?: string;
+  /** HLS segment: segment duration in seconds (from #EXTINF), for ETA. */
+  durationSec?: number;
 }
 
 /** Result of the initial HTTP probe. */
@@ -280,6 +298,13 @@ export interface MetaFile {
   targetPath: string | null;
   minChunkSize: number | null;
   journal: boolean | null;
+  /** Whether the resolved resource is an HLS playlist. Persisted so resume can
+   *  reconstruct segment chunks without re-probing. */
+  isHls: boolean;
+  /** Free-form note (see DownloadOptions.description). */
+  description: string | null;
+  /** Arbitrary key/value data (see DownloadOptions.metadata). */
+  metadata: Record<string, string> | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -373,6 +398,8 @@ export interface DownloadDescription {
   addedAt: number;
   completedAt: number | null;
   errorMessage: string | null;
+  description: string | null;
+  metadata: Record<string, string> | null;
   state: DownloadState;
   totalBytes: number | null;
   downloadedBytes: number;

@@ -33,6 +33,13 @@ export interface ChunkParams {
   lastModified?: string | null;
   /** Live reference to download config — values read per-retry, not snapshotted. */
   global: DownloadConfig;
+  /**
+   * HLS segment mode. A segment chunk downloads a whole segment file from byte
+   * 0 into its own `targetFilePath` (offset is always 0), is never split, and
+   * — when the segment size is unknown — streams until EOF. Retry, throttle,
+   * speed tracking and resume all behave exactly as for a normal chunk.
+   */
+  isSegment?: boolean;
   emitter: TypedEventEmitter<DownloadEventMap>;
   /** Optional throttle hook — called with bytes-just-read before write. */
   throttle?: (bytes: number, signal?: AbortSignal) => Promise<void>;
@@ -114,6 +121,11 @@ export class Chunk {
     return this._failureCode;
   }
 
+  /** True for HLS segment chunks — never split, written from byte 0. */
+  get isSegment(): boolean {
+    return this.params.isSegment ?? false;
+  }
+
   get lastError(): string | undefined {
     return this._lastError;
   }
@@ -138,6 +150,8 @@ export class Chunk {
    * close to completion to split safely.
    */
   truncateTail(minRemaining: number): { offset: number; length: number } | null {
+    // Segment chunks map 1:1 to a segment file and are never split.
+    if (this.isSegment) return null;
     const remaining = this.remainingBytes;
     if (remaining < minRemaining * 2) return null;
     // Cut the unclaimed half — leave at least `minRemaining` for ourselves.

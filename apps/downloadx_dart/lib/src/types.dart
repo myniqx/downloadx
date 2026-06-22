@@ -242,6 +242,15 @@ class DownloadOptions {
   /// Start the download immediately after addUrl.
   final bool? autoStart;
 
+  /// Free-form note attached to this download. Persisted and returned in
+  /// [Download.describe]; has no behavioural effect.
+  final String? description;
+
+  /// Arbitrary key/value data attached to this download (e.g. sourceLink,
+  /// fromExtension). Persisted and returned in [Download.describe]; has no
+  /// behavioural effect. Intended for apps consuming the core.
+  final Map<String, String>? metadata;
+
   const DownloadOptions({
     this.filename,
     this.targetPath,
@@ -256,6 +265,8 @@ class DownloadOptions {
     this.headers,
     this.id,
     this.autoStart,
+    this.description,
+    this.metadata,
   });
 }
 
@@ -301,6 +312,19 @@ class ChunkSnapshot {
   /// Last error message, or null if no error occurred.
   String? lastError;
 
+  /// HLS segment mode: chunk writes from byte 0 into its own file rather than
+  /// at an offset within a shared part file. Null for normal chunks.
+  bool? isSegment;
+
+  /// HLS segment: the dedicated file this segment is written to.
+  String? targetFilePath;
+
+  /// HLS segment: source segment URI (resolved).
+  String? uri;
+
+  /// HLS segment: segment duration in seconds (from #EXTINF), for ETA.
+  num? durationSec;
+
   /// Creates a [ChunkSnapshot].
   ChunkSnapshot({
     required this.id,
@@ -311,6 +335,10 @@ class ChunkSnapshot {
     required this.quality,
     required this.retries,
     this.lastError,
+    this.isSegment,
+    this.targetFilePath,
+    this.uri,
+    this.durationSec,
   });
 
   /// Serialises this snapshot to a JSON-compatible map.
@@ -325,6 +353,10 @@ class ChunkSnapshot {
       'retries': retries,
     };
     if (lastError != null) m['lastError'] = lastError;
+    if (isSegment != null) m['isSegment'] = isSegment;
+    if (targetFilePath != null) m['targetFilePath'] = targetFilePath;
+    if (uri != null) m['uri'] = uri;
+    if (durationSec != null) m['durationSec'] = durationSec;
     return m;
   }
 
@@ -338,6 +370,10 @@ class ChunkSnapshot {
         quality: chunkQualityFromString(j['quality'] as String),
         retries: (j['retries'] as num).toInt(),
         lastError: j['lastError'] as String?,
+        isSegment: j['isSegment'] as bool?,
+        targetFilePath: j['targetFilePath'] as String?,
+        uri: j['uri'] as String?,
+        durationSec: j['durationSec'] as num?,
       );
 }
 
@@ -465,6 +501,16 @@ class MetaFile {
   /// Whether the NDJSON journal is enabled for this download, or null (manager default).
   bool? journal;
 
+  /// Whether the resolved resource is an HLS playlist. Persisted so resume can
+  /// reconstruct segment chunks without re-probing.
+  bool isHls;
+
+  /// Free-form note (see [DownloadOptions.description]).
+  String? description;
+
+  /// Arbitrary key/value data (see [DownloadOptions.metadata]).
+  Map<String, String>? metadata;
+
   /// Creates a [MetaFile].
   MetaFile({
     required this.schemaVersion,
@@ -489,6 +535,9 @@ class MetaFile {
     required this.targetPath,
     required this.minChunkSize,
     required this.journal,
+    this.isHls = false,
+    this.description,
+    this.metadata,
   });
 
   /// Serialises this meta file to a JSON-compatible map.
@@ -515,6 +564,9 @@ class MetaFile {
         'targetPath': targetPath,
         'minChunkSize': minChunkSize,
         'journal': journal,
+        'isHls': isHls,
+        'description': description,
+        'metadata': metadata,
       };
 }
 
@@ -630,6 +682,12 @@ class DownloadDescription {
   /// Last error message, or null.
   final String? errorMessage;
 
+  /// Free-form note (see [DownloadOptions.description]).
+  final String? description;
+
+  /// Arbitrary key/value data (see [DownloadOptions.metadata]).
+  final Map<String, String>? metadata;
+
   /// Current download state.
   final DownloadState state;
 
@@ -678,6 +736,8 @@ class DownloadDescription {
     required this.addedAt,
     required this.completedAt,
     required this.errorMessage,
+    this.description,
+    this.metadata,
     required this.state,
     required this.totalBytes,
     required this.downloadedBytes,
@@ -702,6 +762,8 @@ class DownloadDescription {
         'addedAt': addedAt,
         'completedAt': completedAt,
         'errorMessage': errorMessage,
+        'description': description,
+        'metadata': metadata,
         'state': state.name,
         'totalBytes': totalBytes,
         'downloadedBytes': downloadedBytes,

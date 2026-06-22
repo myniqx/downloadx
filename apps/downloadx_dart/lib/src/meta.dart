@@ -86,6 +86,7 @@ MetaFile applyProbeToMeta(
   meta.etag = probe.etag;
   meta.lastModified = probe.lastModified;
   meta.contentType = probe.contentType;
+  meta.isHls = probe.isHls;
   meta.chunks = chunks;
   meta.updatedAt = _defaultNow();
   return meta;
@@ -202,6 +203,9 @@ MetaFile _validate(dynamic value) {
   _assertNullableString(v, 'targetPath');
   final minChunkSize = v['minChunkSize'];
   final journal = v['journal'];
+  final isHls = v['isHls'];
+  final description = v['description'];
+  final metadata = v['metadata'];
 
   return MetaFile(
     schemaVersion: metaSchemaVersion,
@@ -226,7 +230,22 @@ MetaFile _validate(dynamic value) {
     targetPath: v['targetPath'] as String?,
     minChunkSize: minChunkSize is num ? minChunkSize.toInt() : null,
     journal: journal is bool ? journal : null,
+    isHls: isHls is bool ? isHls : false,
+    description: description is String ? description : null,
+    metadata: _asStringMap(metadata),
   );
+}
+
+/// Returns a `Map<String, String>` when [value] is a plain map whose values are
+/// all strings, otherwise null. Used for the optional `metadata` field.
+Map<String, String>? _asStringMap(dynamic value) {
+  if (value is! Map) return null;
+  final out = <String, String>{};
+  for (final entry in value.entries) {
+    if (entry.key is! String || entry.value is! String) return null;
+    out[entry.key as String] = entry.value as String;
+  }
+  return out;
 }
 
 ChunkSnapshot _validateChunk(dynamic value, int index) {
@@ -239,6 +258,22 @@ ChunkSnapshot _validateChunk(dynamic value, int index) {
   _assertString(c, 'status');
   _assertString(c, 'quality');
   _assertNumber(c, 'retries');
+  // Optional HLS segment fields — validated only when present so old metas and
+  // normal chunks remain valid.
+  if (c.containsKey('isSegment') && c['isSegment'] != null && c['isSegment'] is! bool) {
+    throw FormatException('meta: chunk[$index].isSegment must be boolean');
+  }
+  if (c.containsKey('targetFilePath') &&
+      c['targetFilePath'] != null &&
+      c['targetFilePath'] is! String) {
+    throw FormatException('meta: chunk[$index].targetFilePath must be string');
+  }
+  if (c.containsKey('uri') && c['uri'] != null && c['uri'] is! String) {
+    throw FormatException('meta: chunk[$index].uri must be string');
+  }
+  if (c.containsKey('durationSec') && c['durationSec'] != null && c['durationSec'] is! num) {
+    throw FormatException('meta: chunk[$index].durationSec must be number');
+  }
   return ChunkSnapshot.fromJson(c);
 }
 

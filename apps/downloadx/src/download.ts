@@ -121,6 +121,8 @@ export class Download implements GlobalConfig {
       if (options.speedLimit !== undefined) this._meta.speedLimit = options.speedLimit;
       if (options.minChunkSize !== undefined) this._meta.minChunkSize = options.minChunkSize;
       if (options.journal !== undefined) this._meta.journal = options.journal;
+      if (options.description !== undefined) this._meta.description = options.description;
+      if (options.metadata !== undefined) this._meta.metadata = options.metadata;
     }
     this.emitter.on('chunkLifecycle', (payload) => {
       if (
@@ -333,6 +335,8 @@ export class Download implements GlobalConfig {
       addedAt: this.meta.addedAt,
       completedAt: this.meta.completedAt,
       errorMessage: this.meta.errorMessage,
+      description: this.meta.description,
+      metadata: this.meta.metadata,
       state: this._state,
       totalBytes: total,
       downloadedBytes: downloaded,
@@ -598,7 +602,35 @@ export class Download implements GlobalConfig {
       runners.set(chunk.id, p);
     };
 
-    for (const c of this.chunks) launch(c);
+    // HLS segment downloads can have hundreds of chunks; cap how many run at
+    // once so we don't fire one request per segment. The cap is the configured
+    // target chunk count. Normal (non-segment) downloads keep their existing
+    // behaviour — every planned chunk launches immediately and the dynamic
+    // splitter grows them up to targetChunkCount.
+    const segmentMode = this.chunks.some((c) => c.isSegment);
+    const concurrency = segmentMode
+      ? Math.max(1, this.options.targetChunkCount ?? this.targetChunkCount)
+      : Infinity;
+
+    // Launch up to `concurrency` chunks; the rest wait until a slot frees up.
+    // A chunk is launchable when it isn't finished and isn't already running.
+    // (On resume, chunks may be `paused`, not `pending`, so don't filter on
+    // `pending` alone — that would skip resumable chunks.)
+    const launchPending = (): void => {
+      for (const c of this.chunks) {
+        if (runners.size >= concurrency) break;
+        if (
+          c.status === 'completed' ||
+          c.status === 'reassigned' ||
+          c.status === 'failed' ||
+          runners.has(c.id)
+        ) {
+          continue;
+        }
+        launch(c);
+      }
+    };
+    launchPending();
 
     while (runners.size > 0) {
       const entries = Array.from(runners.entries());
@@ -656,6 +688,10 @@ export class Download implements GlobalConfig {
         );
         launch(newChunk);
       }
+
+      // Fill any freed slots with still-pending chunks (segment mode). No-op
+      // for normal downloads, where every chunk launched up front.
+      launchPending();
 
       await this.persistCurrentMeta().catch(() => undefined);
     }

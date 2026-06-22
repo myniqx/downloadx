@@ -102,6 +102,8 @@ class Download implements GlobalConfig {
       if (options.speedLimit != null) _meta.speedLimit = options.speedLimit;
       if (options.minChunkSize != null) _meta.minChunkSize = options.minChunkSize;
       if (options.journal != null) _meta.journal = options.journal;
+      if (options.description != null) _meta.description = options.description;
+      if (options.metadata != null) _meta.metadata = options.metadata;
     }
     emitter.onType<ChunkLifecycleEvent>((payload) {
       if (payload.status == ChunkStatus.completed ||
@@ -302,6 +304,8 @@ class Download implements GlobalConfig {
       addedAt: _meta.addedAt,
       completedAt: _meta.completedAt,
       errorMessage: _meta.errorMessage,
+      description: _meta.description,
+      metadata: _meta.metadata,
       state: _state,
       totalBytes: total,
       downloadedBytes: downloaded,
@@ -566,9 +570,34 @@ class Download implements GlobalConfig {
       runners[chunk.id] = chunk.run().whenComplete(() => done.add(chunk.id));
     }
 
-    for (final c in _chunks) {
-      launch(c);
+    // HLS segment downloads can have hundreds of chunks; cap how many run at
+    // once so we don't fire one request per segment. The cap is the configured
+    // target chunk count. Normal (non-segment) downloads keep their existing
+    // behaviour — every planned chunk launches immediately and the dynamic
+    // splitter grows them up to targetChunkCount.
+    final segmentMode = _chunks.any((c) => c.isSegment);
+    final concurrency = segmentMode
+        ? (options.targetChunkCount ?? targetChunkCount).clamp(1, 1 << 30)
+        : (1 << 30);
+
+    // Launch up to `concurrency` chunks; the rest wait until a slot frees up.
+    // A chunk is launchable when it isn't finished and isn't already running.
+    // (On resume, chunks may be `paused`, not `pending`, so don't filter on
+    // `pending` alone — that would skip resumable chunks.)
+    void launchPending() {
+      for (final c in _chunks) {
+        if (runners.length >= concurrency) break;
+        if (c.status == ChunkStatus.completed ||
+            c.status == ChunkStatus.reassigned ||
+            c.status == ChunkStatus.failed ||
+            runners.containsKey(c.id)) {
+          continue;
+        }
+        launch(c);
+      }
     }
+
+    launchPending();
 
     while (runners.isNotEmpty) {
       await Future.any(runners.values);
@@ -627,6 +656,10 @@ class Download implements GlobalConfig {
         );
         launch(newChunk);
       }
+
+      // Fill any freed slots with still-pending chunks (segment mode). No-op
+      // for normal downloads, where every chunk launched up front.
+      launchPending();
 
       await _persistCurrentMeta().catchError((_) {});
     }
