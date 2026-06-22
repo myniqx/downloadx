@@ -121,9 +121,6 @@ class Download implements GlobalConfig {
         _aggregate.remove(payload.chunkId);
       }
     });
-    emitter.onType<LogEvent>((event) {
-      _journalWrite(event);
-    });
   }
 
   /// Current lifecycle state of this download.

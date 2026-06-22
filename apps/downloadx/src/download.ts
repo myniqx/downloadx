@@ -143,9 +143,6 @@ export class Download implements GlobalConfig {
         this.aggregate.remove(payload.chunkId);
       }
     });
-    this.emitter.on('log', (payload) => {
-      this.journalWrite(payload);
-    });
   }
 
   get state(): DownloadState {
