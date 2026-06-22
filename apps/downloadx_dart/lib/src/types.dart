@@ -511,6 +511,9 @@ class MetaFile {
   /// Arbitrary key/value data (see [DownloadOptions.metadata]).
   Map<String, String>? metadata;
 
+  /// Per-download HTTP headers merged on top of global headers.
+  Map<String, String>? headers;
+
   /// Creates a [MetaFile].
   MetaFile({
     required this.schemaVersion,
@@ -538,6 +541,7 @@ class MetaFile {
     this.isHls = false,
     this.description,
     this.metadata,
+    this.headers,
   });
 
   /// Serialises this meta file to a JSON-compatible map.
@@ -567,6 +571,7 @@ class MetaFile {
         'isHls': isHls,
         'description': description,
         'metadata': metadata,
+        'headers': headers,
       };
 }
 

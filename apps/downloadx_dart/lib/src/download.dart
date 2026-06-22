@@ -64,7 +64,11 @@ class Download implements GlobalConfig {
   @override
   int get requestTimeout => _context.requestTimeout;
   @override
-  Map<String, String> get headers => _context.headers;
+  Map<String, String> get headers {
+    final local = _meta.headers;
+    if (local == null) return _context.headers;
+    return {..._context.headers, ...local};
+  }
 
   @override
   int get targetChunkCount =>
@@ -96,12 +100,14 @@ class Download implements GlobalConfig {
       initialMeta.state = _state;
     } else {
       _meta = createEmptyMeta(id: id, url: url);
+      if (options.filename != null) _meta.filename = options.filename;
       if (options.targetPath != null) _meta.targetPath = options.targetPath;
       if (options.speedLimit != null) _meta.speedLimit = options.speedLimit;
       if (options.minChunkSize != null) _meta.minChunkSize = options.minChunkSize;
       if (options.journal != null) _meta.journal = options.journal;
       if (options.description != null) _meta.description = options.description;
       if (options.metadata != null) _meta.metadata = options.metadata;
+      if (options.headers != null) _meta.headers = options.headers;
     }
     emitter.onType<ChunkLifecycleEvent>((payload) {
       if (payload.status == ChunkStatus.completed ||
@@ -156,9 +162,9 @@ class Download implements GlobalConfig {
     return sum;
   }
 
-  /// Resolved filename (user option → probe → meta → fallback).
+  /// Resolved filename (meta → probe → fallback).
   String get filename =>
-      options.filename ?? _probe?.filename ?? _meta.filename ?? 'download-$id';
+      _meta.filename ?? _probe?.filename ?? 'download-$id';
 
   /// Absolute path where the finished file will be written.
   String get targetFilePath => io.joinPath([targetPath, filename]);
@@ -245,6 +251,46 @@ class Download implements GlobalConfig {
 
   /// Toggle NDJSON journal writing; takes effect on the next diagnostic event.
   void setJournal(bool? enabled) => _meta.journal = enabled;
+
+  /// Override the filename. null clears the override (falls back to probe then URL).
+  void setFilename(String? name) => _meta.filename = name;
+
+  /// Set or clear the free-form description.
+  void setDescription(String? text) => _meta.description = text;
+
+  /// Merge key/value pairs into per-download metadata. null clears all metadata.
+  /// Pass {key: null} to remove a single key.
+  void setMetadata(Map<String, String?> patch) {
+    final current = _meta.metadata ?? {};
+    for (final entry in patch.entries) {
+      if (entry.value == null) {
+        current.remove(entry.key);
+      } else {
+        current[entry.key] = entry.value!;
+      }
+    }
+    _meta.metadata = current.isEmpty ? null : current;
+  }
+
+  /// Clear all metadata.
+  void clearMetadata() => _meta.metadata = null;
+
+  /// Merge HTTP headers into per-download headers (merged on top of global).
+  /// null value for a key removes that header from the local override.
+  void setHeaders(Map<String, String?> patch) {
+    final current = _meta.headers ?? {};
+    for (final entry in patch.entries) {
+      if (entry.value == null) {
+        current.remove(entry.key);
+      } else {
+        current[entry.key] = entry.value!;
+      }
+    }
+    _meta.headers = current.isEmpty ? null : current;
+  }
+
+  /// Clear all per-download header overrides (reverts to global headers).
+  void clearHeaders() => _meta.headers = null;
 
   /// Pre-allocate the part file to its final size. Requires `io.truncate` and a
   /// known total size; silently no-ops otherwise.
@@ -402,7 +448,7 @@ class Download implements GlobalConfig {
           fetch: io.fetch,
           url: url,
           headers: headers,
-          filenameHint: options.filename,
+          filenameHint: _meta.filename,
         ));
       }
 

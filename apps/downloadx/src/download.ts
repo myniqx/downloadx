@@ -75,7 +75,10 @@ export class Download implements GlobalConfig {
   get retryBackoff(): number { return this._context.retryBackoff; }
   get speedSampleWindow(): number { return this._context.speedSampleWindow; }
   get requestTimeout(): number { return this._context.requestTimeout; }
-  get headers(): Record<string, string> { return this._context.headers; }
+  get headers(): Record<string, string> {
+    if (this._meta.headers === null) return this._context.headers;
+    return { ...this._context.headers, ...this._meta.headers };
+  }
 
   get targetChunkCount(): number {
     return this._meta.targetChunkCount ?? this._context.targetChunkCount;
@@ -115,12 +118,14 @@ export class Download implements GlobalConfig {
       initialMeta.state = this._state;
     } else {
       this._meta = createEmptyMeta({ id, url });
+      if (options.filename !== undefined) this._meta.filename = options.filename;
       if (options.targetPath !== undefined) this._meta.targetPath = options.targetPath;
       if (options.speedLimit !== undefined) this._meta.speedLimit = options.speedLimit;
       if (options.minChunkSize !== undefined) this._meta.minChunkSize = options.minChunkSize;
       if (options.journal !== undefined) this._meta.journal = options.journal;
       if (options.description !== undefined) this._meta.description = options.description;
       if (options.metadata !== undefined) this._meta.metadata = options.metadata;
+      if (options.headers !== undefined) this._meta.headers = options.headers;
     }
     this.emitter.on('chunkLifecycle', (payload) => {
       if (
@@ -177,9 +182,7 @@ export class Download implements GlobalConfig {
   }
 
   get filename(): string {
-    return (
-      this.options.filename ?? this._probe?.filename ?? this._meta.filename ?? `download-${this.id}`
-    );
+    return this._meta.filename ?? this._probe?.filename ?? `download-${this.id}`;
   }
 
   get targetFilePath(): string {
@@ -270,6 +273,45 @@ export class Download implements GlobalConfig {
   /** Toggle NDJSON journal writing; takes effect on the next diagnostic event. */
   setJournal(enabled: boolean | null): void {
     this._meta.journal = enabled;
+  }
+
+  /** Override the filename. null clears the override (falls back to probe then URL). */
+  setFilename(name: string | null): void {
+    this._meta.filename = name;
+  }
+
+  /** Set or clear the free-form description. */
+  setDescription(text: string | null): void {
+    this._meta.description = text;
+  }
+
+  /**
+   * Merge key/value pairs into per-download metadata. null clears all metadata.
+   * To remove a single key, pass { key: null } — null values are deleted from the map.
+   */
+  setMetadata(patch: Record<string, string | null> | null): void {
+    if (patch === null) { this._meta.metadata = null; return; }
+    const current = this._meta.metadata ?? {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) delete current[k];
+      else current[k] = v;
+    }
+    this._meta.metadata = Object.keys(current).length > 0 ? current : null;
+  }
+
+  /**
+   * Merge HTTP headers into per-download headers (merged on top of global).
+   * null clears the local override entirely (reverts to global headers).
+   * To remove a single header, pass { Key: null } — null values are deleted.
+   */
+  setHeaders(patch: Record<string, string | null> | null): void {
+    if (patch === null) { this._meta.headers = null; return; }
+    const current = this._meta.headers ?? {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) delete current[k];
+      else current[k] = v;
+    }
+    this._meta.headers = Object.keys(current).length > 0 ? current : null;
   }
 
   /**
@@ -421,7 +463,7 @@ export class Download implements GlobalConfig {
           fetch: this.io.fetch,
           url: this.url,
           headers: this.headers,
-          ...(this.options.filename !== undefined ? { filenameHint: this.options.filename } : {}),
+          ...(this._meta.filename !== null ? { filenameHint: this._meta.filename } : {}),
         });
         this._probe = probe;
       }

@@ -305,6 +305,8 @@ export interface MetaFile {
   description: string | null;
   /** Arbitrary key/value data (see DownloadOptions.metadata). */
   metadata: Record<string, string> | null;
+  /** Per-download HTTP headers merged on top of global headers. */
+  headers: Record<string, string> | null;
 }
 
 // ---------------------------------------------------------------------------

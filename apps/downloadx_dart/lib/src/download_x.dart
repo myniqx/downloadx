@@ -214,6 +214,23 @@ class DownloadX implements DlxContext {
   @override
   Map<String, String> get headers => _baseConfig.headers ?? const {};
 
+  /// Merge HTTP headers into the global headers config.
+  /// null value for a key removes that header. Pass null patch to clear all.
+  void setHeaders(Map<String, String?> patch) {
+    final current = _baseConfig.headers ?? {};
+    for (final entry in patch.entries) {
+      if (entry.value == null) {
+        current.remove(entry.key);
+      } else {
+        current[entry.key] = entry.value!;
+      }
+    }
+    _baseConfig.headers = current.isEmpty ? null : current;
+  }
+
+  /// Clear all global headers.
+  void clearHeaders() => _baseConfig.headers = null;
+
   @override
   int get maxRetries => _baseConfig.maxRetries ?? DefaultConfig.maxRetries;
 

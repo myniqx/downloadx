@@ -76,6 +76,7 @@ export function createEmptyMeta(input: CreateEmptyMetaInput): MetaFile {
     isHls: false,
     description: null,
     metadata: null,
+    headers: null,
   };
 }
 
@@ -191,6 +192,7 @@ export function updateMeta(
       | 'isHls'
       | 'description'
       | 'metadata'
+      | 'headers'
     >
   >,
 ): MetaFile {
@@ -206,6 +208,7 @@ export function updateMeta(
   if ('isHls' in patch) meta.isHls = patch.isHls ?? false;
   if ('description' in patch) meta.description = patch.description ?? null;
   if ('metadata' in patch) meta.metadata = patch.metadata ?? null;
+  if ('headers' in patch) meta.headers = patch.headers ?? null;
   meta.updatedAt = Date.now();
   return meta;
 }
@@ -267,6 +270,7 @@ function validate(value: unknown): MetaFile {
   const isHls = 'isHls' in v ? v['isHls'] : false;
   const description = 'description' in v ? v['description'] : null;
   const metadata = 'metadata' in v ? v['metadata'] : null;
+  const headers = 'headers' in v ? v['headers'] : null;
   return {
     ...(v as unknown as MetaFile),
     chunks,
@@ -275,6 +279,7 @@ function validate(value: unknown): MetaFile {
     isHls: typeof isHls === 'boolean' ? isHls : false,
     description: typeof description === 'string' ? description : null,
     metadata: isStringRecord(metadata) ? metadata : null,
+    headers: isStringRecord(headers) ? headers : null,
   };
 }
 

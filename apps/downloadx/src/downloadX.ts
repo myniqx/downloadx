@@ -239,6 +239,20 @@ export class DownloadX implements DlxContext {
     return this.baseConfig.headers ?? {};
   }
 
+  /**
+   * Merge HTTP headers into the global headers config.
+   * null values remove that header key. Pass null to clear all global headers.
+   */
+  setHeaders(patch: Record<string, string | null> | null): void {
+    if (patch === null) { this.baseConfig.headers = {}; return; }
+    const current = this.baseConfig.headers ?? {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) delete current[k];
+      else current[k] = v;
+    }
+    this.baseConfig.headers = current;
+  }
+
   get maxRetries(): number {
     return this.baseConfig.maxRetries ?? DEFAULT_CONFIG.maxRetries;
   }

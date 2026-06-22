@@ -206,6 +206,7 @@ MetaFile _validate(dynamic value) {
   final isHls = v['isHls'];
   final description = v['description'];
   final metadata = v['metadata'];
+  final headers = v['headers'];
 
   return MetaFile(
     schemaVersion: metaSchemaVersion,
@@ -233,6 +234,7 @@ MetaFile _validate(dynamic value) {
     isHls: isHls is bool ? isHls : false,
     description: description is String ? description : null,
     metadata: _asStringMap(metadata),
+    headers: _asStringMap(headers),
   );
 }
 
