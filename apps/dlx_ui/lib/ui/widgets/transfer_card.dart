@@ -292,7 +292,7 @@ class _MobileCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    _StateChip(state: state, isHls: d.hlsSegmentsDone != null),
+                    _StateChip(state: state, isHls: vm.isHls),
                   ],
                 ),
               ),
@@ -328,8 +328,8 @@ class _MobileCard extends StatelessWidget {
                         ? 'Paused'
                         : completed
                             ? '100%'
-                            : d.hlsSegmentsDone != null
-                                ? '${d.hlsSegmentsDone} / ${d.hlsTotalSegments ?? '?'}'
+                            : vm.isHls
+                                ? '${vm.hlsSegmentsDone ?? 0} / ${vm.hlsTotalSegments ?? '?'}'
                                 : formatPercent(d.percent),
                 style: AppTextStyles.headlineMd.copyWith(
                   color: error
@@ -340,13 +340,7 @@ class _MobileCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              if (running && d.hlsSegmentsDone != null) ...[
-                Text(
-                  'segments',
-                  style: AppTextStyles.dataDisplay
-                      .copyWith(color: AppColors.onSurfaceVariant),
-                ),
-              ] else if (running) ...[
+              if (running) ...[
                 Text(
                   formatSpeed(d.totalSpeedBps.toDouble()),
                   style: AppTextStyles.dataDisplay

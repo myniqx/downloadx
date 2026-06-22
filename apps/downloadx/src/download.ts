@@ -54,8 +54,6 @@ export class Download implements GlobalConfig {
   private cancelRequested = false;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
   private startedAt = 0;
-  private hlsSegmentsDone: number | undefined = undefined;
-  private hlsTotalSegments: number | undefined = undefined;
   private chunkSeq = 0;
   private rangeFallbackDone = false;
   private readonly stalledSince = new Map<string, number>();
@@ -379,8 +377,6 @@ export class Download implements GlobalConfig {
         retries: s.retries,
       })),
       recentDiagnostics: [...this.recentDiagnostics],
-      ...(this.hlsSegmentsDone !== undefined && { hlsSegmentsDone: this.hlsSegmentsDone }),
-      ...(this.hlsTotalSegments !== undefined && { hlsTotalSegments: this.hlsTotalSegments }),
     };
   }
 
@@ -970,8 +966,6 @@ export class Download implements GlobalConfig {
       const doneSegments = this.chunks.filter(
         (c) => c.status === 'completed' || c.status === 'reassigned',
       ).length;
-      this.hlsSegmentsDone = doneSegments;
-      this.hlsTotalSegments = totalSegments;
       // ETA = remaining segments × average elapsed per completed segment.
       const elapsed = this.startedAt === 0 ? 0 : Date.now() - this.startedAt;
       const etaMs =

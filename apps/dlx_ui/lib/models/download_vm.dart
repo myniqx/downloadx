@@ -26,12 +26,24 @@ class DownloadVm extends ChangeNotifier {
 
   DownloadVm(this.download)
       : desc = download.describe(),
-        snapshots = download.getChunkSnapshots();
+        snapshots = download.getChunkSnapshots() {
+    _syncHlsFromDesc();
+  }
 
   String get id => download.id;
   DownloadState get state => download.state;
 
-  bool get isHls => hlsSegmentsDone != null || hlsTotalSegments != null;
+  bool get isHls =>
+      hlsSegmentsDone != null ||
+      hlsTotalSegments != null ||
+      desc.hlsTotalSegments != null;
+
+  /// Pull HLS segment counts from the latest [describe] so they stay correct
+  /// even without a fresh ProgressEvent (e.g. resume, reload, or completion).
+  void _syncHlsFromDesc() {
+    if (desc.hlsSegmentsDone != null) hlsSegmentsDone = desc.hlsSegmentsDone;
+    if (desc.hlsTotalSegments != null) hlsTotalSegments = desc.hlsTotalSegments;
+  }
 
   /// Progress 0–1, null when unknown. For HLS uses segment count if byte percent unavailable.
   double? get progressFraction {
@@ -66,6 +78,7 @@ class DownloadVm extends ChangeNotifier {
   void refresh() {
     desc = download.describe();
     snapshots = download.getChunkSnapshots();
+    _syncHlsFromDesc();
     if (download.state != DownloadState.downloading) {
       currentSpeed = 0;
     } else {
