@@ -206,6 +206,14 @@ export class Download implements GlobalConfig {
     return this._logs;
   }
 
+  get renderedLogs(): readonly { timestamp: number; level: 'info' | 'warn' | 'error'; message: string }[] {
+    return this._logs.map((e) => ({
+      timestamp: e.timestamp,
+      level: e.level ?? 'info',
+      message: renderLog(e.code, e.params),
+    }));
+  }
+
   addLog(entry: LogEntry): void {
     const level = entry.level ?? 'info';
     const timestamp = Date.now();

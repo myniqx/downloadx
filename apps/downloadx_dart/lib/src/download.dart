@@ -181,6 +181,14 @@ class Download implements GlobalConfig {
   /// The persistent log entries for this download.
   List<LogEntry> get logs => List.unmodifiable(_logs);
 
+  /// Rendered log entries — each entry resolved to a human-readable message.
+  List<({int timestamp, DiagnosticLevel level, String message})> get renderedLogs =>
+      _logs.map((e) => (
+        timestamp: e.timestamp,
+        level: e.level,
+        message: renderLog(e.code, e.params),
+      )).toList();
+
   @override
   void addLog({
     DiagnosticLevel level = DiagnosticLevel.info,
@@ -521,7 +529,7 @@ class Download implements GlobalConfig {
         addLog(code: 'probe.completed', params: {
           'size': _probe!.totalSize ?? -1,
           'ranges': _probe!.acceptsRanges ? 'yes' : 'no',
-          'filename': _probe!.filename ?? '',
+          'filename': _probe!.filename,
         });
       }
 
