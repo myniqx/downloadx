@@ -43,9 +43,6 @@ export const UNKNOWN_SIZE_LENGTH = Number.MAX_SAFE_INTEGER;
  */
 export const STALL_RECOVERY_MS = 15_000;
 
-/** Max diagnostics retained in memory for {@link Download.describe}. */
-export const RECENT_DIAGNOSTICS_LIMIT = 10;
-
 /**
  * Threshold ratios used by the chunk-quality classifier.
  *

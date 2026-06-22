@@ -347,11 +347,6 @@ class _MobileLayout extends StatelessWidget {
         // Settings
         _DownloadSettingsCard(vm: vm),
 
-        // Diagnostics
-        if (d.recentDiagnostics.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.md),
-          _DiagnosticsPanel(diags: d.recentDiagnostics),
-        ],
         const SizedBox(height: AppSpacing.md),
         _LogCard(download: vm.download),
       ],
@@ -577,11 +572,6 @@ class _DesktopLayout extends StatelessWidget {
               const SizedBox(height: AppSpacing.lg),
               _DownloadSettingsCard(vm: vm),
 
-              // Diagnostics
-              if (d.recentDiagnostics.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.lg),
-                _DiagnosticsPanel(diags: d.recentDiagnostics),
-              ],
               const SizedBox(height: AppSpacing.lg),
               _LogCard(download: vm.download),
             ],
@@ -1062,56 +1052,6 @@ class _DangerButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _DiagnosticsPanel extends StatelessWidget {
-  final List<DiagnosticPayload> diags;
-  const _DiagnosticsPanel({required this.diags});
-
-  @override
-  Widget build(BuildContext context) {
-    return _GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Recent Activity',
-              style:
-                  AppTextStyles.headlineMd.copyWith(color: AppColors.onSurface)),
-          const SizedBox(height: AppSpacing.sm),
-          ...diags.reversed.take(5).map((diag) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(_diagIcon(diag.level),
-                        size: 16, color: _diagColor(diag.level)),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(
-                      child: Text(
-                        '[${diag.code}] ${diag.message}',
-                        style: AppTextStyles.labelSm
-                            .copyWith(color: AppColors.onSurfaceVariant),
-                      ),
-                    ),
-                  ],
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-
-  IconData _diagIcon(DiagnosticLevel l) => switch (l) {
-        DiagnosticLevel.error => Icons.error_outline_rounded,
-        DiagnosticLevel.warn => Icons.warning_amber_rounded,
-        DiagnosticLevel.info => Icons.info_outline_rounded,
-      };
-
-  Color _diagColor(DiagnosticLevel l) => switch (l) {
-        DiagnosticLevel.error => AppColors.error,
-        DiagnosticLevel.warn => AppColors.tertiary,
-        DiagnosticLevel.info => AppColors.primary,
-      };
 }
 
 String _hlsProgressLabel(DownloadVm vm) {

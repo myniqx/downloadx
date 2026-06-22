@@ -39,7 +39,6 @@ class Download implements GlobalConfig {
   int _chunkSeq = 0;
   bool _rangeFallbackDone = false;
   final Map<String, int> _stalledSince = {};
-  final List<DiagnosticPayload> _recentDiagnostics = [];
   final List<LogEntry> _logs = [];
 
   // ---- GlobalConfig delegation -------------------------------------------
@@ -122,21 +121,8 @@ class Download implements GlobalConfig {
         _aggregate.remove(payload.chunkId);
       }
     });
-    emitter.onType<DiagnosticEvent>((event) {
-      _recentDiagnostics.add(event.payload);
-      if (_recentDiagnostics.length > recentDiagnosticsLimit) {
-        _recentDiagnostics.removeAt(0);
-      }
-      _journalWrite(event.payload);
-    });
-    emitter.onType<StateChangeEvent>((payload) {
-      _journalWrite(DiagnosticPayload(
-        downloadId: id,
-        level: DiagnosticLevel.info,
-        code: 'state-change',
-        message: '${payload.previous.name} -> ${payload.current.name}',
-        timestamp: _nowMs(),
-      ));
+    emitter.onType<LogEvent>((event) {
+      _journalWrite(event);
     });
   }
 
@@ -196,13 +182,11 @@ class Download implements GlobalConfig {
     Map<String, dynamic>? params,
   }) {
     final timestamp = _nowMs();
+    final message = renderLog(code, params);
     _logs.add(LogEntry(level: level, code: code, params: params, timestamp: timestamp));
-    emitter.emit(LogEvent(
-      id,
-      timestamp: timestamp,
-      level: level,
-      message: renderLog(code, params),
-    ));
+    final event = LogEvent(id, timestamp: timestamp, level: level, message: message);
+    emitter.emit(event);
+    _journalWrite(event);
   }
 
   /// Start (or resume) the download. Completes on finish/pause/error.
@@ -371,7 +355,6 @@ class Download implements GlobalConfig {
       addLog(code: 'alloc.completed', params: {'bytes': total});
     } catch (err) {
       addLog(level: DiagnosticLevel.warn, code: 'alloc.failed', params: {'message': err.toString()});
-      _diag('warn', 'prealloc-failed', 'disk pre-allocation failed: $err');
     }
   }
 
@@ -435,7 +418,7 @@ class Download implements GlobalConfig {
                   retries: s.retries,
                 ))
             .toList(),
-        recentDiagnostics: List<DiagnosticPayload>.of(_recentDiagnostics),
+        recentIssues: _recentIssues,
         hlsSegmentsDone: doneSegments,
         hlsTotalSegments: totalSegments,
       );
@@ -476,9 +459,19 @@ class Download implements GlobalConfig {
                 retries: s.retries,
               ))
           .toList(),
-      recentDiagnostics: List<DiagnosticPayload>.of(_recentDiagnostics),
+      recentIssues: _recentIssues,
     );
   }
+
+  List<RecentIssue> get _recentIssues => _logs
+      .where((e) => e.level == DiagnosticLevel.warn || e.level == DiagnosticLevel.error)
+      .toList()
+      .reversed
+      .take(10)
+      .toList()
+      .reversed
+      .map((e) => RecentIssue(timestamp: e.timestamp, level: e.level, message: renderLog(e.code, e.params)))
+      .toList();
 
   /// Human/LLM-friendly one-screen summary of [describe]. Stable line format.
   String describeText() {
@@ -502,10 +495,9 @@ class Download implements GlobalConfig {
       lines.add(
           '  ${c.id}: ${c.status.name}/${c.quality.name} $chunkPct$retries');
     }
-    final recent = d.recentDiagnostics;
-    for (final diag
-        in recent.sublist(recent.length > 3 ? recent.length - 3 : 0)) {
-      lines.add('  ${diag.level.name}: [${diag.code}] ${diag.message}');
+    final recent = d.recentIssues;
+    for (final issue in recent.sublist(recent.length > 3 ? recent.length - 3 : 0)) {
+      lines.add('  ${issue.level.name}: ${issue.message}');
     }
     return lines.join('\n');
   }
@@ -578,8 +570,6 @@ class Download implements GlobalConfig {
         if (rangeNotHonored && !_rangeFallbackDone && _probe != null) {
           _rangeFallbackDone = true;
           addLog(level: DiagnosticLevel.warn, code: 'range.fallback');
-          _diag('warn', 'range-fallback',
-              'server ignored Range header — restarting as a single-chunk download');
           _probe = _probe!.copyWith(acceptsRanges: false);
           _chunks = [];
           _meta.chunks = [];
@@ -808,6 +798,7 @@ class Download implements GlobalConfig {
           'id': newChunk.id,
           'offset': candidate.newRange.offset,
           'end': candidate.newRange.offset + candidate.newRange.length,
+          'length': candidate.newRange.length,
         });
         emitter.emit(ChunkSplitEvent(
           id,
@@ -816,12 +807,6 @@ class Download implements GlobalConfig {
           splitOffset: candidate.newRange.offset,
           reason: candidate.reason,
         ));
-        _diag(
-          'info',
-          'chunk-split',
-          '${candidate.chunk.id} donated ${candidate.newRange.length} bytes at ${candidate.newRange.offset} to ${newChunk.id}',
-          newChunk.id,
-        );
         launch(newChunk);
       }
 
@@ -996,8 +981,6 @@ class Download implements GlobalConfig {
       }
       if (actual != null && actual != expected) {
         addLog(level: DiagnosticLevel.error, code: 'finalize.size-mismatch', params: {'expected': expected, 'actual': actual});
-        _diag('error', 'size-mismatch',
-            'assembled file is $actual bytes, expected $expected');
         final msg =
             'size mismatch after download: expected $expected bytes, found $actual';
         _setState(DownloadState.error);
@@ -1065,8 +1048,6 @@ class Download implements GlobalConfig {
         } else if (now - since >= stallRecoveryMs) {
           _stalledSince.remove(c.id);
           addLog(level: DiagnosticLevel.warn, code: 'chunk.stall', params: {'id': c.id, 'duration': now - since});
-          _diag('warn', 'stall-recovery',
-              'chunk stalled for ${now - since}ms — reissuing request', c.id);
           c.restart('stalled');
         }
       } else {
@@ -1133,29 +1114,19 @@ class Download implements GlobalConfig {
     ));
   }
 
-  void _diag(String level, String code, String message,
-      [String? chunkId, Map<String, dynamic>? data]) {
-    emitter.emit(DiagnosticEvent(
-      id,
-      DiagnosticPayload(
-        downloadId: id,
-        chunkId: chunkId,
-        level: _levelFromString(level),
-        code: code,
-        message: message,
-        timestamp: _nowMs(),
-        data: data,
-      ),
-    ));
-  }
-
   String _journalPath() => io.joinPath([cachePath, '$id$journalExt']);
 
-  void _journalWrite(DiagnosticPayload payload) {
+  void _journalWrite(LogEvent event) {
     if (journal != true) return;
     final append = io.appendFile;
     if (append == null) return;
-    final line = utf8.encode('${jsonEncode(payload.toJson())}\n');
+    final entry = {
+      'downloadId': event.downloadId,
+      'timestamp': event.timestamp,
+      'level': event.level.name,
+      'message': event.message,
+    };
+    final line = utf8.encode('${jsonEncode(entry)}\n');
     append(_journalPath(), line).catchError((_) {});
   }
 
@@ -1177,12 +1148,6 @@ class Download implements GlobalConfig {
 }
 
 int _nowMs() => DateTime.now().millisecondsSinceEpoch;
-
-DiagnosticLevel _levelFromString(String s) => switch (s) {
-      'warn' => DiagnosticLevel.warn,
-      'error' => DiagnosticLevel.error,
-      _ => DiagnosticLevel.info,
-    };
 
 String _formatBytes(int n) {
   if (n >= 1000000000) return '${(n / 1e9).toStringAsFixed(2)} GB';

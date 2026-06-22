@@ -174,15 +174,6 @@ class CompletedEvent extends DownloadEvent {
       required this.durationMs});
 }
 
-/// Emitted for internal lifecycle diagnostics (retries, splits, timeouts, stalls).
-class DiagnosticEvent extends DownloadEvent {
-  /// The structured diagnostic payload.
-  final DiagnosticPayload payload;
-
-  /// Creates a [DiagnosticEvent].
-  const DiagnosticEvent(super.downloadId, this.payload);
-}
-
 class LogEvent extends DownloadEvent {
   final int timestamp;
   final DiagnosticLevel level;

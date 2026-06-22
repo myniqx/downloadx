@@ -31,7 +31,6 @@ export type {
   ChunkSnapshot,
   ChunkSplitPayload,
   ChunkStatus,
-  DiagnosticPayload,
   DownloadCompletedPayload,
   DownloadConfig,
   DownloadDescription,

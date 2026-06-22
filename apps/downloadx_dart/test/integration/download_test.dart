@@ -285,12 +285,13 @@ void main() {
       expect(raw, isNotNull);
       final lines =
           utf8.decode(raw!).trim().split('\n').where((l) => l.isNotEmpty);
-      // Every line is a valid JSON diagnostic with a code.
       for (final line in lines) {
         final obj = jsonDecode(line) as Map<String, dynamic>;
-        expect(obj['code'], isA<String>());
+        expect(obj['level'], isA<String>());
+        expect(obj['message'], isA<String>());
+        expect(obj['timestamp'], isA<int>());
       }
-      expect(lines.any((l) => l.contains('state-change')), isTrue);
+      expect(lines.any((l) => l.contains('Download started')), isTrue);
     });
 
     test('clear removes part file, meta, and journal', () async {

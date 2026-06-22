@@ -2,7 +2,6 @@ import { Chunk } from './chunk.js';
 import { findSplitCandidate, planChunks } from './chunkScheduler.js';
 import {
   DEFAULT_CONFIG,
-  RECENT_DIAGNOSTICS_LIMIT,
   STALL_RECOVERY_MS,
   TEMP_EXT,
   UNKNOWN_SIZE_LENGTH,
@@ -27,7 +26,6 @@ import { AggregateSpeed } from './speedTracker.js';
 import { Throttle } from './throttle.js';
 import type {
   ChunkSnapshot,
-  DiagnosticPayload,
   DlxContext,
   DownloadDescription,
   DownloadEventMap,
@@ -36,6 +34,7 @@ import type {
   GlobalConfig,
   InjectedFunctions,
   LogEntry,
+  LogEventPayload,
   MetaFile,
   ProbeResult,
 } from './types.js';
@@ -62,7 +61,6 @@ export class Download implements GlobalConfig {
   private chunkSeq = 0;
   private rangeFallbackDone = false;
   private readonly stalledSince = new Map<string, number>();
-  private readonly recentDiagnostics: DiagnosticPayload[] = [];
   private readonly _logs: PersistedLogEntry[] = [];
 
   // ---------------------------------------------------------------------------
@@ -145,21 +143,8 @@ export class Download implements GlobalConfig {
         this.aggregate.remove(payload.chunkId);
       }
     });
-    this.emitter.on('diagnostic', (payload) => {
-      this.recentDiagnostics.push(payload);
-      if (this.recentDiagnostics.length > RECENT_DIAGNOSTICS_LIMIT) {
-        this.recentDiagnostics.shift();
-      }
+    this.emitter.on('log', (payload) => {
       this.journalWrite(payload);
-    });
-    this.emitter.on('stateChange', (payload) => {
-      this.journalWrite({
-        downloadId: this.id,
-        level: 'info',
-        code: 'state-change',
-        message: `${payload.previous} -> ${payload.current}`,
-        timestamp: Date.now(),
-      });
     });
   }
 
@@ -217,13 +202,10 @@ export class Download implements GlobalConfig {
   addLog(entry: LogEntry): void {
     const level = entry.level ?? 'info';
     const timestamp = Date.now();
+    const message = renderLog(entry.code, entry.params);
     this._logs.push({ ...entry, level, timestamp });
-    this.emitter.emit('log', {
-      downloadId: this.id,
-      timestamp,
-      level,
-      message: renderLog(entry.code, entry.params),
-    });
+    this.emitter.emit('log', { downloadId: this.id, timestamp, level, message });
+    this.journalWrite({ downloadId: this.id, timestamp, level, message });
   }
 
   /** Start (or resume) the download. Returns a promise that resolves on finish/pause/error. */
@@ -387,7 +369,6 @@ export class Download implements GlobalConfig {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.addLog({ level: 'warn', code: 'alloc.failed', params: { message } });
-      this.diag('warn', 'prealloc-failed', `disk pre-allocation failed: ${message}`);
     }
   }
 
@@ -441,7 +422,7 @@ export class Download implements GlobalConfig {
           downloadedBytes: s.downloadedBytes,
           retries: s.retries,
         })),
-        recentDiagnostics: [...this.recentDiagnostics],
+        recentIssues: this._logs.filter((e) => e.level === 'warn' || e.level === 'error').slice(-10).map((e) => ({ timestamp: e.timestamp, level: e.level as 'warn' | 'error', message: renderLog(e.code, e.params) })),
         hlsSegmentsDone: doneSegments,
         hlsTotalSegments: totalSegments,
       };
@@ -475,7 +456,7 @@ export class Download implements GlobalConfig {
         downloadedBytes: s.downloadedBytes,
         retries: s.retries,
       })),
-      recentDiagnostics: [...this.recentDiagnostics],
+      recentIssues: this._logs.filter((e) => e.level === 'warn' || e.level === 'error').slice(-10).map((e) => ({ timestamp: e.timestamp, level: e.level as 'warn' | 'error', message: renderLog(e.code, e.params) })),
     };
   }
 
@@ -506,8 +487,8 @@ export class Download implements GlobalConfig {
       const retries = c.retries > 0 ? `, retries ${c.retries}` : '';
       lines.push(`  ${c.id}: ${c.status}/${c.quality} ${chunkPct}${retries}`);
     }
-    for (const diag of d.recentDiagnostics.slice(-3)) {
-      lines.push(`  ${diag.level}: [${diag.code}] ${diag.message}`);
+    for (const issue of d.recentIssues.slice(-3)) {
+      lines.push(`  ${issue.level}: ${issue.message}`);
     }
     return lines.join('\n');
   }
@@ -586,11 +567,6 @@ export class Download implements GlobalConfig {
         if (rangeNotHonored && !this.rangeFallbackDone && this._probe !== null) {
           this.rangeFallbackDone = true;
           this.addLog({ level: 'warn', code: 'range.fallback' });
-          this.diag(
-            'warn',
-            'range-fallback',
-            'server ignored Range header — restarting as a single-chunk download',
-          );
           this._probe = { ...this._probe, acceptsRanges: false };
           this.chunks = [];
           this._meta.chunks = [];
@@ -820,6 +796,7 @@ export class Download implements GlobalConfig {
             id: newChunk.id,
             offset: candidate.newRange.offset,
             end: candidate.newRange.offset + candidate.newRange.length,
+            length: candidate.newRange.length,
           },
         });
         this.emitter.emit('chunkSplit', {
@@ -829,12 +806,6 @@ export class Download implements GlobalConfig {
           splitOffset: candidate.newRange.offset,
           reason: candidate.reason,
         });
-        this.diag(
-          'info',
-          'chunk-split',
-          `${candidate.chunk.id} donated ${candidate.newRange.length} bytes at ${candidate.newRange.offset} to ${newChunk.id}`,
-          newChunk.id,
-        );
         launch(newChunk);
       }
 
@@ -999,11 +970,6 @@ export class Download implements GlobalConfig {
       const actual = await fileSize(this.partFilePath).catch(() => null);
       if (actual !== null && actual !== expected) {
         this.addLog({ level: 'error', code: 'finalize.size-mismatch', params: { expected, actual } });
-        this.diag(
-          'error',
-          'size-mismatch',
-          `assembled file is ${actual} bytes, expected ${expected}`,
-        );
         const msg = `size mismatch after download: expected ${expected} bytes, found ${actual}`;
         this.setState('error');
         this._meta.errorMessage = msg;
@@ -1075,12 +1041,6 @@ export class Download implements GlobalConfig {
         } else if (now - since >= STALL_RECOVERY_MS) {
           this.stalledSince.delete(c.id);
           this.addLog({ level: 'warn', code: 'chunk.stall', params: { id: c.id, duration: now - since } });
-          this.diag(
-            'warn',
-            'stall-recovery',
-            `chunk stalled for ${now - since}ms — reissuing request`,
-            c.id,
-          );
           c.restart('stalled');
         }
       } else {
@@ -1147,34 +1107,15 @@ export class Download implements GlobalConfig {
     });
   }
 
-  private diag(
-    level: DiagnosticPayload['level'],
-    code: string,
-    message: string,
-    chunkId?: string,
-    data?: Record<string, unknown>,
-  ): void {
-    const payload: DiagnosticPayload = {
-      downloadId: this.id,
-      level,
-      code,
-      message,
-      timestamp: Date.now(),
-    };
-    if (chunkId !== undefined) payload.chunkId = chunkId;
-    if (data !== undefined) payload.data = data;
-    this.emitter.emit('diagnostic', payload);
-  }
-
   private journalPath(): string {
     return this.io.joinPath(this.cachePath, `${this.id}.downloadx.log`);
   }
 
-  private journalWrite(payload: DiagnosticPayload): void {
+  private journalWrite(entry: LogEventPayload): void {
     if (this.journal !== true) return;
     const append = this.io.appendFile;
     if (append === undefined) return;
-    const line = new TextEncoder().encode(`${JSON.stringify(payload)}\n`);
+    const line = new TextEncoder().encode(`${JSON.stringify(entry)}\n`);
     void append(this.journalPath(), line).catch(() => undefined);
   }
 

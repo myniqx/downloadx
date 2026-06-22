@@ -110,7 +110,6 @@ class Chunk {
   final SpeedTracker _tracker;
   CancelToken? _abortController;
   final ChunkParams _params;
-  final int Function() _now;
 
   Chunk(this._params)
       : id = _params.id,
@@ -118,7 +117,6 @@ class Chunk {
         offset = _params.offset,
         _length = _params.length,
         _downloadedBytes = _params.initialDownloadedBytes,
-        _now = _params.now ?? _defaultNow,
         _tracker = SpeedTracker(_params.global.speedSampleWindow, _params.now);
 
   /// Current byte length of this chunk (may shrink when the tail is split off).
@@ -242,20 +240,8 @@ class Chunk {
             _params.global.addLog(
               level: DiagnosticLevel.warn,
               code: 'chunk.retry',
-              params: {'id': id, 'attempt': info.attempt, 'message': _lastError},
+              params: {'id': id, 'attempt': info.attempt, 'message': _lastError, 'delayMs': info.delayMs},
             );
-            _params.emitter.emit(DiagnosticEvent(
-              downloadId,
-              DiagnosticPayload(
-                downloadId: downloadId,
-                chunkId: id,
-                level: DiagnosticLevel.warn,
-                code: 'chunk-retry',
-                message: 'retry #$_retries in ${info.delayMs}ms: $_lastError',
-                timestamp: _now(),
-                data: {'attempt': info.attempt, 'delayMs': info.delayMs},
-              ),
-            ));
           },
         ),
       );
@@ -296,18 +282,6 @@ class Chunk {
         code: 'chunk.no-range-restart',
         params: {'id': id, 'discarded': _downloadedBytes},
       );
-      _params.emitter.emit(DiagnosticEvent(
-        downloadId,
-        DiagnosticPayload(
-          downloadId: downloadId,
-          chunkId: id,
-          level: DiagnosticLevel.info,
-          code: 'no-range-restart',
-          message:
-              'server lacks range support — restarting chunk from byte 0 (discarding $_downloadedBytes bytes)',
-          timestamp: _now(),
-        ),
-      ));
       _downloadedBytes = 0;
     }
 
@@ -519,5 +493,3 @@ String _toMessage(Object err) {
   if (err is TransientAbort) return err.message;
   return err.toString();
 }
-
-int _defaultNow() => DateTime.now().millisecondsSinceEpoch;

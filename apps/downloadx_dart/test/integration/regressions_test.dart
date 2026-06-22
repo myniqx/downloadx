@@ -96,8 +96,8 @@ void main() {
 
       var restart = false;
       final dl = await h.manager.addUrl(_url);
-      dl.emitter.onType<DiagnosticEvent>((e) {
-        if (e.payload.code == 'no-range-restart') restart = true;
+      dl.emitter.onType<LogEvent>((e) {
+        if (e.message.contains('restarting from byte 0')) restart = true;
       });
 
       await dl.start();
@@ -128,8 +128,8 @@ void main() {
       h.io; // ensure created
       final dl = await h.manager
           .addUrl(_url, const DownloadOptions(chunkMode: ChunkMode.single));
-      dl.emitter.onType<DiagnosticEvent>((e) {
-        if (e.payload.code == 'chunk-retry') idleRetry = true;
+      dl.emitter.onType<LogEvent>((e) {
+        if (e.message.contains('retry #')) idleRetry = true;
       });
 
       await dl.start().timeout(const Duration(seconds: 10));

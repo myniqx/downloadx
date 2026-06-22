@@ -52,9 +52,6 @@ const int unknownSizeLength = 9007199254740991; // 2^53 - 1
 /// its current request and retries it from the bytes already written.
 const int stallRecoveryMs = 15000;
 
-/// Max diagnostics retained in memory for [Download.describe].
-const int recentDiagnosticsLimit = 10;
-
 /// Threshold ratios used by the chunk-quality classifier.
 ///
 /// A chunk is `poor` when its windowed speed is below [qualityPoorRatio] × the

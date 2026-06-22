@@ -236,16 +236,7 @@ export class Chunk {
             this.params.global.addLog({
               level: 'warn',
               code: 'chunk.retry',
-              params: { id: this.id, attempt: info.attempt, message: this._lastError },
-            });
-            this.params.emitter.emit('diagnostic', {
-              downloadId: this.downloadId,
-              chunkId: this.id,
-              level: 'warn',
-              code: 'chunk-retry',
-              message: `retry #${this._retries} in ${info.delayMs}ms: ${this._lastError}`,
-              timestamp: this.now(),
-              data: { attempt: info.attempt, delayMs: info.delayMs },
+              params: { id: this.id, attempt: info.attempt, message: this._lastError, delayMs: info.delayMs },
             });
           },
         },
@@ -288,14 +279,6 @@ export class Chunk {
         level: 'warn',
         code: 'chunk.no-range-restart',
         params: { id: this.id, discarded: this._downloadedBytes },
-      });
-      this.params.emitter.emit('diagnostic', {
-        downloadId: this.downloadId,
-        chunkId: this.id,
-        level: 'info',
-        code: 'no-range-restart',
-        message: `server lacks range support — restarting chunk from byte 0 (discarding ${this._downloadedBytes} bytes)`,
-        timestamp: this.now(),
       });
       this._downloadedBytes = 0;
     }

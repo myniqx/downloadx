@@ -237,9 +237,10 @@ describe('features — journal, describe, preallocation', () => {
     const lines = new TextDecoder().decode(log!).trim().split('\n');
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) {
-      const parsed = JSON.parse(line) as { downloadId: string; code: string; timestamp: number };
+      const parsed = JSON.parse(line) as { downloadId: string; level: string; message: string; timestamp: number };
       expect(parsed.downloadId).toBe('r6');
-      expect(typeof parsed.code).toBe('string');
+      expect(typeof parsed.level).toBe('string');
+      expect(typeof parsed.message).toBe('string');
       expect(typeof parsed.timestamp).toBe('number');
     }
   });

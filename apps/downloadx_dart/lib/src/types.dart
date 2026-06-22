@@ -613,42 +613,23 @@ class LogEntry {
 
 // ---------------------------------------------------------------------------
 
-/// Machine-readable diagnostic record. Mirrors what the NDJSON journal stores,
-/// so log consumers and event consumers see identical data.
-class DiagnosticPayload {
-  final String downloadId;
-  final String? chunkId;
-  final DiagnosticLevel level;
-
-  /// Stable machine-readable code, e.g. `idle-timeout`, `chunk-split`.
-  final String code;
-  final String message;
+/// A rendered warn/error log entry surfaced in [DownloadDescription.recentIssues].
+class RecentIssue {
   final int timestamp;
-  final Map<String, dynamic>? data;
+  final DiagnosticLevel level;
+  final String message;
 
-  const DiagnosticPayload({
-    required this.downloadId,
-    this.chunkId,
-    required this.level,
-    required this.code,
-    required this.message,
+  const RecentIssue({
     required this.timestamp,
-    this.data,
+    required this.level,
+    required this.message,
   });
 
-  /// Serialises this payload to a JSON-compatible map (used for NDJSON journal).
-  Map<String, dynamic> toJson() {
-    final m = <String, dynamic>{
-      'downloadId': downloadId,
-      'level': level.name,
-      'code': code,
-      'message': message,
-      'timestamp': timestamp,
-    };
-    if (chunkId != null) m['chunkId'] = chunkId;
-    if (data != null) m['data'] = data;
-    return m;
-  }
+  Map<String, dynamic> toJson() => {
+        'timestamp': timestamp,
+        'level': level.name,
+        'message': message,
+      };
 }
 
 /// One row in [DownloadDescription.chunks].
@@ -757,8 +738,8 @@ class DownloadDescription {
   /// Descriptions of chunks that are not yet completed or reassigned.
   final List<ChunkDescription> chunks;
 
-  /// Up to the last 10 diagnostic events for this download.
-  final List<DiagnosticPayload> recentDiagnostics;
+  /// Last 10 warn/error log entries for this download.
+  final List<RecentIssue> recentIssues;
 
   /// Number of HLS segments downloaded so far. Null for non-HLS downloads.
   final int? hlsSegmentsDone;
@@ -787,7 +768,7 @@ class DownloadDescription {
     required this.activeChunks,
     required this.totalChunks,
     required this.chunks,
-    required this.recentDiagnostics,
+    required this.recentIssues,
     this.hlsSegmentsDone,
     this.hlsTotalSegments,
   });
@@ -813,7 +794,7 @@ class DownloadDescription {
         'activeChunks': activeChunks,
         'totalChunks': totalChunks,
         'chunks': chunks.map((c) => c.toJson()).toList(),
-        'recentDiagnostics': recentDiagnostics.map((d) => d.toJson()).toList(),
+        'recentIssues': recentIssues.map((i) => i.toJson()).toList(),
         if (hlsSegmentsDone != null) 'hlsSegmentsDone': hlsSegmentsDone,
         if (hlsTotalSegments != null) 'hlsTotalSegments': hlsTotalSegments,
       };

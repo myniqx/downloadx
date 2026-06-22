@@ -381,21 +381,6 @@ export interface DownloadCompletedPayload {
 }
 
 /**
- * Machine-readable diagnostic record. Mirrors what the NDJSON journal stores,
- * so log consumers and event consumers see identical data.
- */
-export interface DiagnosticPayload {
-  downloadId: string;
-  chunkId?: string;
-  level: 'info' | 'warn' | 'error';
-  /** Stable machine-readable code, e.g. `idle-timeout`, `chunk-split`, `range-not-honored`. */
-  code: string;
-  message: string;
-  timestamp: number;
-  data?: Record<string, unknown>;
-}
-
-/**
  * Compact, serialisable status report aimed at dashboards and LLM/agent
  * consumers. Produced by {@link Download.describe}.
  */
@@ -427,7 +412,7 @@ export interface DownloadDescription {
     downloadedBytes: number;
     retries: number;
   }>;
-  recentDiagnostics: DiagnosticPayload[];
+  recentIssues: Array<{ timestamp: number; level: 'warn' | 'error'; message: string }>;
   /** Number of HLS segments downloaded so far. Undefined for non-HLS downloads. */
   hlsSegmentsDone?: number;
   /** Total HLS segment count. Undefined for non-HLS downloads. */
@@ -451,7 +436,6 @@ export interface DownloadEventMap {
   stateChange: DownloadStatePayload;
   error: DownloadErrorPayload;
   completed: DownloadCompletedPayload;
-  diagnostic: DiagnosticPayload;
   log: LogEventPayload;
 }
 

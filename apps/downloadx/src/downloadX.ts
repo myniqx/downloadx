@@ -22,7 +22,6 @@ const RELAYED_EVENTS: readonly DownloadEventName[] = [
   'stateChange',
   'error',
   'completed',
-  'diagnostic',
   'log',
 ];
 
