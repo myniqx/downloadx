@@ -50,6 +50,38 @@ chrome.tabs.onActivated.addListener(({ tabId }) => updateBadge(tabId));
 
 registerRequestWatcher((item) => updateBadge(item.tabId));
 
+// ---- Context menu -----------------------------------------------------------
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'dlx-download-with',
+    title: 'Download with dlx',
+    contexts: ['link', 'video', 'audio', 'image'],
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== 'dlx-download-with') return;
+  if (!isConnected()) return;
+
+  const url = info.srcUrl || info.linkUrl;
+  if (!url) return;
+
+  const filename = url.split('?')[0].split('/').pop() || undefined;
+  const metadata = {
+    fromExtension: 'true',
+    sourcePageUrl: tab?.url ?? '',
+    sourcePageTitle: tab?.title ?? '',
+  };
+
+  sendWs({
+    action: 'add-url',
+    url,
+    openDialog: true,
+    options: { filename, description: tab?.title ?? undefined, metadata },
+  });
+});
+
 // ---- Messages from popup ----------------------------------------------------
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -84,7 +116,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.action === 'add-url') {
     if (!isConnected()) { sendResponse({ ok: false, error: 'dlx is not running' }); return; }
-    sendWs({ action: 'add-url', url: msg.url, filename: msg.filename ?? undefined });
+    sendWs({
+      action: 'add-url',
+      url: msg.url,
+      openDialog: msg.openDialog ?? false,
+      options: msg.options ?? {},
+    });
     sendResponse({ ok: true });
     return;
   }

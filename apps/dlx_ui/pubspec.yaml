@@ -41,6 +41,7 @@ dependencies:
 
   # Cross-platform writable directories (Android needs this; desktop uses it too).
   path_provider: ^2.1.0
+  window_manager: ^0.5.1
 
 dev_dependencies:
   flutter_test:

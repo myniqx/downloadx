@@ -95,6 +95,19 @@ function sizeFrom(responseHeaders) {
   return null;
 }
 
+const FORWARDED_REQUEST_HEADERS = new Set([
+  'cookie', 'referer', 'authorization', 'user-agent', 'origin',
+]);
+
+function _filterRequestHeaders(headers) {
+  const result = {};
+  for (const h of (headers || [])) {
+    const name = h.name.toLowerCase();
+    if (FORWARDED_REQUEST_HEADERS.has(name)) result[h.name] = h.value;
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
 export function registerRequestWatcher(onCaptured) {
   chrome.webRequest.onSendHeaders.addListener(
     (info) => {
@@ -132,6 +145,7 @@ export function registerRequestWatcher(onCaptured) {
         mime: (res.responseHeaders || []).find(h => h.name.toLowerCase() === 'content-type')?.value ?? null,
         tabId,
         isHls: extOf(res.url) === 'm3u8',
+        requestHeaders: _filterRequestHeaders(req.requestHeaders),
       };
       tabMap.set(res.url, item);
 

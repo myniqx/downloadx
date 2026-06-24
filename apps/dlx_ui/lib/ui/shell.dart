@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:downloadx/downloadx.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../models/download_vm.dart';
 import '../services/download_service.dart';
@@ -22,6 +25,7 @@ class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
   DownloadVm? _selectedDownload;
   final TextEditingController _searchCtrl = TextEditingController();
+  StreamSubscription<({String url, DownloadOptions options})>? _openDialogSub;
 
   static const _navItems = [
     _NavItem(icon: Icons.download_outlined, activeIcon: Icons.download_rounded, label: 'Home'),
@@ -29,7 +33,21 @@ class _AppShellState extends State<AppShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _openDialogSub = widget.service.openDialogRequests.listen((req) async {
+      if (!mounted) return;
+      await windowManager.show();
+      await windowManager.focus();
+      if (!mounted) return;
+      showAddDownloadDialog(context, widget.service,
+          initialUrl: req.url, initialOptions: req.options);
+    });
+  }
+
+  @override
   void dispose() {
+    _openDialogSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }

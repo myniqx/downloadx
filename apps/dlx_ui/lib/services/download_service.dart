@@ -35,6 +35,13 @@ class DownloadService extends ChangeNotifier {
   Timer? _tickTimer;
   late final WsServer _ws;
 
+  /// Extension'dan openDialog:true ile gelen istekler buraya düşer.
+  /// UI (shell) bu stream'i dinleyip dialog açar.
+  final StreamController<({String url, DownloadOptions options})> _openDialogRequests =
+      StreamController.broadcast();
+  Stream<({String url, DownloadOptions options})> get openDialogRequests =>
+      _openDialogRequests.stream;
+
   Future<void> init() async {
     final defaultTarget = await _resolveDownloadsDir();
     final support = await getApplicationSupportDirectory();
@@ -250,6 +257,18 @@ class DownloadService extends ChangeNotifier {
     _ws.send(socket, _buildHandshake());
   }
 
+  static DownloadOptions _parseOptions(Map<String, dynamic> msg) {
+    final raw = msg['options'] as Map<String, dynamic>? ?? {};
+    final rawHeaders = raw['headers'] as Map<String, dynamic>?;
+    final rawMeta = raw['metadata'] as Map<String, dynamic>?;
+    return DownloadOptions(
+      filename: raw['filename'] as String?,
+      description: raw['description'] as String?,
+      headers: rawHeaders?.map((k, v) => MapEntry(k, v.toString())),
+      metadata: rawMeta?.map((k, v) => MapEntry(k, v.toString())),
+    );
+  }
+
   void _broadcastOptions() {
     _ws.broadcast({
       'type': 'options',
@@ -283,10 +302,12 @@ class DownloadService extends ChangeNotifier {
       case 'add-url':
         final url = msg['url'] as String?;
         if (url != null) {
-          final options = DownloadOptions(
-            filename: msg['filename'] as String?,
-          );
-          addUrl(url, options: options);
+          final options = _parseOptions(msg);
+          if (msg['openDialog'] == true) {
+            _openDialogRequests.add((url: url, options: options));
+          } else {
+            addUrl(url, options: options);
+          }
         }
       case 'list':
         _ws.send(socket, {

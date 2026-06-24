@@ -125,9 +125,27 @@ function _resolveFilename(filename, pageTitle) {
 
 // ---- Send -------------------------------------------------------------------
 
-function sendUrl(url, filename, btn) {
+function _buildPayload(item, openDialog) {
+  return {
+    action: 'add-url',
+    url: item.url,
+    openDialog,
+    options: {
+      filename: _resolveFilename(item.filename, item.pageTitle) ?? undefined,
+      description: item.pageTitle ? _cleanPageTitle(item.pageTitle) : undefined,
+      headers: item.requestHeaders ?? undefined,
+      metadata: {
+        ...(item.mime ? { mime: item.mime } : {}),
+        ...(item.size != null ? { size: String(item.size) } : {}),
+        fromExtension: 'true',
+      },
+    },
+  };
+}
+
+function sendUrl(item, btn) {
   btn.disabled = true;
-  chrome.runtime.sendMessage({ action: 'add-url', url, filename }, (res) => {
+  chrome.runtime.sendMessage(_buildPayload(item, false), (res) => {
     if (res?.ok) {
       btn.textContent = '✓';
       btn.classList.add('sent');
@@ -146,7 +164,8 @@ function renderItems(items) {
   const list = document.getElementById('link-list');
   list.innerHTML = '';
 
-  items.forEach(({ url, filename, pageTitle, size, source, isHls }) => {
+  items.forEach((item) => {
+    const { url, filename, pageTitle, size, source, isHls } = item;
     const li = document.createElement('li');
     li.className = 'link-item';
     li.dataset.id = url;
@@ -164,8 +183,9 @@ function renderItems(items) {
       </div>
       <button class="btn-send">Send</button>
     `;
+    li._dlxItem = item;
     li.querySelector('.btn-send').addEventListener('click', (e) =>
-      sendUrl(url, _resolveFilename(filename, pageTitle), e.currentTarget)
+      sendUrl(item, e.currentTarget)
     );
     list.appendChild(li);
   });
@@ -174,7 +194,7 @@ function renderItems(items) {
     e.currentTarget.disabled = true;
     list.querySelectorAll('.btn-send:not(.sent):not(:disabled)').forEach(btn => {
       const li = btn.closest('.link-item');
-      sendUrl(li.querySelector('.link-url').title, null, btn);
+      sendUrl(li._dlxItem, btn);
     });
   });
 
