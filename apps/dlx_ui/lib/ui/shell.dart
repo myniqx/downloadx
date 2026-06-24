@@ -1,3 +1,4 @@
+import 'package:downloadx/downloadx.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
@@ -55,13 +56,62 @@ class _AppShellState extends State<AppShell> {
 
     // Desktop: detail ekranı shell içinde gösterilir, sidebar sabit kalır.
     final detailVm = _selectedDownload;
-    final desktopChild = detailVm != null
-        ? DownloadDetailScreen(
-            vm: detailVm,
-            service: widget.service,
-            onBack: _closeDetail,
-          )
-        : _buildPage(_selectedIndex);
+
+    _DesktopHeaderConfig desktopHeader;
+    Widget desktopChild;
+
+    if (detailVm != null) {
+      desktopChild = DownloadDetailScreen(
+        vm: detailVm,
+        service: widget.service,
+        onBack: _closeDetail,
+        hideAppBar: true,
+      );
+      desktopHeader = _DesktopHeaderConfig(
+        onBack: _closeDetail,
+        title: (detailVm.desc.filename?.isNotEmpty ?? false)
+            ? detailVm.desc.filename!
+            : detailVm.desc.url,
+        trailingActions: [
+          ListenableBuilder(
+            listenable: detailVm,
+            builder: (context, _) {
+              if (detailVm.state == DownloadState.completed) {
+                return const SizedBox.shrink();
+              }
+              final running = detailVm.state == DownloadState.downloading ||
+                  detailVm.state == DownloadState.probing;
+              return _HeaderAction(
+                icon: running ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                tooltip: running ? 'Pause' : 'Resume',
+                onPressed: () => running
+                    ? widget.service.pause(detailVm)
+                    : widget.service.start(detailVm),
+              );
+            },
+          ),
+        ],
+      );
+    } else if (_selectedIndex == 1) {
+      desktopChild = _buildPage(_selectedIndex);
+      desktopHeader = _DesktopHeaderConfig(
+        onBack: () => setState(() => _selectedIndex = 0),
+        title: 'Settings',
+      );
+    } else {
+      desktopChild = _buildPage(_selectedIndex);
+      desktopHeader = _DesktopHeaderConfig(
+        trailingActions: [
+          _HeaderAction(icon: Icons.speed_outlined, tooltip: 'Speed limit'),
+          const SizedBox(width: AppSpacing.xs),
+          _HeaderAction(
+            icon: Icons.pause_circle_outline,
+            tooltip: 'Pause all',
+            onPressed: widget.service.pauseAll,
+          ),
+        ],
+      );
+    }
 
     return isDesktop
         ? _DesktopShell(
@@ -71,6 +121,7 @@ class _AppShellState extends State<AppShell> {
                 setState(() { _selectedIndex = i; _selectedDownload = null; }),
             service: widget.service,
             searchCtrl: _searchCtrl,
+            headerConfig: desktopHeader,
             child: desktopChild,
           )
         : _MobileShell(
@@ -94,6 +145,7 @@ class _DesktopShell extends StatelessWidget {
   final DownloadService service;
   final TextEditingController searchCtrl;
   final Widget child;
+  final _DesktopHeaderConfig headerConfig;
 
   const _DesktopShell({
     required this.selectedIndex,
@@ -102,6 +154,7 @@ class _DesktopShell extends StatelessWidget {
     required this.service,
     required this.searchCtrl,
     required this.child,
+    required this.headerConfig,
   });
 
   @override
@@ -119,7 +172,7 @@ class _DesktopShell extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
-                _TopHeader(service: service, searchCtrl: searchCtrl),
+                _DesktopHeader(config: headerConfig, searchCtrl: searchCtrl),
                 Expanded(child: child),
               ],
             ),
@@ -128,6 +181,18 @@ class _DesktopShell extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DesktopHeaderConfig {
+  final VoidCallback? onBack;
+  final String? title;
+  final List<Widget> trailingActions;
+
+  const _DesktopHeaderConfig({
+    this.onBack,
+    this.title,
+    this.trailingActions = const [],
+  });
 }
 
 class _SideNav extends StatelessWidget {
@@ -245,13 +310,15 @@ class _SideNavButton extends StatelessWidget {
   }
 }
 
-class _TopHeader extends StatelessWidget {
-  final DownloadService service;
+class _DesktopHeader extends StatelessWidget {
+  final _DesktopHeaderConfig config;
   final TextEditingController searchCtrl;
-  const _TopHeader({required this.service, required this.searchCtrl});
+
+  const _DesktopHeader({required this.config, required this.searchCtrl});
 
   @override
   Widget build(BuildContext context) {
+    final isHome = config.onBack == null;
     return Container(
       height: 64,
       decoration: BoxDecoration(
@@ -261,22 +328,30 @@ class _TopHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: Row(
         children: [
-          Text('dlx', style: AppTextStyles.headlineMd.copyWith(color: AppColors.primary)),
-          const SizedBox(width: AppSpacing.lg),
-          Expanded(
-            child: ConstrainedBox(
+          if (!isHome) ...[
+            IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              color: AppColors.onSurfaceVariant,
+              onPressed: config.onBack,
+              style: IconButton.styleFrom(shape: const CircleBorder()),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              config.title ?? '',
+              style: AppTextStyles.headlineMd.copyWith(color: AppColors.primary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ] else ...[
+            Text('dlx', style: AppTextStyles.headlineMd.copyWith(color: AppColors.primary)),
+            const SizedBox(width: AppSpacing.lg),
+            ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),
               child: _SearchField(controller: searchCtrl),
             ),
-          ),
+          ],
           const Spacer(),
-          _HeaderAction(icon: Icons.speed_outlined, tooltip: 'Speed limit'),
-          const SizedBox(width: AppSpacing.xs),
-          _HeaderAction(
-            icon: Icons.pause_circle_outline,
-            tooltip: 'Pause all',
-            onPressed: service.pauseAll,
-          ),
+          ...config.trailingActions,
         ],
       ),
     );

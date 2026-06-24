@@ -28,7 +28,7 @@ class ChunkSpeedPanel extends StatelessWidget {
     // For the rows: exclude pending, hide completed after linger window.
     final now = DateTime.now().millisecondsSinceEpoch;
     final visibleRows = ordered.where((c) {
-      if (c.status == ChunkStatus.pending || c.status == ChunkStatus.paused) {
+      if (c.status == ChunkStatus.pending) {
         return false;
       }
       if (c.status == ChunkStatus.completed ||
@@ -90,10 +90,11 @@ class ChunkSpeedPanel extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.sm),
             SizedBox(
-              width: 80,
+              width: 32,
               child: Text(
                 c.id.split('-').last,
                 overflow: TextOverflow.ellipsis,
+                maxLines: 1,
                 style: AppTextStyles.labelSm
                     .copyWith(color: AppColors.onSurfaceVariant),
               ),
@@ -112,12 +113,14 @@ class ChunkSpeedPanel extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.sm),
             SizedBox(
-              width: 72,
+              width: 90,
               child: Text(
                 isDone
                     ? 'done'
                     : c.status.name + (c.retries > 0 ? ' ·r${c.retries}' : ''),
                 textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.labelSm
                     .copyWith(color: AppColors.onSurfaceVariant),
               ),

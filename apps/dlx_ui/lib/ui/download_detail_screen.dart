@@ -20,19 +20,21 @@ class DownloadDetailScreen extends StatelessWidget {
   final DownloadVm vm;
   final DownloadService service;
   final VoidCallback? onBack;
+  final bool hideAppBar;
 
   const DownloadDetailScreen({
     super.key,
     required this.vm,
     required this.service,
     this.onBack,
+    this.hideAppBar = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: _DetailAppBar(vm: vm, service: service, onBack: onBack),
+      appBar: hideAppBar ? null : _DetailAppBar(vm: vm, service: service, onBack: onBack),
       body: ListenableBuilder(
         listenable: vm,
         builder: (context, _) {

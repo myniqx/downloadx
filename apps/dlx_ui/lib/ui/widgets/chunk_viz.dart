@@ -38,7 +38,7 @@ class ChunkViz extends StatelessWidget {
           ),
         ),
         // Active chunk metadata list
-        if (chunks.any((c) => c.status == ChunkStatus.downloading)) ...[
+        if (chunks.any((c) => c.status == ChunkStatus.downloading || c.status == ChunkStatus.paused)) ...[
           const SizedBox(height: AppSpacing.md),
           _ActiveChunkList(chunks: chunks, totalBytes: totalBytes),
         ],
@@ -158,7 +158,7 @@ class _ActiveChunkList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = chunks
-        .where((c) => c.status == ChunkStatus.downloading)
+        .where((c) => c.status == ChunkStatus.downloading || c.status == ChunkStatus.paused)
         .toList();
 
     return Column(
