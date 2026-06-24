@@ -1,14 +1,17 @@
 import 'package:downloadx/downloadx.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/download_vm.dart';
 import '../../util/palette.dart';
+import 'speed_bar_chart.dart';
 
 const int _maxVisible = 30;
 
 class SegmentViz extends StatefulWidget {
   final List<ChunkSnapshot> segments;
+  final DownloadVm? vm;
 
-  const SegmentViz({super.key, required this.segments});
+  const SegmentViz({super.key, required this.segments, this.vm});
 
   @override
   State<SegmentViz> createState() => _SegmentVizState();
@@ -36,12 +39,35 @@ class _SegmentVizState extends State<SegmentViz>
   @override
   Widget build(BuildContext context) {
     final items = _buildItems(widget.segments);
-    return Wrap(
+    final vm = widget.vm;
+
+    Widget segmentGrid = Wrap(
       spacing: AppSpacing.xs,
       runSpacing: AppSpacing.xs,
       children: items
           .map((item) => _SegmentCell(item: item, pulse: _pulse))
           .toList(),
+    );
+
+    if (vm == null) return segmentGrid;
+
+    final ordered = [...vm.snapshots]..sort((a, b) => a.id.compareTo(b.id));
+    final seriesOrder = ordered.map((c) => c.id).toList();
+    final colorIndex = {for (var i = 0; i < seriesOrder.length; i++) seriesOrder[i]: i};
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SpeedBarChart(
+          frames: vm.chunkSpeedHistory.frames,
+          frameCount: vm.chunkSpeedHistory.frames.length,
+          seriesOrder: seriesOrder,
+          colorOf: (id) => colorForIndex(colorIndex[id] ?? 0),
+          height: 80,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        segmentGrid,
+      ],
     );
   }
 }

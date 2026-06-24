@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/download_vm.dart';
 import '../../util/palette.dart';
+import 'speed_bar_chart.dart';
 
 const int _completedLingerMs = 2000;
 
@@ -55,7 +56,7 @@ class ChunkSpeedPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.md),
-        _SpeedBarChart(
+        SpeedBarChart(
           frames: vm.chunkSpeedHistory.frames,
           frameCount: vm.chunkSpeedHistory.frames.length,
           seriesOrder: seriesOrder,
@@ -132,114 +133,5 @@ class ChunkSpeedPanel extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Bar chart — time on X, stacked chunk speeds on Y
-// ---------------------------------------------------------------------------
 
-class _SpeedBarChart extends StatelessWidget {
-  final List<Map<String, double>> frames;
-  final int frameCount;
-  final List<String> seriesOrder;
-  final Color Function(String id) colorOf;
-
-  const _SpeedBarChart({
-    required this.frames,
-    required this.frameCount,
-    required this.seriesOrder,
-    required this.colorOf,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 120,
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.outlineVariant.withValues(alpha: 0.4)),
-          left: BorderSide(color: AppColors.outlineVariant.withValues(alpha: 0.4)),
-        ),
-      ),
-      child: frames.isEmpty
-          ? Center(
-              child: Text('No data yet',
-                  style: AppTextStyles.labelSm
-                      .copyWith(color: AppColors.onSurfaceVariant)),
-            )
-          : CustomPaint(
-              painter: _BarChartPainter(
-                frames: frames,
-                frameCount: frameCount,
-                seriesOrder: seriesOrder,
-                colorOf: colorOf,
-              ),
-              size: const Size(double.infinity, 120),
-            ),
-    );
-  }
-}
-
-class _BarChartPainter extends CustomPainter {
-  final List<Map<String, double>> frames;
-  final int frameCount;
-  final List<String> seriesOrder;
-  final Color Function(String id) colorOf;
-
-  _BarChartPainter({
-    required this.frames,
-    required this.frameCount,
-    required this.seriesOrder,
-    required this.colorOf,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (frames.isEmpty) return;
-
-    // Find max total speed across all frames for Y scaling
-    double maxSpeed = 0;
-    for (final f in frames) {
-      final total = f.values.fold(0.0, (a, b) => a + b);
-      if (total > maxSpeed) maxSpeed = total;
-    }
-    if (maxSpeed <= 0) return;
-
-    // Grid lines (4 horizontal)
-    final gridPaint = Paint()
-      ..color = AppColors.outlineVariant.withValues(alpha: 0.15)
-      ..strokeWidth = 1;
-    for (var i = 1; i <= 4; i++) {
-      final y = size.height * (1 - i / 4);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    final barCount = frames.length;
-    final barW = (size.width / barCount).clamp(2.0, 16.0);
-    final gap = barW * 0.15;
-
-    for (var fi = 0; fi < frames.length; fi++) {
-      final frame = frames[fi];
-      final x = fi * (size.width / barCount);
-      double yOffset = size.height;
-
-      for (final id in seriesOrder) {
-        final speed = frame[id] ?? 0;
-        if (speed <= 0) continue;
-        final barH = (speed / maxSpeed) * size.height;
-        final rect = Rect.fromLTWH(
-            x + gap / 2, yOffset - barH, barW - gap, barH);
-        canvas.drawRRect(
-          RRect.fromRectAndCorners(rect,
-              topLeft: const Radius.circular(2),
-              topRight: const Radius.circular(2)),
-          Paint()..color = colorOf(id).withValues(alpha: 0.7),
-        );
-        yOffset -= barH;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _BarChartPainter old) =>
-      old.frameCount != frameCount || old.seriesOrder != seriesOrder;
-}
 

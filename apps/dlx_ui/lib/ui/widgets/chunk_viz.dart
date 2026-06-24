@@ -1,7 +1,9 @@
 import 'package:downloadx/downloadx.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/download_vm.dart';
 import '../../util/palette.dart';
+import 'speed_bar_chart.dart';
 
 /// Segmented horizontal bar — each chunk is a proportional region,
 /// tinted by status: completed (emerald), active/pulsing (blue),
@@ -10,18 +12,40 @@ class ChunkViz extends StatelessWidget {
   final int? totalBytes;
   final List<ChunkSnapshot> chunks;
   final double height;
+  final DownloadVm? vm;
 
   const ChunkViz({
     super.key,
     required this.totalBytes,
     required this.chunks,
     this.height = 48,
+    this.vm,
   });
 
   @override
   Widget build(BuildContext context) {
+    final vm = this.vm;
+    List<String> seriesOrder = const [];
+    Map<String, int> colorIndex = const {};
+    if (vm != null) {
+      final ordered = [...vm.snapshots]..sort((a, b) => a.offset.compareTo(b.offset));
+      seriesOrder = ordered.map((c) => c.id).toList();
+      colorIndex = {for (var i = 0; i < seriesOrder.length; i++) seriesOrder[i]: i};
+    }
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (vm != null) ...[
+          SpeedBarChart(
+            frames: vm.chunkSpeedHistory.frames,
+            frameCount: vm.chunkSpeedHistory.frames.length,
+            seriesOrder: seriesOrder,
+            colorOf: (id) => colorForIndex(colorIndex[id] ?? 0),
+            height: 80,
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
         SizedBox(
           height: height,
           width: double.infinity,
@@ -37,7 +61,6 @@ class ChunkViz extends StatelessWidget {
             ),
           ),
         ),
-        // Active chunk metadata list
         if (chunks.any((c) => c.status == ChunkStatus.downloading || c.status == ChunkStatus.paused)) ...[
           const SizedBox(height: AppSpacing.md),
           _ActiveChunkList(chunks: chunks, totalBytes: totalBytes),

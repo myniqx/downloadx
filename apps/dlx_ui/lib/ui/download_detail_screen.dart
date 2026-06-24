@@ -380,7 +380,7 @@ class _MobileLayout extends StatelessWidget {
             titleIcon: Icons.grid_view_rounded,
             description:
                 '${vm.hlsSegmentsDone ?? 0} done / ${vm.hlsTotalSegments ?? vm.desc.totalChunks} total',
-            child: SegmentViz(segments: vm.snapshots),
+            child: SegmentViz(segments: vm.snapshots, vm: vm),
           )
         else
           DlxCard(
@@ -389,7 +389,7 @@ class _MobileLayout extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ChunkViz(totalBytes: d.totalBytes, chunks: vm.snapshots),
+                ChunkViz(totalBytes: d.totalBytes, chunks: vm.snapshots, vm: vm),
                 const SizedBox(height: AppSpacing.md),
                 _ChunkLegend(),
               ],
@@ -634,7 +634,7 @@ class _DesktopLayout extends StatelessWidget {
                   titleIcon: Icons.grid_view_rounded,
                   description:
                       '${vm.hlsSegmentsDone ?? 0} done / ${vm.hlsTotalSegments ?? d.totalChunks} total',
-                  child: SegmentViz(segments: vm.snapshots),
+                  child: SegmentViz(segments: vm.snapshots, vm: vm),
                 )
               else
                 DlxCard(
@@ -649,6 +649,7 @@ class _DesktopLayout extends StatelessWidget {
                         totalBytes: d.totalBytes,
                         chunks: vm.snapshots,
                         height: 56,
+                        vm: vm,
                       ),
                       const SizedBox(height: AppSpacing.md),
                       _ChunkLegend(),
