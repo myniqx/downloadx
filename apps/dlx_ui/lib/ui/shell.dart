@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
+import '../models/download_vm.dart';
 import '../services/download_service.dart';
 import '../util/palette.dart';
 import 'add_download_dialog.dart';
+import 'download_detail_screen.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 
@@ -17,6 +19,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
+  DownloadVm? _selectedDownload;
   final TextEditingController _searchCtrl = TextEditingController();
 
   static const _navItems = [
@@ -30,9 +33,16 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
+  void _openDetail(DownloadVm vm) => setState(() => _selectedDownload = vm);
+  void _closeDetail() => setState(() => _selectedDownload = null);
+
   Widget _buildPage(int index) {
     return switch (index) {
-      0 => HomeScreen(service: widget.service, searchCtrl: _searchCtrl),
+      0 => HomeScreen(
+          service: widget.service,
+          searchCtrl: _searchCtrl,
+          onOpenDetail: _openDetail,
+        ),
       1 => SettingsScreen(service: widget.service),
       _ => const _PlaceholderPage(),
     };
@@ -43,14 +53,25 @@ class _AppShellState extends State<AppShell> {
     final width = MediaQuery.sizeOf(context).width;
     final isDesktop = width >= kBreakpointMd;
 
+    // Desktop: detail ekranı shell içinde gösterilir, sidebar sabit kalır.
+    final detailVm = _selectedDownload;
+    final desktopChild = detailVm != null
+        ? DownloadDetailScreen(
+            vm: detailVm,
+            service: widget.service,
+            onBack: _closeDetail,
+          )
+        : _buildPage(_selectedIndex);
+
     return isDesktop
         ? _DesktopShell(
             selectedIndex: _selectedIndex,
             navItems: _navItems,
-            onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+            onDestinationSelected: (i) =>
+                setState(() { _selectedIndex = i; _selectedDownload = null; }),
             service: widget.service,
             searchCtrl: _searchCtrl,
-            child: _buildPage(_selectedIndex),
+            child: desktopChild,
           )
         : _MobileShell(
             selectedIndex: _selectedIndex,

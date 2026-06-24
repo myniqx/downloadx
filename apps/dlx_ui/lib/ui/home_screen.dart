@@ -1,6 +1,7 @@
 import 'package:downloadx/downloadx.dart';
 import 'package:flutter/material.dart';
 
+import '../models/download_vm.dart';
 import '../services/download_service.dart';
 import '../util/palette.dart';
 import 'download_detail_screen.dart';
@@ -11,11 +12,13 @@ import 'widgets/transfer_card.dart';
 class HomeScreen extends StatelessWidget {
   final DownloadService service;
   final TextEditingController searchCtrl;
+  final ValueChanged<DownloadVm>? onOpenDetail;
 
   const HomeScreen({
     super.key,
     required this.service,
     required this.searchCtrl,
+    this.onOpenDetail,
   });
 
   @override
@@ -93,12 +96,16 @@ class HomeScreen extends StatelessWidget {
                       onPause: () => service.pause(vm),
                       onStart: () => service.start(vm),
                       onRemove: () => service.remove(vm),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              DownloadDetailScreen(vm: vm, service: service),
-                        ),
-                      ),
+                      onTap: () {
+                        if (onOpenDetail != null) {
+                          onOpenDetail!(vm);
+                        } else {
+                          Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) =>
+                                DownloadDetailScreen(vm: vm, service: service),
+                          ));
+                        }
+                      },
                     );
                   },
                 ),

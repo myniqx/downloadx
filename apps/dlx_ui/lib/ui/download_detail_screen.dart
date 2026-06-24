@@ -19,26 +19,28 @@ import 'widgets/slider_number_field.dart';
 class DownloadDetailScreen extends StatelessWidget {
   final DownloadVm vm;
   final DownloadService service;
+  final VoidCallback? onBack;
 
   const DownloadDetailScreen({
     super.key,
     required this.vm,
     required this.service,
+    this.onBack,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: _DetailAppBar(vm: vm, service: service),
+      appBar: _DetailAppBar(vm: vm, service: service, onBack: onBack),
       body: ListenableBuilder(
         listenable: vm,
         builder: (context, _) {
           final width = MediaQuery.sizeOf(context).width;
           final isDesktop = width >= kBreakpointMd;
           return isDesktop
-              ? _DesktopLayout(vm: vm, service: service)
-              : _MobileLayout(vm: vm, service: service);
+              ? _DesktopLayout(vm: vm, service: service, onBack: onBack)
+              : _MobileLayout(vm: vm, service: service, onBack: onBack);
         },
       ),
     );
@@ -52,8 +54,9 @@ class DownloadDetailScreen extends StatelessWidget {
 class _DetailAppBar extends StatelessWidget implements PreferredSizeWidget {
   final DownloadVm vm;
   final DownloadService service;
+  final VoidCallback? onBack;
 
-  const _DetailAppBar({required this.vm, required this.service});
+  const _DetailAppBar({required this.vm, required this.service, this.onBack});
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
@@ -80,7 +83,7 @@ class _DetailAppBar extends StatelessWidget implements PreferredSizeWidget {
                 DlxButton(
                   icon: Icons.arrow_back_rounded,
                   tooltip: 'Back',
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: onBack ?? () => Navigator.of(context).pop(),
                   variant: DlxButtonVariant.ghost,
                   shape: DlxButtonShape.circle,
                 ),
@@ -127,7 +130,7 @@ class _DetailAppBar extends StatelessWidget implements PreferredSizeWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
       ),
-      builder: (_) => _MoreMenu(vm: vm, service: service),
+      builder: (_) => _MoreMenu(vm: vm, service: service, onBack: onBack),
     );
   }
 }
@@ -135,8 +138,9 @@ class _DetailAppBar extends StatelessWidget implements PreferredSizeWidget {
 class _MoreMenu extends StatelessWidget {
   final DownloadVm vm;
   final DownloadService service;
+  final VoidCallback? onBack;
 
-  const _MoreMenu({required this.vm, required this.service});
+  const _MoreMenu({required this.vm, required this.service, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +170,11 @@ class _MoreMenu extends StatelessWidget {
             onTap: () {
               Navigator.of(context).pop();
               service.remove(vm);
-              Navigator.of(context).pop();
+              if (onBack != null) {
+                onBack!();
+              } else {
+                Navigator.of(context).pop();
+              }
             },
           ),
         ],
@@ -182,8 +190,9 @@ class _MoreMenu extends StatelessWidget {
 class _MobileLayout extends StatelessWidget {
   final DownloadVm vm;
   final DownloadService service;
+  final VoidCallback? onBack;
 
-  const _MobileLayout({required this.vm, required this.service});
+  const _MobileLayout({required this.vm, required this.service, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -394,7 +403,7 @@ class _MobileLayout extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
 
         // Controls
-        _ControlButtons(vm: vm, service: service),
+        _ControlButtons(vm: vm, service: service, onBack: onBack),
         const SizedBox(height: AppSpacing.md),
 
         // Settings
@@ -414,8 +423,9 @@ class _MobileLayout extends StatelessWidget {
 class _DesktopLayout extends StatelessWidget {
   final DownloadVm vm;
   final DownloadService service;
+  final VoidCallback? onBack;
 
-  const _DesktopLayout({required this.vm, required this.service});
+  const _DesktopLayout({required this.vm, required this.service, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -720,7 +730,7 @@ class _DesktopLayout extends StatelessWidget {
               const SizedBox(height: AppSpacing.md),
               DlxCard(
                 title: 'Actions',
-                child: _ControlButtons(vm: vm, service: service, dense: true),
+                child: _ControlButtons(vm: vm, service: service, dense: true, onBack: onBack),
               ),
             ],
           ),
@@ -960,11 +970,13 @@ class _ControlButtons extends StatelessWidget {
   final DownloadVm vm;
   final DownloadService service;
   final bool dense;
+  final VoidCallback? onBack;
 
   const _ControlButtons({
     required this.vm,
     required this.service,
     this.dense = false,
+    this.onBack,
   });
 
   @override
@@ -995,7 +1007,7 @@ class _ControlButtons extends StatelessWidget {
               label: 'Remove',
               onPressed: () {
                 service.remove(vm);
-                Navigator.of(context).pop();
+                if (onBack != null) { onBack!(); } else { Navigator.of(context).pop(); }
               },
               variant: DlxButtonVariant.danger,
               size: DlxButtonSize.lg,
@@ -1025,7 +1037,7 @@ class _ControlButtons extends StatelessWidget {
             label: 'Remove',
             onPressed: () {
               service.remove(vm);
-              Navigator.of(context).pop();
+              if (onBack != null) { onBack!(); } else { Navigator.of(context).pop(); }
             },
             variant: DlxButtonVariant.danger,
             size: DlxButtonSize.lg,
