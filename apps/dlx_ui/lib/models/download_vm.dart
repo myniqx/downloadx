@@ -63,6 +63,7 @@ class DownloadVm extends ChangeNotifier {
   void onEvent(DownloadEvent e) {
     if (e is ChunkProgressEvent) {
       _chunkSpeed[e.chunkId] = e.instantSpeed;
+      _patchSnapshot(e.chunkId, e.downloadedBytes, e.length);
     } else if (e is ChunkLifecycleEvent) {
       if (e.status != ChunkStatus.downloading) {
         _chunkSpeed.remove(e.chunkId);
@@ -71,6 +72,16 @@ class DownloadVm extends ChangeNotifier {
       currentSpeed = e.totalSpeed;
       if (e.hlsSegmentsDone != null) hlsSegmentsDone = e.hlsSegmentsDone;
       if (e.hlsTotalSegments != null) hlsTotalSegments = e.hlsTotalSegments;
+    }
+  }
+
+  void _patchSnapshot(String chunkId, int downloadedBytes, int length) {
+    for (final s in snapshots) {
+      if (s.id == chunkId) {
+        s.downloadedBytes = downloadedBytes;
+        s.length = length;
+        return;
+      }
     }
   }
 

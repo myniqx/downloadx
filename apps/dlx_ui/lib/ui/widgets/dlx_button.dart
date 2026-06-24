@@ -79,7 +79,13 @@ class DlxButton extends StatelessWidget {
               children: [
                 Icon(icon, size: dims.iconSize, color: colors.foreground),
                 SizedBox(width: AppSpacing.xs),
-                Text(label!, style: dims.textStyle.copyWith(color: colors.foreground)),
+                Flexible(
+                  child: Text(
+                    label!,
+                    style: dims.textStyle.copyWith(color: colors.foreground),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             )
           : hasIcon

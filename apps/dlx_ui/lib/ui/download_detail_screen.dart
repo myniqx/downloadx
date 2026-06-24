@@ -8,6 +8,7 @@ import '../util/palette.dart';
 import 'widgets/chunk_speed_panel.dart';
 import 'widgets/chunk_viz.dart';
 import 'widgets/dlx_button.dart';
+import 'widgets/segment_viz.dart';
 import 'widgets/dlx_card.dart';
 import 'widgets/download_progress_bar.dart';
 import 'widgets/editable_field.dart';
@@ -361,19 +362,28 @@ class _MobileLayout extends StatelessWidget {
         _StatsBento(d: d, vm: vm),
         const SizedBox(height: AppSpacing.md),
 
-        // Chunk visualization
-        DlxCard(
-          title: 'Chunk Visualization',
-          description: '${vm.desc.totalChunks} Chunks',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ChunkViz(totalBytes: d.totalBytes, chunks: vm.snapshots),
-              const SizedBox(height: AppSpacing.md),
-              _ChunkLegend(),
-            ],
+        // Chunk / segment visualization
+        if (vm.isHls)
+          DlxCard(
+            title: 'Segment Distribution',
+            titleIcon: Icons.grid_view_rounded,
+            description:
+                '${vm.hlsSegmentsDone ?? 0} done / ${vm.hlsTotalSegments ?? vm.desc.totalChunks} total',
+            child: SegmentViz(segments: vm.snapshots),
+          )
+        else
+          DlxCard(
+            title: 'Chunk Visualization',
+            description: '${vm.desc.totalChunks} Chunks',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ChunkViz(totalBytes: d.totalBytes, chunks: vm.snapshots),
+                const SizedBox(height: AppSpacing.md),
+                _ChunkLegend(),
+              ],
+            ),
           ),
-        ),
         const SizedBox(height: AppSpacing.md),
 
         // Chunk speed panel
@@ -605,25 +615,34 @@ class _DesktopLayout extends StatelessWidget {
               DownloadProgressBar(vm: vm),
               const SizedBox(height: AppSpacing.lg),
 
-              // Chunk visualization
-              DlxCard(
-                title: 'Chunk Distribution',
-                titleIcon: Icons.grid_view_rounded,
-                description:
-                    '${d.activeChunks} active / ${d.totalChunks} total',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ChunkViz(
-                      totalBytes: d.totalBytes,
-                      chunks: vm.snapshots,
-                      height: 56,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _ChunkLegend(),
-                  ],
+              // Chunk / segment visualization
+              if (vm.isHls)
+                DlxCard(
+                  title: 'Segment Distribution',
+                  titleIcon: Icons.grid_view_rounded,
+                  description:
+                      '${vm.hlsSegmentsDone ?? 0} done / ${vm.hlsTotalSegments ?? d.totalChunks} total',
+                  child: SegmentViz(segments: vm.snapshots),
+                )
+              else
+                DlxCard(
+                  title: 'Chunk Distribution',
+                  titleIcon: Icons.grid_view_rounded,
+                  description:
+                      '${d.activeChunks} active / ${d.totalChunks} total',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ChunkViz(
+                        totalBytes: d.totalBytes,
+                        chunks: vm.snapshots,
+                        height: 56,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _ChunkLegend(),
+                    ],
+                  ),
                 ),
-              ),
               const SizedBox(height: AppSpacing.lg),
 
               // Chunk speed panel
@@ -645,7 +664,7 @@ class _DesktopLayout extends StatelessWidget {
 
         // Right column — stats + controls
         SizedBox(
-          width: 280,
+          width: 320,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
               0,
@@ -748,23 +767,22 @@ class _StatsBento extends StatelessWidget {
         segLabel,
       ),
     ];
-    return GridView.count(
-      crossAxisCount: 2,
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: AppSpacing.sm,
-      mainAxisSpacing: AppSpacing.sm,
-      childAspectRatio: 2.2,
-      children: items
-          .map(
-            (item) => _BentoCell(
-              icon: item.$1,
-              iconColor: item.$2,
-              label: item.$3,
-              value: item.$4,
-            ),
-          )
-          .toList(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: AppSpacing.sm,
+        mainAxisSpacing: AppSpacing.sm,
+        mainAxisExtent: 100,
+      ),
+      itemCount: items.length,
+      itemBuilder: (_, i) => _BentoCell(
+        icon: items[i].$1,
+        iconColor: items[i].$2,
+        label: items[i].$3,
+        value: items[i].$4,
+      ),
     );
   }
 }
