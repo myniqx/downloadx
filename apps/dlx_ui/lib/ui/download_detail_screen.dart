@@ -5,7 +5,6 @@ import '../models/download_vm.dart';
 import '../services/download_service.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
-import 'widgets/chunk_speed_panel.dart';
 import 'widgets/chunk_viz.dart';
 import 'widgets/dlx_button.dart';
 import 'widgets/segment_viz.dart';
@@ -397,13 +396,6 @@ class _MobileLayout extends StatelessWidget {
           ),
         const SizedBox(height: AppSpacing.md),
 
-        // Chunk speed panel
-        ListenableBuilder(
-          listenable: service.ticker,
-          builder: (context, _) => DlxCard(child: ChunkSpeedPanel(vm: vm)),
-        ),
-        const SizedBox(height: AppSpacing.md),
-
         // Controls
         _ControlButtons(vm: vm, service: service, onBack: onBack),
         const SizedBox(height: AppSpacing.md),
@@ -652,13 +644,6 @@ class _DesktopLayout extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: AppSpacing.lg),
-
-              // Chunk speed panel
-              ListenableBuilder(
-                listenable: service.ticker,
-                builder: (context, _) =>
-                    DlxCard(child: ChunkSpeedPanel(vm: vm)),
-              ),
 
               // Settings
               const SizedBox(height: AppSpacing.lg),
