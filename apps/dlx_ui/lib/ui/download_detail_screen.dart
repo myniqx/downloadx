@@ -389,7 +389,7 @@ class _MobileLayout extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ChunkViz(totalBytes: d.totalBytes, chunks: vm.snapshots, vm: vm),
+                ChunkViz(vm: vm),
                 const SizedBox(height: AppSpacing.md),
                 _ChunkLegend(),
               ],
@@ -645,12 +645,7 @@ class _DesktopLayout extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ChunkViz(
-                        totalBytes: d.totalBytes,
-                        chunks: vm.snapshots,
-                        height: 56,
-                        vm: vm,
-                      ),
+                      ChunkViz(vm: vm, height: 56),
                       const SizedBox(height: AppSpacing.md),
                       _ChunkLegend(),
                     ],

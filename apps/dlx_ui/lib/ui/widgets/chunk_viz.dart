@@ -9,43 +9,35 @@ import 'speed_bar_chart.dart';
 /// tinted by status: completed (emerald), active/pulsing (blue),
 /// stalled (red), queued (dim).
 class ChunkViz extends StatelessWidget {
-  final int? totalBytes;
-  final List<ChunkSnapshot> chunks;
+  final DownloadVm vm;
   final double height;
-  final DownloadVm? vm;
 
   const ChunkViz({
     super.key,
-    required this.totalBytes,
-    required this.chunks,
+    required this.vm,
     this.height = 48,
-    this.vm,
   });
 
   @override
   Widget build(BuildContext context) {
-    final vm = this.vm;
-    List<String> seriesOrder = const [];
-    Map<String, int> colorIndex = const {};
-    if (vm != null) {
-      final ordered = [...vm.snapshots]..sort((a, b) => a.offset.compareTo(b.offset));
-      seriesOrder = ordered.map((c) => c.id).toList();
-      colorIndex = {for (var i = 0; i < seriesOrder.length; i++) seriesOrder[i]: i};
-    }
+    final chunks = vm.snapshots;
+    final totalBytes = vm.desc.totalBytes;
+
+    final ordered = [...chunks]..sort((a, b) => a.offset.compareTo(b.offset));
+    final seriesOrder = ordered.map((c) => c.id).toList();
+    final colorIndex = {for (var i = 0; i < seriesOrder.length; i++) seriesOrder[i]: i};
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (vm != null) ...[
-          SpeedBarChart(
-            frames: vm.chunkSpeedHistory.frames,
-            frameCount: vm.chunkSpeedHistory.frames.length,
-            seriesOrder: seriesOrder,
-            colorOf: (id) => colorForIndex(colorIndex[id] ?? 0),
-            height: 80,
-          ),
-          const SizedBox(height: AppSpacing.md),
-        ],
+        SpeedBarChart(
+          frames: vm.chunkSpeedHistory.frames,
+          frameCount: vm.chunkSpeedHistory.frames.length,
+          seriesOrder: seriesOrder,
+          colorOf: (id) => colorForIndex(colorIndex[id] ?? 0),
+          height: 80,
+        ),
+        const SizedBox(height: AppSpacing.md),
         SizedBox(
           height: height,
           width: double.infinity,
@@ -63,7 +55,7 @@ class ChunkViz extends StatelessWidget {
         ),
         if (chunks.any((c) => c.status == ChunkStatus.downloading || c.status == ChunkStatus.paused)) ...[
           const SizedBox(height: AppSpacing.md),
-          _ActiveChunkList(chunks: chunks, totalBytes: totalBytes),
+          _ActiveChunkList(chunks: chunks, vm: vm),
         ],
       ],
     );
@@ -174,9 +166,9 @@ class _ChunkVizPainter extends CustomPainter {
 
 class _ActiveChunkList extends StatelessWidget {
   final List<ChunkSnapshot> chunks;
-  final int? totalBytes;
+  final DownloadVm vm;
 
-  const _ActiveChunkList({required this.chunks, required this.totalBytes});
+  const _ActiveChunkList({required this.chunks, required this.vm});
 
   @override
   Widget build(BuildContext context) {
@@ -184,73 +176,76 @@ class _ActiveChunkList extends StatelessWidget {
         .where((c) => c.status == ChunkStatus.downloading || c.status == ChunkStatus.paused)
         .toList();
 
-    return Column(
+    final headerStyle = AppTextStyles.labelSm.copyWith(
+      color: AppColors.onSurfaceVariant,
+      fontWeight: FontWeight.w600,
+    );
+    final cellStyle = AppTextStyles.labelSm.copyWith(color: AppColors.onSurface);
+
+    final lastFrame = vm.chunkSpeedHistory.frames.isNotEmpty
+        ? vm.chunkSpeedHistory.frames.last
+        : const <String, double>{};
+
+    final headerRow = TableRow(
+      decoration: BoxDecoration(color: AppColors.surfaceContainerLow),
       children: [
-        // Two-column grid of active chunks, matching HTML metadata labels
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: AppSpacing.sm,
-            mainAxisSpacing: AppSpacing.sm,
-            childAspectRatio: 3.0,
-          ),
-          itemCount: active.length > 4 ? 4 : active.length,
-          itemBuilder: (context, i) {
-            final c = active[i];
-            final downloaded = c.downloadedBytes;
-            final total = c.length;
-            return Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(AppRadius.def),
-                border: Border.all(
-                    color: AppColors.outlineVariant.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        c.id.split('-').last.toUpperCase(),
-                        style: AppTextStyles.labelSm.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                            fontSize: 10,
-                            letterSpacing: 0.8),
-                      ),
-                      Text(
-                        '${_fmt(downloaded)} / ${_fmt(total)}',
-                        style: AppTextStyles.dataDisplay
-                            .copyWith(color: AppColors.primary),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('Offset',
-                          style: AppTextStyles.labelSm.copyWith(
-                              color: AppColors.onSurfaceVariant, fontSize: 10)),
-                      Text(
-                        _fmt(c.offset),
-                        style: AppTextStyles.dataDisplay
-                            .copyWith(color: AppColors.onSurface),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
+        _cell(Text('#', style: headerStyle), isHeader: true),
+        _cell(Text('Offset', style: headerStyle), isHeader: true),
+        _cell(Text('Size', style: headerStyle), isHeader: true),
+        _cell(Text('Downloaded', style: headerStyle), isHeader: true),
+        _cell(Text('Speed', style: headerStyle), isHeader: true),
+        _cell(Text('Status', style: headerStyle), isHeader: true),
       ],
+    );
+
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(1),
+        1: FlexColumnWidth(2),
+        2: FlexColumnWidth(2),
+        3: FlexColumnWidth(2),
+        4: FlexColumnWidth(2),
+        5: FlexColumnWidth(2),
+      },
+      border: TableBorder(
+        horizontalInside: BorderSide(
+            color: AppColors.outlineVariant.withValues(alpha: 0.3), width: 0.5),
+        bottom: BorderSide(
+            color: AppColors.outlineVariant.withValues(alpha: 0.3), width: 0.5),
+      ),
+      children: [
+        headerRow,
+        ...active.map((c) {
+          final color = colorForQuality(c.quality,
+              completed: c.status == ChunkStatus.completed);
+          final speed = lastFrame[c.id] ?? 0;
+          return TableRow(children: [
+            _cell(Text(c.id.split('-').last.toUpperCase(),
+                style: cellStyle.copyWith(color: color))),
+            _cell(Text(_fmt(c.offset), style: cellStyle)),
+            _cell(Text(_fmt(c.length), style: cellStyle)),
+            _cell(Text(_fmt(c.downloadedBytes),
+                style: cellStyle.copyWith(color: AppColors.primary))),
+            _cell(Text(speed > 0 ? '${_fmt(speed.toInt())}/s' : '—',
+                style: cellStyle.copyWith(
+                    color: speed > 0 ? AppColors.onSurface : AppColors.onSurfaceVariant))),
+            _cell(Text(
+              c.status.name + (c.retries > 0 ? ' ·r${c.retries}' : ''),
+              style: cellStyle.copyWith(color: color),
+            )),
+          ]);
+        }),
+      ],
+    );
+  }
+
+  static Widget _cell(Widget child, {bool isHeader = false}) {
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: isHeader ? AppSpacing.xs : AppSpacing.xs,
+      ),
+      child: child,
     );
   }
 
@@ -259,7 +254,7 @@ class _ActiveChunkList extends StatelessWidget {
       return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
     }
     if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(0)} MB';
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
     return '$bytes B';
