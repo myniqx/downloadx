@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/download_service.dart';
 import '../util/palette.dart';
 import 'download_detail_screen.dart';
+import 'widgets/dlx_button.dart';
 import 'widgets/speed_hero.dart';
 import 'widgets/transfer_card.dart';
 
@@ -146,12 +147,11 @@ class _TransferListHeader extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        TextButton(
+        DlxButton(
+          label: 'Clear Completed',
           onPressed: onClearCompleted,
-          child: Text(
-            'Clear Completed',
-            style: AppTextStyles.labelSm.copyWith(color: AppColors.primary),
-          ),
+          variant: DlxButtonVariant.ghost,
+          size: DlxButtonSize.sm,
         ),
       ],
     );

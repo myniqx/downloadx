@@ -7,6 +7,8 @@ import '../util/format.dart';
 import '../util/palette.dart';
 import 'widgets/chunk_speed_panel.dart';
 import 'widgets/chunk_viz.dart';
+import 'widgets/dlx_button.dart';
+import 'widgets/download_progress_bar.dart';
 import 'widgets/editable_field.dart';
 import 'widgets/folder_path_field.dart';
 import 'widgets/key_value_editor.dart';
@@ -67,10 +69,12 @@ class _DetailAppBar extends StatelessWidget implements PreferredSizeWidget {
             bottom: false,
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  color: AppColors.primary,
+                DlxButton(
+                  icon: Icons.arrow_back_rounded,
+                  tooltip: 'Back',
                   onPressed: () => Navigator.of(context).pop(),
+                  variant: DlxButtonVariant.ghost,
+                  shape: DlxButtonShape.circle,
                 ),
                 Expanded(
                   child: Text(
@@ -81,17 +85,19 @@ class _DetailAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 if (vm.state != DownloadState.completed)
-                  IconButton(
-                    icon: Icon(running ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                    color: AppColors.onSurfaceVariant,
+                  DlxButton(
+                    icon: running ? Icons.pause_rounded : Icons.play_arrow_rounded,
                     tooltip: running ? 'Pause' : 'Resume',
-                    onPressed: () =>
-                        running ? service.pause(vm) : service.start(vm),
+                    onPressed: () => running ? service.pause(vm) : service.start(vm),
+                    variant: DlxButtonVariant.ghost,
+                    shape: DlxButtonShape.circle,
                   ),
-                IconButton(
-                  icon: const Icon(Icons.more_vert_rounded),
-                  color: AppColors.onSurfaceVariant,
+                DlxButton(
+                  icon: Icons.more_vert_rounded,
+                  tooltip: 'More',
                   onPressed: () => _showMoreMenu(context),
+                  variant: DlxButtonVariant.ghost,
+                  shape: DlxButtonShape.circle,
                 ),
               ],
             ),
@@ -298,10 +304,7 @@ class _MobileLayout extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.xs),
-              _GlowProgressBar(
-                value: vm.progressFraction,
-                active: running,
-              ),
+              DownloadProgressBar(vm: vm),
             ],
           ),
         ),
@@ -527,14 +530,7 @@ class _DesktopLayout extends StatelessWidget {
               const SizedBox(height: AppSpacing.lg),
 
               // Progress bar
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.full),
-                child: _GlowProgressBar(
-                  value: vm.progressFraction,
-                  active: running,
-                  height: 10,
-                ),
-              ),
+              DownloadProgressBar(vm: vm),
               const SizedBox(height: AppSpacing.lg),
 
               // Chunk visualization
@@ -902,26 +898,6 @@ class _LegendItem extends StatelessWidget {
   }
 }
 
-class _GlowProgressBar extends StatelessWidget {
-  final double? value;
-  final bool active;
-  final double height;
-
-  const _GlowProgressBar({this.value, this.active = false, this.height = 8});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.full),
-      child: LinearProgressIndicator(
-        value: value,
-        minHeight: height,
-        backgroundColor: AppColors.surfaceDim,
-        color: active ? AppColors.primary : AppColors.outline,
-      ),
-    );
-  }
-}
 
 class _ControlButtons extends StatelessWidget {
   final DownloadVm vm;
@@ -942,22 +918,26 @@ class _ControlButtons extends StatelessWidget {
         children: [
           if (!completed)
             Expanded(
-              child: _OutlineButton(
+              child: DlxButton(
                 icon: running ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 label: running ? 'Pause' : 'Resume',
-                onPressed: () =>
-                    running ? service.pause(vm) : service.start(vm),
+                onPressed: () => running ? service.pause(vm) : service.start(vm),
+                size: DlxButtonSize.lg,
+                shape: DlxButtonShape.pill,
               ),
             ),
           if (!completed) const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: _DangerButton(
+            child: DlxButton(
               icon: Icons.close_rounded,
               label: 'Remove',
               onPressed: () {
                 service.remove(vm);
                 Navigator.of(context).pop();
               },
+              variant: DlxButtonVariant.danger,
+              size: DlxButtonSize.lg,
+              shape: DlxButtonShape.pill,
             ),
           ),
         ],
@@ -968,88 +948,39 @@ class _ControlButtons extends StatelessWidget {
       children: [
         if (!completed)
           Expanded(
-            child: _OutlineButton(
+            child: DlxButton(
               icon: running ? Icons.pause_rounded : Icons.play_arrow_rounded,
               label: running ? 'Pause' : 'Resume',
               onPressed: () => running ? service.pause(vm) : service.start(vm),
+              size: DlxButtonSize.lg,
+              shape: DlxButtonShape.pill,
             ),
           ),
         if (!completed) const SizedBox(width: AppSpacing.sm),
         Expanded(
-          child: _DangerButton(
+          child: DlxButton(
             icon: Icons.close_rounded,
             label: 'Remove',
             onPressed: () {
               service.remove(vm);
               Navigator.of(context).pop();
             },
+            variant: DlxButtonVariant.danger,
+            size: DlxButtonSize.lg,
+            shape: DlxButtonShape.pill,
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
-          child: _OutlineButton(
+          child: DlxButton(
             icon: Icons.tune_rounded,
             label: 'Speed Limit',
             onPressed: () {},
+            size: DlxButtonSize.lg,
+            shape: DlxButtonShape.pill,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _OutlineButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-
-  const _OutlineButton(
-      {required this.icon, required this.label, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.onSurface,
-        side: const BorderSide(color: AppColors.outlineVariant),
-        backgroundColor: AppColors.surfaceContainerHigh,
-        textStyle: AppTextStyles.labelSm,
-        padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.sm, horizontal: AppSpacing.md),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.lg)),
-      ),
-    );
-  }
-}
-
-class _DangerButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-
-  const _DangerButton(
-      {required this.icon, required this.label, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.error,
-        side: BorderSide(color: AppColors.error.withValues(alpha: 0.4)),
-        backgroundColor: AppColors.error.withValues(alpha: 0.08),
-        textStyle: AppTextStyles.labelSm,
-        padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.sm, horizontal: AppSpacing.md),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.lg)),
-      ),
     );
   }
 }
@@ -1159,7 +1090,7 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                 const SizedBox(height: AppSpacing.xs),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: TextButton(onPressed: confirm, child: const Text('Done')),
+                  child: DlxButton(label: 'Done', onPressed: confirm, variant: DlxButtonVariant.ghost),
                 ),
               ],
             ),
@@ -1193,7 +1124,7 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                 const SizedBox(height: AppSpacing.xs),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: TextButton(onPressed: confirm, child: const Text('Done')),
+                  child: DlxButton(label: 'Done', onPressed: confirm, variant: DlxButtonVariant.ghost),
                 ),
               ],
             ),
@@ -1251,9 +1182,10 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(onPressed: cancel, child: const Text('Cancel')),
+                      DlxButton(label: 'Cancel', onPressed: cancel, variant: DlxButtonVariant.ghost),
                       const SizedBox(width: AppSpacing.xs),
-                      FilledButton(
+                      DlxButton(
+                        label: 'Confirm',
                         onPressed: () {
                           final newMap = ctrl.read();
                           dl.clearHeaders();
@@ -1261,7 +1193,7 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                           _refresh();
                           confirm();
                         },
-                        child: const Text('Confirm'),
+                        variant: DlxButtonVariant.filled,
                       ),
                     ],
                   ),
@@ -1296,9 +1228,10 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(onPressed: cancel, child: const Text('Cancel')),
+                      DlxButton(label: 'Cancel', onPressed: cancel, variant: DlxButtonVariant.ghost),
                       const SizedBox(width: AppSpacing.xs),
-                      FilledButton(
+                      DlxButton(
+                        label: 'Confirm',
                         onPressed: () {
                           final newMap = ctrl.read();
                           dl.clearMetadata();
@@ -1306,7 +1239,7 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                           _refresh();
                           confirm();
                         },
-                        child: const Text('Confirm'),
+                        variant: DlxButtonVariant.filled,
                       ),
                     ],
                   ),
@@ -1343,21 +1276,21 @@ class _InlineTextEdit extends StatelessWidget {
             onSubmitted: (_) => onConfirm(),
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.check_rounded, size: 18),
-          color: AppColors.primary,
+        DlxButton(
+          icon: Icons.check_rounded,
           tooltip: 'Confirm',
           onPressed: onConfirm,
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          padding: EdgeInsets.zero,
+          variant: DlxButtonVariant.ghost,
+          shape: DlxButtonShape.circle,
+          size: DlxButtonSize.sm,
         ),
-        IconButton(
-          icon: const Icon(Icons.close_rounded, size: 18),
-          color: AppColors.onSurfaceVariant,
+        DlxButton(
+          icon: Icons.close_rounded,
           tooltip: 'Cancel',
           onPressed: onCancel,
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          padding: EdgeInsets.zero,
+          variant: DlxButtonVariant.ghost,
+          shape: DlxButtonShape.circle,
+          size: DlxButtonSize.sm,
         ),
       ],
     );
@@ -1385,9 +1318,9 @@ class _InlineFolderEdit extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            TextButton(onPressed: onCancel, child: const Text('Cancel')),
+            DlxButton(label: 'Cancel', onPressed: onCancel, variant: DlxButtonVariant.ghost),
             const SizedBox(width: AppSpacing.xs),
-            FilledButton(onPressed: onConfirm, child: const Text('Confirm')),
+            DlxButton(label: 'Confirm', onPressed: onConfirm, variant: DlxButtonVariant.filled),
           ],
         ),
       ],

@@ -4,6 +4,7 @@ import '../services/download_service.dart';
 import '../services/settings_store.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
+import 'widgets/dlx_button.dart';
 import 'widgets/folder_picker_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -436,18 +437,12 @@ class _DirectorySectionState extends State<_DirectorySection> {
                           style: AppTextStyles.labelSm
                               .copyWith(color: AppColors.onSurfaceVariant)),
                       const Spacer(),
-                      TextButton.icon(
+                      DlxButton(
+                        icon: Icons.add_rounded,
+                        label: 'Add Rule',
                         onPressed: _addRule,
-                        icon: const Icon(Icons.add_rounded, size: 14),
-                        label: const Text('Add Rule'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          textStyle: AppTextStyles.labelSm,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.xs),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
+                        variant: DlxButtonVariant.ghost,
+                        size: DlxButtonSize.sm,
                       ),
                     ],
                   ),
@@ -559,11 +554,11 @@ class _RuleRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style:
                         AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface)),
-                GestureDetector(
-                  onTap: onRemove,
-                  child: Text('Remove',
-                      style: AppTextStyles.labelSm
-                          .copyWith(color: AppColors.error, fontSize: 10)),
+                DlxButton(
+                  label: 'Remove',
+                  onPressed: onRemove,
+                  variant: DlxButtonVariant.danger,
+                  size: DlxButtonSize.sm,
                 ),
               ],
             ),
@@ -606,11 +601,10 @@ class _AboutCard extends StatelessWidget {
               valueColor: AppColors.secondary),
           const SizedBox(height: AppSpacing.md),
           Center(
-            child: TextButton(
+            child: DlxButton(
+              label: 'Check for Updates',
               onPressed: () {},
-              child: Text('Check for Updates',
-                  style: AppTextStyles.labelSm
-                      .copyWith(color: AppColors.primary)),
+              variant: DlxButtonVariant.ghost,
             ),
           ),
         ],
@@ -677,18 +671,18 @@ class _SaveBar extends StatelessWidget {
                     .copyWith(color: AppColors.onSurfaceVariant)),
           ],
           const Spacer(),
-          TextButton(
+          DlxButton(
+            label: 'Discard',
             onPressed: dirty ? onDiscard : null,
-            child: Text('Discard',
-                style: AppTextStyles.bodyMd.copyWith(
-                    color: dirty
-                        ? AppColors.onSurfaceVariant
-                        : AppColors.outlineVariant)),
+            variant: DlxButtonVariant.ghost,
+            disabled: !dirty,
           ),
           const SizedBox(width: AppSpacing.md),
-          FilledButton(
+          DlxButton(
+            label: 'Apply Settings',
             onPressed: dirty ? onApply : null,
-            child: const Text('Apply Settings'),
+            variant: DlxButtonVariant.filled,
+            disabled: !dirty,
           ),
         ],
       ),
@@ -714,26 +708,22 @@ class _MobileSaveCard extends StatelessWidget {
               style: AppTextStyles.labelSm
                   .copyWith(color: AppColors.onSurfaceVariant)),
           const SizedBox(height: AppSpacing.md),
-          FilledButton.icon(
+          DlxButton(
+            icon: Icons.save_rounded,
+            label: 'Apply Configuration',
             onPressed: onApply,
-            icon: const Icon(Icons.save_rounded, size: 18),
-            label: const Text('Apply Configuration'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(double.infinity, 48),
-              textStyle: AppTextStyles.labelSm,
-            ),
+            variant: DlxButtonVariant.filled,
+            size: DlxButtonSize.lg,
+            shape: DlxButtonShape.pill,
           ),
           const SizedBox(height: AppSpacing.sm),
-          OutlinedButton.icon(
+          DlxButton(
+            icon: Icons.restart_alt_rounded,
+            label: 'Reset to Defaults',
             onPressed: () {},
-            icon: const Icon(Icons.restart_alt_rounded, size: 18),
-            label: const Text('Reset to Defaults'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 40),
-              foregroundColor: AppColors.onSurfaceVariant,
-              side: const BorderSide(color: AppColors.outlineVariant),
-              textStyle: AppTextStyles.labelSm,
-            ),
+            variant: DlxButtonVariant.outline,
+            size: DlxButtonSize.lg,
+            shape: DlxButtonShape.pill,
           ),
         ],
       ),
@@ -877,13 +867,13 @@ class _PathField extends StatelessWidget {
           if (showPicker && _supportsNativePicker) ...[
             const SizedBox(width: AppSpacing.xs),
             Builder(
-              builder: (ctx) => IconButton(
-                onPressed: () => _pickFolder(ctx),
-                icon: const Icon(Icons.folder_open_rounded, size: 18),
-                color: AppColors.onSurfaceVariant,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              builder: (ctx) => DlxButton(
+                icon: Icons.folder_open_rounded,
                 tooltip: 'Browse',
+                onPressed: () => _pickFolder(ctx),
+                variant: DlxButtonVariant.ghost,
+                shape: DlxButtonShape.circle,
+                size: DlxButtonSize.sm,
               ),
             ),
           ],
@@ -929,12 +919,13 @@ class _NumberInputField extends StatelessWidget {
             children: [
               Icon(icon, size: 20, color: AppColors.onSurfaceVariant),
               const Spacer(),
-              IconButton(
+              DlxButton(
+                icon: Icons.remove_rounded,
                 onPressed: value > min ? () => onChanged(value - 1) : null,
-                icon: const Icon(Icons.remove_rounded, size: 16),
-                color: AppColors.onSurfaceVariant,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                variant: DlxButtonVariant.ghost,
+                shape: DlxButtonShape.circle,
+                size: DlxButtonSize.sm,
+                disabled: value <= min,
               ),
               SizedBox(
                 width: 36,
@@ -945,12 +936,13 @@ class _NumberInputField extends StatelessWidget {
                       .copyWith(color: AppColors.onSurface),
                 ),
               ),
-              IconButton(
+              DlxButton(
+                icon: Icons.add_rounded,
                 onPressed: value < max ? () => onChanged(value + 1) : null,
-                icon: const Icon(Icons.add_rounded, size: 16),
-                color: AppColors.onSurfaceVariant,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                variant: DlxButtonVariant.ghost,
+                shape: DlxButtonShape.circle,
+                size: DlxButtonSize.sm,
+                disabled: value >= max,
               ),
             ],
           ),

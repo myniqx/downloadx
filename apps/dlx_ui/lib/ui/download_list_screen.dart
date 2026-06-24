@@ -7,6 +7,7 @@ import '../util/palette.dart';
 import 'add_download_dialog.dart';
 import 'download_detail_screen.dart';
 import 'settings_screen.dart';
+import 'widgets/dlx_button.dart';
 import 'widgets/download_tile.dart';
 import 'widgets/speed_chart.dart';
 
@@ -24,29 +25,36 @@ class DownloadListScreen extends StatelessWidget {
           if (kDebugMode)
             ListenableBuilder(
               listenable: service,
-              builder: (context, _) => IconButton(
+              builder: (context, _) => DlxButton(
                 tooltip: service.demoActive ? 'Clear demo downloads' : 'Inject demo downloads',
-                icon: Icon(service.demoActive ? Icons.science : Icons.science_outlined),
-                color: service.demoActive ? Theme.of(context).colorScheme.primary : null,
+                icon: service.demoActive ? Icons.science : Icons.science_outlined,
                 onPressed: service.toggleDemo,
+                variant: DlxButtonVariant.ghost,
+                shape: DlxButtonShape.circle,
               ),
             ),
-          IconButton(
+          DlxButton(
             tooltip: 'Start all',
-            icon: const Icon(Icons.play_arrow),
+            icon: Icons.play_arrow,
             onPressed: service.startAll,
+            variant: DlxButtonVariant.ghost,
+            shape: DlxButtonShape.circle,
           ),
-          IconButton(
+          DlxButton(
             tooltip: 'Pause all',
-            icon: const Icon(Icons.pause),
+            icon: Icons.pause,
             onPressed: service.pauseAll,
+            variant: DlxButtonVariant.ghost,
+            shape: DlxButtonShape.circle,
           ),
-          IconButton(
+          DlxButton(
             tooltip: 'Settings',
-            icon: const Icon(Icons.settings),
+            icon: Icons.settings,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => SettingsScreen(service: service)),
             ),
+            variant: DlxButtonVariant.ghost,
+            shape: DlxButtonShape.circle,
           ),
         ],
       ),

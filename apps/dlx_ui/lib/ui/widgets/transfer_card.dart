@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../models/download_vm.dart';
 import '../../util/format.dart';
 import '../../util/palette.dart';
+import 'dlx_button.dart';
+import 'download_progress_bar.dart';
 
 class TransferCard extends StatelessWidget {
   final DownloadVm vm;
@@ -93,136 +95,9 @@ class _HoverState extends InheritedWidget {
 }
 
 
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final Color color;
-  final VoidCallback onPressed;
-
-  const _ActionButton({
-    required this.icon,
-    required this.tooltip,
-    required this.color,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onPressed,
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.outlineVariant),
-            ),
-            child: Icon(icon, size: 18, color: color),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RemoveButton extends StatelessWidget {
-  final VoidCallback onPressed;
-  const _RemoveButton({required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Remove',
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onPressed,
-          hoverColor: AppColors.errorContainer.withValues(alpha: 0.2),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.outlineVariant),
-            ),
-            child: const Icon(Icons.close_rounded, size: 18, color: AppColors.onSurfaceVariant),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 
-class _FlatProgressBar extends StatelessWidget {
-  final double? value;
-  final Color color;
-  const _FlatProgressBar({this.value, this.color = AppColors.outline});
 
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.full),
-      child: LinearProgressIndicator(
-        value: value,
-        minHeight: 8,
-        backgroundColor: AppColors.surfaceDim,
-        color: color,
-      ),
-    );
-  }
-}
-
-class _SpinningIcon extends StatefulWidget {
-  @override
-  State<_SpinningIcon> createState() => _SpinningIconState();
-}
-
-class _SpinningIconState extends State<_SpinningIcon>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 3))
-      ..repeat();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return RotationTransition(
-      turns: _ctrl,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: AppColors.outlineVariant,
-            style: BorderStyle.solid,
-            width: 1.5,
-          ),
-        ),
-        child: const Icon(Icons.sync_rounded, size: 20, color: AppColors.onSurfaceVariant),
-      ),
-    );
-  }
-}
 
 
 // ---------------------------------------------------------------------------
@@ -299,16 +174,21 @@ class _MobileCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (!completed)
-                    _ActionButton(
-                      icon: running
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
+                    DlxButton(
+                      icon: running ? Icons.pause_rounded : Icons.play_arrow_rounded,
                       tooltip: running ? 'Pause' : 'Resume',
-                      color: AppColors.onSurfaceVariant,
                       onPressed: running ? onPause : onStart,
+                      shape: DlxButtonShape.circle,
+                      variant: DlxButtonVariant.outline,
                     ),
                   const SizedBox(width: AppSpacing.xs),
-                  _RemoveButton(onPressed: onRemove),
+                  DlxButton(
+                    icon: Icons.close_rounded,
+                    tooltip: 'Remove',
+                    onPressed: onRemove,
+                    shape: DlxButtonShape.circle,
+                    variant: DlxButtonVariant.danger,
+                  ),
                 ],
               ),
             ],
@@ -360,17 +240,7 @@ class _MobileCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           // Segment track
-          if (snapshots.isNotEmpty && d.totalBytes != null)
-            _SegmentTrack(
-              chunks: snapshots,
-              totalBytes: d.totalBytes!,
-              state: state,
-            )
-          else
-            _FlatProgressBar(
-              value: d.percent == null ? null : d.percent! / 100,
-              color: colorForState(state),
-            ),
+          DownloadProgressBar(vm: vm),
           if (error && d.errorMessage != null) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
@@ -421,111 +291,3 @@ class _StateChip extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Segment track — chunk-aware progress bar for mobile
-// ---------------------------------------------------------------------------
-
-class _SegmentTrack extends StatelessWidget {
-  final List<ChunkSnapshot> chunks;
-  final int totalBytes;
-  final DownloadState state;
-
-  const _SegmentTrack({
-    required this.chunks,
-    required this.totalBytes,
-    required this.state,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final sorted = [...chunks]..sort((a, b) => a.offset.compareTo(b.offset));
-    return SizedBox(
-      height: 8,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.full),
-        child: CustomPaint(
-          painter: _SegmentPainter(
-            chunks: sorted,
-            totalBytes: totalBytes,
-            activeColor: AppColors.primary,
-            completedColor: AppColors.primary,
-            pendingColor: AppColors.primary.withValues(alpha: 0.2),
-            stalledColor: AppColors.error,
-            trackColor: AppColors.surfaceDim,
-          ),
-          child: const SizedBox.expand(),
-        ),
-      ),
-    );
-  }
-}
-
-class _SegmentPainter extends CustomPainter {
-  final List<ChunkSnapshot> chunks;
-  final int totalBytes;
-  final Color activeColor;
-  final Color completedColor;
-  final Color pendingColor;
-  final Color stalledColor;
-  final Color trackColor;
-
-  const _SegmentPainter({
-    required this.chunks,
-    required this.totalBytes,
-    required this.activeColor,
-    required this.completedColor,
-    required this.pendingColor,
-    required this.stalledColor,
-    required this.trackColor,
-  });
-
-  static const _gap = 2.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = trackColor);
-    if (totalBytes <= 0) return;
-
-    final n = chunks.length;
-    final totalGap = n > 1 ? (n - 1) * _gap : 0.0;
-    final usable = size.width - totalGap;
-
-    for (var i = 0; i < n; i++) {
-      final c = chunks[i];
-      final chunkW = (c.length / totalBytes) * usable;
-      if (chunkW <= 0) continue;
-
-      final offsetX = (c.offset / totalBytes) * usable + i * _gap;
-      final completed = c.status == ChunkStatus.completed;
-      final stalled = c.quality == ChunkQuality.stalled;
-      final active = c.status == ChunkStatus.downloading;
-
-      final fillFrac = c.length > 0
-          ? (c.downloadedBytes / c.length).clamp(0.0, 1.0)
-          : 0.0;
-
-      // Pending background
-      canvas.drawRect(
-        Rect.fromLTWH(offsetX, 0, chunkW, size.height),
-        Paint()..color = pendingColor,
-      );
-
-      // Filled portion
-      if (fillFrac > 0) {
-        final fillColor = completed
-            ? completedColor
-            : stalled
-                ? stalledColor
-                : activeColor.withValues(alpha: active ? 0.85 : 0.5);
-        canvas.drawRect(
-          Rect.fromLTWH(offsetX, 0, chunkW * fillFrac, size.height),
-          Paint()..color = fillColor,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SegmentPainter old) =>
-      old.chunks != chunks || old.totalBytes != totalBytes;
-}

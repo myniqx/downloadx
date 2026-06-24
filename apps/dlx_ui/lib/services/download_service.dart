@@ -144,6 +144,7 @@ class DownloadService extends ChangeNotifier {
     final specs = [
       ('https://demo.local/alpha-24mb.bin', '${_demoPrefix}alpha'),
       ('https://demo.local/beta-40mb.bin', '${_demoPrefix}beta'),
+      ('https://demo.local/gamma-stream.m3u8', '${_demoPrefix}gamma'),
     ];
     for (final (url, id) in specs) {
       final d = await m.addUrl(url, DownloadOptions(id: id));

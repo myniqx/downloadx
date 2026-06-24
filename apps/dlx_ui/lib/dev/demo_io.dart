@@ -32,8 +32,40 @@ class DemoIo extends DownloadxIo {
     return mb * 1024 * 1024;
   }
 
+  static String _buildDemoPlaylist(String baseUrl, int segmentCount, int segmentBytes) {
+    final buf = StringBuffer()
+      ..writeln('#EXTM3U')
+      ..writeln('#EXT-X-VERSION:3')
+      ..writeln('#EXT-X-TARGETDURATION:6');
+    for (var i = 0; i < segmentCount; i++) {
+      buf.writeln('#EXTINF:6.0,');
+      buf.writeln('${baseUrl.replaceFirst('.m3u8', '')}/seg$i.ts?size=$segmentBytes');
+    }
+    buf.writeln('#EXT-X-ENDLIST');
+    return buf.toString();
+  }
+
   @override
   Future<FetchResponse> fetch(String url, [FetchInit? init]) async {
+    if (url.endsWith('.m3u8')) {
+      final segBytes = 512 * 1024;
+      final segCount = 20;
+      final body = _buildDemoPlaylist(url, segCount, segBytes);
+      final headers = MapFetchHeaders()
+        ..set('content-type', 'application/vnd.apple.mpegurl')
+        ..set('content-length', body.length.toString());
+      return _TextResponse(200, 'OK', headers, url, body);
+    }
+
+    if (url.contains('.ts')) {
+      final m = RegExp(r'size=(\d+)').firstMatch(url);
+      final size = m != null ? int.parse(m.group(1)!) : 256 * 1024;
+      final headers = MapFetchHeaders()
+        ..set('content-type', 'video/mp2t')
+        ..set('content-length', size.toString());
+      return _DemoResponse(200, 'OK', headers, url, init?.signal, size, baseDelayMs, _rng);
+    }
+
     final size = _sizeFor(url);
     final method = init?.method ?? 'GET';
     final headers = MapFetchHeaders()
@@ -137,6 +169,21 @@ class DemoIo extends DownloadxIo {
   @override
   Future<int> Function(String path)? get fileSize =>
       (path) async => _lengths[path] ?? _files[path]?.length ?? 0;
+}
+
+class _TextResponse implements FetchResponse {
+  @override final int status;
+  @override final String statusText;
+  @override final FetchHeaders headers;
+  @override final String url;
+  final String _body;
+
+  _TextResponse(this.status, this.statusText, this.headers, this.url, this._body);
+
+  @override bool get ok => status >= 200 && status < 300;
+  @override Stream<List<int>>? get body => null;
+  @override Future<List<int>> bytes() async => _body.codeUnits;
+  @override Future<String> text() async => _body;
 }
 
 class _DemoResponse implements FetchResponse {
