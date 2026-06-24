@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import '../../models/download_vm.dart';
 import '../../util/format.dart';
 import '../../util/palette.dart';
-import 'dlx_button.dart';
-import 'dlx_card.dart';
+import 'ui/dlx_button.dart';
+import 'ui/dlx_card.dart';
 import 'download_progress_bar.dart';
 
 class TransferCard extends StatelessWidget {

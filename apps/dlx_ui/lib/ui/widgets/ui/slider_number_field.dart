@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../util/palette.dart';
+import '../../../util/palette.dart';
 
 class SliderNumberField extends StatefulWidget {
   final int value;

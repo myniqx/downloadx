@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../util/palette.dart';
+import '../../../util/palette.dart';
 
 class Field extends StatelessWidget {
   final String label;

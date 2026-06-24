@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../models/download_vm.dart';
 import '../../../util/format.dart';
 import '../../../util/palette.dart';
-import '../dlx_button.dart';
-import '../dlx_card.dart';
-import '../editable_field.dart';
-import '../key_value_editor.dart';
-import '../slider_number_field.dart';
+import '../ui/dlx_button.dart';
+import '../ui/dlx_card.dart';
+import '../ui/editable_field.dart';
+import '../ui/key_value_editor.dart';
+import '../ui/slider_number_field.dart';
 
 class DownloadSettingsCard extends StatefulWidget {
   final DownloadVm vm;

@@ -5,7 +5,7 @@ import '../models/download_vm.dart';
 import '../services/download_service.dart';
 import '../util/palette.dart';
 import 'download_detail_screen.dart';
-import 'widgets/dlx_button.dart';
+import 'widgets/ui/dlx_button.dart';
 import 'widgets/speed_hero.dart';
 import 'widgets/transfer_card.dart';
 

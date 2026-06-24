@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../util/palette.dart';
+import '../../../util/palette.dart';
 import 'folder_picker_dialog.dart';
 
 class FolderPathField extends StatelessWidget {

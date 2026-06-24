@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../util/palette.dart';
+import '../../../util/palette.dart';
 
 enum DlxButtonVariant { filled, outline, ghost, danger }
 

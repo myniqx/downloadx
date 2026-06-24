@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../../util/palette.dart';
+import '../../../util/palette.dart';
 
 /// Opens a [FolderPickerDialog] and returns the selected path, or null if cancelled.
 Future<String?> showFolderPicker(BuildContext context, {String? initialPath}) {

@@ -4,9 +4,9 @@ import '../services/download_service.dart';
 import '../services/settings_store.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
-import 'widgets/dlx_button.dart';
-import 'widgets/dlx_card.dart';
-import 'widgets/folder_picker_dialog.dart';
+import 'widgets/ui/dlx_button.dart';
+import 'widgets/ui/dlx_card.dart';
+import 'widgets/ui/folder_picker_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   final DownloadService service;

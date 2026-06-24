@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import '../services/download_service.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
-import 'widgets/folder_path_field.dart';
-import 'widgets/key_value_editor.dart';
-import 'widgets/slider_number_field.dart';
+import 'widgets/ui/folder_path_field.dart';
+import 'widgets/ui/key_value_editor.dart';
+import 'widgets/ui/slider_number_field.dart';
 
 Future<void> showAddDownloadDialog(
   BuildContext context,
