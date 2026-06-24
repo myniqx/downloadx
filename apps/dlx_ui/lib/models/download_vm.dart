@@ -108,17 +108,14 @@ class DownloadVm extends ChangeNotifier {
 
   /// Push one speed frame (per-chunk) for the detail chart. Called on the tick.
   void tick() {
+    final frame = <String, double>{};
     if (download.state == DownloadState.downloading) {
-      final frame = <String, double>{};
       for (final s in snapshots) {
         if (s.status == ChunkStatus.downloading) {
           frame[s.id] = _chunkSpeed[s.id] ?? 0;
         }
       }
-      chunkSpeedHistory.push(frame);
-    } else if (chunkSpeedHistory.frames.isNotEmpty) {
-      // Let the trace decay to zero once the download stops.
-      chunkSpeedHistory.push(const {});
     }
+    chunkSpeedHistory.push(frame);
   }
 }

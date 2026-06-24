@@ -6,7 +6,12 @@ class SpeedHistory {
   final List<Map<String, double>> _frames = [];
   final List<double?> _limits = [];
 
-  SpeedHistory({this.capacity = 120});
+  SpeedHistory({this.capacity = 120}) {
+    for (var i = 0; i < capacity; i++) {
+      _frames.add({});
+      _limits.add(null);
+    }
+  }
 
   void push(Map<String, double> frame, {double? speedLimit}) {
     _frames.add(frame);
