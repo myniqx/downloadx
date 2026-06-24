@@ -8,6 +8,7 @@ import '../util/palette.dart';
 import 'widgets/chunk_speed_panel.dart';
 import 'widgets/chunk_viz.dart';
 import 'widgets/dlx_button.dart';
+import 'widgets/dlx_card.dart';
 import 'widgets/download_progress_bar.dart';
 import 'widgets/editable_field.dart';
 import 'widgets/folder_path_field.dart';
@@ -18,7 +19,11 @@ class DownloadDetailScreen extends StatelessWidget {
   final DownloadVm vm;
   final DownloadService service;
 
-  const DownloadDetailScreen({super.key, required this.vm, required this.service});
+  const DownloadDetailScreen({
+    super.key,
+    required this.vm,
+    required this.service,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -57,13 +62,15 @@ class _DetailAppBar extends StatelessWidget implements PreferredSizeWidget {
     return ListenableBuilder(
       listenable: vm,
       builder: (context, _) {
-        final running = vm.state == DownloadState.downloading ||
+        final running =
+            vm.state == DownloadState.downloading ||
             vm.state == DownloadState.probing;
         return Container(
           decoration: BoxDecoration(
             color: AppColors.surface.withValues(alpha: 0.9),
             border: const Border(
-                bottom: BorderSide(color: AppColors.outlineVariant, width: 0.5)),
+              bottom: BorderSide(color: AppColors.outlineVariant, width: 0.5),
+            ),
           ),
           child: SafeArea(
             bottom: false,
@@ -81,14 +88,19 @@ class _DetailAppBar extends StatelessWidget implements PreferredSizeWidget {
                     _displayName(vm.desc.filename, vm.desc.url),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.headlineMd.copyWith(color: AppColors.primary),
+                    style: AppTextStyles.headlineMd.copyWith(
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
                 if (vm.state != DownloadState.completed)
                   DlxButton(
-                    icon: running ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    icon: running
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
                     tooltip: running ? 'Pause' : 'Resume',
-                    onPressed: () => running ? service.pause(vm) : service.start(vm),
+                    onPressed: () =>
+                        running ? service.pause(vm) : service.start(vm),
                     variant: DlxButtonVariant.ghost,
                     shape: DlxButtonShape.circle,
                   ),
@@ -142,9 +154,14 @@ class _MoreMenu extends StatelessWidget {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
-            title: Text('Remove',
-                style: AppTextStyles.bodyMd.copyWith(color: AppColors.error)),
+            leading: const Icon(
+              Icons.delete_outline_rounded,
+              color: AppColors.error,
+            ),
+            title: Text(
+              'Remove',
+              style: AppTextStyles.bodyMd.copyWith(color: AppColors.error),
+            ),
             onTap: () {
               Navigator.of(context).pop();
               service.remove(vm);
@@ -174,18 +191,23 @@ class _MobileLayout extends StatelessWidget {
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.md, AppSpacing.md, 100),
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        100,
+      ),
       children: [
         // File info header
-        _GlassCard(
+        DlxCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               EditableField(
                 viewBuilder: () => Text(
                   _displayName(d.filename, d.url),
-                  style: AppTextStyles.headlineLgMobile
-                      .copyWith(color: AppColors.onSurface),
+                  style: AppTextStyles.headlineLgMobile.copyWith(
+                    color: AppColors.onSurface,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -194,7 +216,9 @@ class _MobileLayout extends StatelessWidget {
                   return _InlineTextEdit(
                     controller: ctrl,
                     onConfirm: () {
-                      vm.download.setFilename(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                      vm.download.setFilename(
+                        ctrl.text.trim().isEmpty ? null : ctrl.text.trim(),
+                      );
                       confirm();
                     },
                     onCancel: cancel,
@@ -205,14 +229,18 @@ class _MobileLayout extends StatelessWidget {
               EditableField(
                 viewBuilder: () => Row(
                   children: [
-                    const Icon(Icons.folder_open_outlined,
-                        size: 14, color: AppColors.onSurfaceVariant),
+                    const Icon(
+                      Icons.folder_open_outlined,
+                      size: 14,
+                      color: AppColors.onSurfaceVariant,
+                    ),
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
                       child: Text(
                         d.targetPath ?? '—',
-                        style: AppTextStyles.labelSm
-                            .copyWith(color: AppColors.onSurfaceVariant),
+                        style: AppTextStyles.labelSm.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -224,7 +252,9 @@ class _MobileLayout extends StatelessWidget {
                   return _InlineFolderEdit(
                     controller: ctrl,
                     onConfirm: () {
-                      vm.download.setTargetPath(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                      vm.download.setTargetPath(
+                        ctrl.text.trim().isEmpty ? null : ctrl.text.trim(),
+                      );
                       confirm();
                     },
                     onCancel: cancel,
@@ -234,14 +264,19 @@ class _MobileLayout extends StatelessWidget {
               const SizedBox(height: AppSpacing.xs),
               Row(
                 children: [
-                  const Icon(Icons.link_rounded,
-                      size: 14, color: AppColors.outlineVariant),
+                  const Icon(
+                    Icons.link_rounded,
+                    size: 14,
+                    color: AppColors.outlineVariant,
+                  ),
                   const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
                       d.url,
                       style: AppTextStyles.labelSm.copyWith(
-                          color: AppColors.outlineVariant, fontSize: 11),
+                        color: AppColors.outlineVariant,
+                        fontSize: 11,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -254,33 +289,41 @@ class _MobileLayout extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
 
         // Status card
-        _GlassCard(
+        DlxCard(
+          layout: DlxCardLayout.iconLead,
+          leadIcon: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: colorForState(vm.state).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+            ),
+            child: Icon(
+              iconForState(vm.state),
+              size: 28,
+              color: colorForState(vm.state),
+            ),
+          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: colorForState(vm.state).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.lg),
-                    ),
-                    child: Icon(iconForState(vm.state),
-                        size: 28, color: colorForState(vm.state)),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_stateLabel(vm.state),
-                            style: AppTextStyles.headlineMd
-                                .copyWith(color: AppColors.onSurface)),
+                        Text(
+                          _stateLabel(vm.state),
+                          style: AppTextStyles.headlineMd.copyWith(
+                            color: AppColors.onSurface,
+                          ),
+                        ),
                         Text(
                           running ? 'Active Connection' : vm.state.name,
-                          style: AppTextStyles.labelSm
-                              .copyWith(color: AppColors.onSurfaceVariant),
+                          style: AppTextStyles.labelSm.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -293,13 +336,17 @@ class _MobileLayout extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Progress',
-                      style: AppTextStyles.labelSm
-                          .copyWith(color: AppColors.onSurfaceVariant)),
+                  Text(
+                    'Progress',
+                    style: AppTextStyles.labelSm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
                   Text(
                     formatPercent(d.percent),
-                    style: AppTextStyles.labelSm
-                        .copyWith(color: AppColors.onSurfaceVariant),
+                    style: AppTextStyles.labelSm.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -315,18 +362,13 @@ class _MobileLayout extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
 
         // Chunk visualization
-        _GlassCard(
+        DlxCard(
+          title: 'Chunk Visualization',
+          description: '${vm.desc.totalChunks} Chunks',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _SectionHeader(
-                  title: 'Chunk Visualization',
-                  trailing: '${vm.desc.totalChunks} Chunks'),
-              const SizedBox(height: AppSpacing.md),
-              ChunkViz(
-                totalBytes: d.totalBytes,
-                chunks: vm.snapshots,
-              ),
+              ChunkViz(totalBytes: d.totalBytes, chunks: vm.snapshots),
               const SizedBox(height: AppSpacing.md),
               _ChunkLegend(),
             ],
@@ -337,9 +379,7 @@ class _MobileLayout extends StatelessWidget {
         // Chunk speed panel
         ListenableBuilder(
           listenable: service.ticker,
-          builder: (context, _) => _GlassCard(
-            child: ChunkSpeedPanel(vm: vm),
-          ),
+          builder: (context, _) => DlxCard(child: ChunkSpeedPanel(vm: vm)),
         ),
         const SizedBox(height: AppSpacing.md),
 
@@ -382,22 +422,25 @@ class _DesktopLayout extends StatelessWidget {
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
               // Header card
-              _GlassCard(
+              DlxCard(
+                layout: DlxCardLayout.iconLead,
+                leadIcon: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(color: AppColors.outlineVariant),
+                  ),
+                  child: Icon(
+                    iconForState(vm.state),
+                    size: 36,
+                    color: colorForState(vm.state),
+                  ),
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                        border: Border.all(color: AppColors.outlineVariant),
-                      ),
-                      child: Icon(iconForState(vm.state),
-                          size: 36, color: colorForState(vm.state)),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,17 +448,24 @@ class _DesktopLayout extends StatelessWidget {
                           EditableField(
                             viewBuilder: () => Text(
                               _displayName(d.filename, d.url),
-                              style: AppTextStyles.headlineLgMobile
-                                  .copyWith(color: AppColors.onSurface),
+                              style: AppTextStyles.headlineLgMobile.copyWith(
+                                color: AppColors.onSurface,
+                              ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             editBuilder: (confirm, cancel) {
-                              final ctrl = TextEditingController(text: d.filename ?? '');
+                              final ctrl = TextEditingController(
+                                text: d.filename ?? '',
+                              );
                               return _InlineTextEdit(
                                 controller: ctrl,
                                 onConfirm: () {
-                                  vm.download.setFilename(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                                  vm.download.setFilename(
+                                    ctrl.text.trim().isEmpty
+                                        ? null
+                                        : ctrl.text.trim(),
+                                  );
                                   vm.refresh();
                                   confirm();
                                 },
@@ -427,14 +477,18 @@ class _DesktopLayout extends StatelessWidget {
                           EditableField(
                             viewBuilder: () => Row(
                               children: [
-                                const Icon(Icons.folder_open_outlined,
-                                    size: 14, color: AppColors.onSurfaceVariant),
+                                const Icon(
+                                  Icons.folder_open_outlined,
+                                  size: 14,
+                                  color: AppColors.onSurfaceVariant,
+                                ),
                                 const SizedBox(width: AppSpacing.xs),
                                 Expanded(
                                   child: Text(
                                     d.targetPath ?? '—',
                                     style: AppTextStyles.labelSm.copyWith(
-                                        color: AppColors.onSurfaceVariant),
+                                      color: AppColors.onSurfaceVariant,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -442,11 +496,17 @@ class _DesktopLayout extends StatelessWidget {
                               ],
                             ),
                             editBuilder: (confirm, cancel) {
-                              final ctrl = TextEditingController(text: d.targetPath ?? '');
+                              final ctrl = TextEditingController(
+                                text: d.targetPath ?? '',
+                              );
                               return _InlineFolderEdit(
                                 controller: ctrl,
                                 onConfirm: () {
-                                  vm.download.setTargetPath(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                                  vm.download.setTargetPath(
+                                    ctrl.text.trim().isEmpty
+                                        ? null
+                                        : ctrl.text.trim(),
+                                  );
                                   vm.refresh();
                                   confirm();
                                 },
@@ -457,15 +517,19 @@ class _DesktopLayout extends StatelessWidget {
                           const SizedBox(height: AppSpacing.xs),
                           Row(
                             children: [
-                              const Icon(Icons.link_rounded,
-                                  size: 14, color: AppColors.outlineVariant),
+                              const Icon(
+                                Icons.link_rounded,
+                                size: 14,
+                                color: AppColors.outlineVariant,
+                              ),
                               const SizedBox(width: AppSpacing.xs),
                               Expanded(
                                 child: Text(
                                   d.url,
                                   style: AppTextStyles.labelSm.copyWith(
-                                      color: AppColors.outlineVariant,
-                                      fontSize: 11),
+                                    color: AppColors.outlineVariant,
+                                    fontSize: 11,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -493,33 +557,41 @@ class _DesktopLayout extends StatelessWidget {
                               ? _hlsProgressLabel(vm)
                               : formatPercent(d.percent),
                           style: AppTextStyles.headlineLg.copyWith(
-                              color: AppColors.primary, fontSize: 28),
+                            color: AppColors.primary,
+                            fontSize: 28,
+                          ),
                         ),
                         if (d.totalBytes != null)
                           Text(
                             '/ ${formatBytes(d.totalBytes!)}',
-                            style: AppTextStyles.dataDisplay
-                                .copyWith(color: AppColors.onSurfaceVariant),
+                            style: AppTextStyles.dataDisplay.copyWith(
+                              color: AppColors.onSurfaceVariant,
+                            ),
                           ),
                         if (running) ...[
                           const SizedBox(height: AppSpacing.xs),
                           Row(
                             children: [
-                              const Icon(Icons.download_rounded,
-                                  size: 14, color: AppColors.secondary),
+                              const Icon(
+                                Icons.download_rounded,
+                                size: 14,
+                                color: AppColors.secondary,
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 formatSpeed(d.totalSpeedBps.toDouble()),
-                                style: AppTextStyles.dataDisplay
-                                    .copyWith(color: AppColors.secondary),
+                                style: AppTextStyles.dataDisplay.copyWith(
+                                  color: AppColors.secondary,
+                                ),
                               ),
                             ],
                           ),
                           if (d.etaMs != null)
                             Text(
                               'ETA: ${formatDuration(d.etaMs!)}',
-                              style: AppTextStyles.labelSm
-                                  .copyWith(color: AppColors.onSurfaceVariant),
+                              style: AppTextStyles.labelSm.copyWith(
+                                color: AppColors.onSurfaceVariant,
+                              ),
                             ),
                         ],
                       ],
@@ -534,16 +606,14 @@ class _DesktopLayout extends StatelessWidget {
               const SizedBox(height: AppSpacing.lg),
 
               // Chunk visualization
-              _GlassCard(
+              DlxCard(
+                title: 'Chunk Distribution',
+                titleIcon: Icons.grid_view_rounded,
+                description:
+                    '${d.activeChunks} active / ${d.totalChunks} total',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _SectionHeader(
-                      title: 'Chunk Distribution',
-                      trailing: '${d.activeChunks} active / ${d.totalChunks} total',
-                      icon: Icons.grid_view_rounded,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
                     ChunkViz(
                       totalBytes: d.totalBytes,
                       chunks: vm.snapshots,
@@ -559,9 +629,8 @@ class _DesktopLayout extends StatelessWidget {
               // Chunk speed panel
               ListenableBuilder(
                 listenable: service.ticker,
-                builder: (context, _) => _GlassCard(
-                  child: ChunkSpeedPanel(vm: vm),
-                ),
+                builder: (context, _) =>
+                    DlxCard(child: ChunkSpeedPanel(vm: vm)),
               ),
 
               // Settings
@@ -578,112 +647,65 @@ class _DesktopLayout extends StatelessWidget {
         SizedBox(
           width: 280,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(0, AppSpacing.lg, AppSpacing.lg, AppSpacing.lg),
+            padding: const EdgeInsets.fromLTRB(
+              0,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+            ),
             children: [
-              _GlassCard(
+              DlxCard(
+                title: 'Metrics',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Metrics',
-                        style: AppTextStyles.labelSm.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                            letterSpacing: 0.8)),
-                    const SizedBox(height: AppSpacing.md),
                     _MetricRow(
-                        label: 'Downloaded',
-                        value: formatBytes(d.downloadedBytes)),
+                      label: 'Downloaded',
+                      value: formatBytes(d.downloadedBytes),
+                    ),
                     if (!vm.isHls)
                       _MetricRow(
-                          label: 'Total Size',
-                          value: d.totalBytes == null
-                              ? '—'
-                              : formatBytes(d.totalBytes!)),
+                        label: 'Total Size',
+                        value: d.totalBytes == null
+                            ? '—'
+                            : formatBytes(d.totalBytes!),
+                      ),
                     if (vm.isHls)
                       _MetricRow(
-                          label: 'Segments',
-                          value: vm.hlsTotalSegments != null
-                              ? '${vm.hlsSegmentsDone ?? 0} / ${vm.hlsTotalSegments}'
-                              : '${vm.hlsSegmentsDone ?? 0}'),
-                    _MetricRow(label: 'Speed', value: formatSpeed(d.totalSpeedBps.toDouble())),
+                        label: 'Segments',
+                        value: vm.hlsTotalSegments != null
+                            ? '${vm.hlsSegmentsDone ?? 0} / ${vm.hlsTotalSegments}'
+                            : '${vm.hlsSegmentsDone ?? 0}',
+                      ),
                     _MetricRow(
-                        label: 'ETA',
-                        value: d.etaMs == null ? '—' : formatDuration(d.etaMs!)),
+                      label: 'Speed',
+                      value: formatSpeed(d.totalSpeedBps.toDouble()),
+                    ),
                     _MetricRow(
-                        label: 'Elapsed', value: formatDuration(d.elapsedMs)),
+                      label: 'ETA',
+                      value: d.etaMs == null ? '—' : formatDuration(d.etaMs!),
+                    ),
+                    _MetricRow(
+                      label: 'Elapsed',
+                      value: formatDuration(d.elapsedMs),
+                    ),
                     if (!vm.isHls)
                       _MetricRow(
-                          label: 'Chunks',
-                          value: '${d.activeChunks} / ${d.totalChunks}'),
+                        label: 'Chunks',
+                        value: '${d.activeChunks} / ${d.totalChunks}',
+                      ),
                     _MetricRow(label: 'State', value: d.state.name),
                   ],
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              _GlassCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Actions',
-                        style: AppTextStyles.labelSm.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                            letterSpacing: 0.8)),
-                    const SizedBox(height: AppSpacing.sm),
-                    _ControlButtons(vm: vm, service: service, dense: true),
-                  ],
-                ),
+              DlxCard(
+                title: 'Actions',
+                child: _ControlButtons(vm: vm, service: service, dense: true),
               ),
             ],
           ),
         ),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Shared section widgets
-// ---------------------------------------------------------------------------
-
-class _GlassCard extends StatelessWidget {
-  final Widget child;
-  const _GlassCard({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: child,
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final String? trailing;
-  final IconData? icon;
-
-  const _SectionHeader({required this.title, this.trailing, this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        if (icon != null) ...[
-          Icon(icon, size: 18, color: AppColors.onSurface),
-          const SizedBox(width: AppSpacing.xs),
-        ],
-        Text(title,
-            style: AppTextStyles.headlineMd.copyWith(color: AppColors.onSurface)),
-        const Spacer(),
-        if (trailing != null)
-          Text(trailing!,
-              style: AppTextStyles.labelSm
-                  .copyWith(color: AppColors.onSurfaceVariant)),
       ],
     );
   }
@@ -698,8 +720,8 @@ class _StatsBento extends StatelessWidget {
   Widget build(BuildContext context) {
     final segLabel = vm.isHls
         ? (vm.hlsTotalSegments != null
-            ? '${vm.hlsSegmentsDone ?? 0}/${vm.hlsTotalSegments}'
-            : '${vm.hlsSegmentsDone ?? 0}')
+              ? '${vm.hlsSegmentsDone ?? 0}/${vm.hlsTotalSegments}'
+              : '${vm.hlsSegmentsDone ?? 0}')
         : '${d.activeChunks}/${d.totalChunks}';
     final sizeLabel = vm.isHls
         ? formatBytes(d.downloadedBytes)
@@ -707,12 +729,24 @@ class _StatsBento extends StatelessWidget {
 
     final items = [
       (Icons.storage_rounded, AppColors.onSurfaceVariant, 'Size', sizeLabel),
-      (Icons.speed_rounded, AppColors.primary, 'Speed',
-          formatSpeed(d.totalSpeedBps.toDouble())),
-      (Icons.timer_outlined, AppColors.onSurfaceVariant, 'ETA',
-          d.etaMs == null ? '—' : formatDuration(d.etaMs!)),
-      (Icons.layers_rounded, AppColors.secondary,
-          vm.isHls ? 'Segments' : 'Chunks', segLabel),
+      (
+        Icons.speed_rounded,
+        AppColors.primary,
+        'Speed',
+        formatSpeed(d.totalSpeedBps.toDouble()),
+      ),
+      (
+        Icons.timer_outlined,
+        AppColors.onSurfaceVariant,
+        'ETA',
+        d.etaMs == null ? '—' : formatDuration(d.etaMs!),
+      ),
+      (
+        Icons.layers_rounded,
+        AppColors.secondary,
+        vm.isHls ? 'Segments' : 'Chunks',
+        segLabel,
+      ),
     ];
     return GridView.count(
       crossAxisCount: 2,
@@ -722,12 +756,14 @@ class _StatsBento extends StatelessWidget {
       mainAxisSpacing: AppSpacing.sm,
       childAspectRatio: 2.2,
       children: items
-          .map((item) => _BentoCell(
-                icon: item.$1,
-                iconColor: item.$2,
-                label: item.$3,
-                value: item.$4,
-              ))
+          .map(
+            (item) => _BentoCell(
+              icon: item.$1,
+              iconColor: item.$2,
+              label: item.$3,
+              value: item.$4,
+            ),
+          )
           .toList(),
     );
   }
@@ -748,32 +784,19 @@ class _BentoCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Icon(icon, size: 20, color: iconColor),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label.toUpperCase(),
-                  style: AppTextStyles.labelSm.copyWith(
-                      color: AppColors.onSurfaceVariant,
-                      fontSize: 10,
-                      letterSpacing: 0.8)),
-              Text(value,
-                  style: AppTextStyles.dataDisplay
-                      .copyWith(color: AppColors.onSurface, fontSize: 16)),
-            ],
+    return DlxCard(
+      title: label,
+      titleIcon: icon,
+      titleIconColor: iconColor,
+      child: Align(
+        alignment: Alignment.bottomRight,
+        child: Text(
+          value,
+          style: AppTextStyles.dataDisplay.copyWith(
+            color: AppColors.onSurface,
+            fontSize: 16,
           ),
-        ],
+        ),
       ),
     );
   }
@@ -791,11 +814,18 @@ class _MetricRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: AppTextStyles.labelSm
-                  .copyWith(color: AppColors.onSurfaceVariant)),
-          Text(value,
-              style: AppTextStyles.dataDisplay.copyWith(color: AppColors.onSurface)),
+          Text(
+            label,
+            style: AppTextStyles.labelSm.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            value,
+            style: AppTextStyles.dataDisplay.copyWith(
+              color: AppColors.onSurface,
+            ),
+          ),
         ],
       ),
     );
@@ -810,7 +840,9 @@ class _SpeedBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppRadius.full),
@@ -823,11 +855,15 @@ class _SpeedBadge extends StatelessWidget {
             width: 8,
             height: 8,
             decoration: const BoxDecoration(
-                color: AppColors.primary, shape: BoxShape.circle),
+              color: AppColors.primary,
+              shape: BoxShape.circle,
+            ),
           ),
           const SizedBox(width: AppSpacing.xs),
-          Text(formatSpeed(speedBps),
-              style: AppTextStyles.dataDisplay.copyWith(color: AppColors.primary)),
+          Text(
+            formatSpeed(speedBps),
+            style: AppTextStyles.dataDisplay.copyWith(color: AppColors.primary),
+          ),
         ],
       ),
     );
@@ -843,14 +879,15 @@ class _TagChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: 2),
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppRadius.full),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Text(label,
-          style: AppTextStyles.labelSm.copyWith(color: color)),
+      child: Text(label, style: AppTextStyles.labelSm.copyWith(color: color)),
     );
   }
 }
@@ -890,26 +927,32 @@ class _LegendItem extends StatelessWidget {
           ),
         ),
         const SizedBox(width: AppSpacing.xs),
-        Text(label,
-            style: AppTextStyles.labelSm
-                .copyWith(color: AppColors.onSurfaceVariant)),
+        Text(
+          label,
+          style: AppTextStyles.labelSm.copyWith(
+            color: AppColors.onSurfaceVariant,
+          ),
+        ),
       ],
     );
   }
 }
-
 
 class _ControlButtons extends StatelessWidget {
   final DownloadVm vm;
   final DownloadService service;
   final bool dense;
 
-  const _ControlButtons(
-      {required this.vm, required this.service, this.dense = false});
+  const _ControlButtons({
+    required this.vm,
+    required this.service,
+    this.dense = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final running = vm.state == DownloadState.downloading ||
+    final running =
+        vm.state == DownloadState.downloading ||
         vm.state == DownloadState.probing;
     final completed = vm.state == DownloadState.completed;
 
@@ -921,7 +964,8 @@ class _ControlButtons extends StatelessWidget {
               child: DlxButton(
                 icon: running ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 label: running ? 'Pause' : 'Resume',
-                onPressed: () => running ? service.pause(vm) : service.start(vm),
+                onPressed: () =>
+                    running ? service.pause(vm) : service.start(vm),
                 size: DlxButtonSize.lg,
                 shape: DlxButtonShape.pill,
               ),
@@ -989,13 +1033,16 @@ String _hlsProgressLabel(DownloadVm vm) {
   final done = vm.hlsSegmentsDone;
   final total = vm.hlsTotalSegments;
   if (done == null) return 'HLS';
-  if (total != null && total > 0) return '${(done / total * 100).toStringAsFixed(0)}%';
+  if (total != null && total > 0)
+    return '${(done / total * 100).toStringAsFixed(0)}%';
   return '$done segs';
 }
 
 String _displayName(String? filename, String url) {
   if (filename != null && filename.isNotEmpty) return filename;
-  final path = Uri.tryParse(url)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull;
+  final path = Uri.tryParse(
+    url,
+  )?.pathSegments.where((s) => s.isNotEmpty).lastOrNull;
   return path ?? url;
 }
 
@@ -1030,19 +1077,20 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
     final currentHeaders = Map<String, String>.from(dl.headers);
     final currentMetadata = d.metadata ?? {};
 
-    return _GlassCard(
+    return DlxCard(
+      title: 'Settings',
+      titleIcon: Icons.tune_rounded,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(title: 'Settings', icon: Icons.tune_rounded),
-          const SizedBox(height: AppSpacing.md),
-
           // Description
           EditableField(
             label: 'Description',
             viewBuilder: () => Text(
               d.description?.isNotEmpty == true ? d.description! : '—',
-              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+              style: AppTextStyles.bodyMd.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1051,7 +1099,9 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
               return _InlineTextEdit(
                 controller: ctrl,
                 onConfirm: () {
-                  dl.setDescription(ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+                  dl.setDescription(
+                    ctrl.text.trim().isEmpty ? null : ctrl.text.trim(),
+                  );
                   _refresh();
                   confirm();
                 },
@@ -1066,22 +1116,30 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
             label: 'Speed limit',
             viewBuilder: () => Text(
               currentSpeed == 0 ? 'Unlimited' : formatSpeedLimit(currentSpeed),
-              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+              style: AppTextStyles.bodyMd.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
             editBuilder: (confirm, cancel) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Speed limit',
-                    style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface)),
+                Text(
+                  'Speed limit',
+                  style: AppTextStyles.bodyMd.copyWith(
+                    color: AppColors.onSurface,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.xs),
                 SliderNumberField(
                   value: currentSpeed,
                   min: 0,
                   max: _maxSpeedBytes,
                   step: _speedStep,
-                  labelBuilder: (v) => v == 0 ? 'Unlimited' : formatSpeedLimit(v),
-                  inputParser: (s) =>
-                      s.trim().toLowerCase() == 'unlimited' ? 0 : parseSpeedLimit(s),
+                  labelBuilder: (v) =>
+                      v == 0 ? 'Unlimited' : formatSpeedLimit(v),
+                  inputParser: (s) => s.trim().toLowerCase() == 'unlimited'
+                      ? 0
+                      : parseSpeedLimit(s),
                   onChanged: (v) {
                     dl.setSpeedLimit(v == 0 ? null : v);
                     _refresh();
@@ -1090,7 +1148,11 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                 const SizedBox(height: AppSpacing.xs),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: DlxButton(label: 'Done', onPressed: confirm, variant: DlxButtonVariant.ghost),
+                  child: DlxButton(
+                    label: 'Done',
+                    onPressed: confirm,
+                    variant: DlxButtonVariant.ghost,
+                  ),
                 ),
               ],
             ),
@@ -1102,13 +1164,19 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
             label: 'Target chunk count',
             viewBuilder: () => Text(
               '$currentChunks',
-              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+              style: AppTextStyles.bodyMd.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
             editBuilder: (confirm, cancel) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Target chunk count',
-                    style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface)),
+                Text(
+                  'Target chunk count',
+                  style: AppTextStyles.bodyMd.copyWith(
+                    color: AppColors.onSurface,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.xs),
                 SliderNumberField(
                   value: currentChunks,
@@ -1124,7 +1192,11 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                 const SizedBox(height: AppSpacing.xs),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: DlxButton(label: 'Done', onPressed: confirm, variant: DlxButtonVariant.ghost),
+                  child: DlxButton(
+                    label: 'Done',
+                    onPressed: confirm,
+                    variant: DlxButtonVariant.ghost,
+                  ),
                 ),
               ],
             ),
@@ -1136,13 +1208,19 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
             label: 'Write diagnostic journal',
             viewBuilder: () => Text(
               currentJournal ? 'Enabled' : 'Disabled',
-              style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+              style: AppTextStyles.bodyMd.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
             editBuilder: (confirm, cancel) => Row(
               children: [
                 Expanded(
-                  child: Text('Write diagnostic journal',
-                      style: AppTextStyles.bodyMd.copyWith(color: AppColors.onSurface)),
+                  child: Text(
+                    'Write diagnostic journal',
+                    style: AppTextStyles.bodyMd.copyWith(
+                      color: AppColors.onSurface,
+                    ),
+                  ),
                 ),
                 Switch(
                   value: currentJournal,
@@ -1161,9 +1239,13 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
           EditableField(
             label: 'HTTP Headers',
             viewBuilder: () => Text(
-              currentHeaders.isEmpty ? 'none' : '${currentHeaders.length} entries',
+              currentHeaders.isEmpty
+                  ? 'none'
+                  : '${currentHeaders.length} entries',
               style: AppTextStyles.bodyMd.copyWith(
-                color: currentHeaders.isEmpty ? AppColors.outlineVariant : AppColors.onSurfaceVariant,
+                color: currentHeaders.isEmpty
+                    ? AppColors.outlineVariant
+                    : AppColors.onSurfaceVariant,
               ),
             ),
             editBuilder: (confirm, cancel) {
@@ -1182,14 +1264,19 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      DlxButton(label: 'Cancel', onPressed: cancel, variant: DlxButtonVariant.ghost),
+                      DlxButton(
+                        label: 'Cancel',
+                        onPressed: cancel,
+                        variant: DlxButtonVariant.ghost,
+                      ),
                       const SizedBox(width: AppSpacing.xs),
                       DlxButton(
                         label: 'Confirm',
                         onPressed: () {
                           final newMap = ctrl.read();
                           dl.clearHeaders();
-                          if (newMap.isNotEmpty) dl.setHeaders(newMap.map((k, v) => MapEntry(k, v)));
+                          if (newMap.isNotEmpty)
+                            dl.setHeaders(newMap.map((k, v) => MapEntry(k, v)));
                           _refresh();
                           confirm();
                         },
@@ -1207,9 +1294,13 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
           EditableField(
             label: 'Metadata',
             viewBuilder: () => Text(
-              currentMetadata.isEmpty ? 'none' : '${currentMetadata.length} entries',
+              currentMetadata.isEmpty
+                  ? 'none'
+                  : '${currentMetadata.length} entries',
               style: AppTextStyles.bodyMd.copyWith(
-                color: currentMetadata.isEmpty ? AppColors.outlineVariant : AppColors.onSurfaceVariant,
+                color: currentMetadata.isEmpty
+                    ? AppColors.outlineVariant
+                    : AppColors.onSurfaceVariant,
               ),
             ),
             editBuilder: (confirm, cancel) {
@@ -1228,14 +1319,21 @@ class _DownloadSettingsCardState extends State<_DownloadSettingsCard> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      DlxButton(label: 'Cancel', onPressed: cancel, variant: DlxButtonVariant.ghost),
+                      DlxButton(
+                        label: 'Cancel',
+                        onPressed: cancel,
+                        variant: DlxButtonVariant.ghost,
+                      ),
                       const SizedBox(width: AppSpacing.xs),
                       DlxButton(
                         label: 'Confirm',
                         onPressed: () {
                           final newMap = ctrl.read();
                           dl.clearMetadata();
-                          if (newMap.isNotEmpty) dl.setMetadata(newMap.map((k, v) => MapEntry(k, v)));
+                          if (newMap.isNotEmpty)
+                            dl.setMetadata(
+                              newMap.map((k, v) => MapEntry(k, v)),
+                            );
                           _refresh();
                           confirm();
                         },
@@ -1318,9 +1416,17 @@ class _InlineFolderEdit extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            DlxButton(label: 'Cancel', onPressed: onCancel, variant: DlxButtonVariant.ghost),
+            DlxButton(
+              label: 'Cancel',
+              onPressed: onCancel,
+              variant: DlxButtonVariant.ghost,
+            ),
             const SizedBox(width: AppSpacing.xs),
-            DlxButton(label: 'Confirm', onPressed: onConfirm, variant: DlxButtonVariant.filled),
+            DlxButton(
+              label: 'Confirm',
+              onPressed: onConfirm,
+              variant: DlxButtonVariant.filled,
+            ),
           ],
         ),
       ],
@@ -1341,7 +1447,8 @@ class _LogCard extends StatefulWidget {
 }
 
 class _LogCardState extends State<_LogCard> {
-  final List<({int timestamp, DiagnosticLevel level, String message})> _entries = [];
+  final List<({int timestamp, DiagnosticLevel level, String message})>
+  _entries = [];
   late final void Function() _unsub;
 
   @override
@@ -1350,11 +1457,13 @@ class _LogCardState extends State<_LogCard> {
     _entries.addAll(widget.download.renderedLogs);
     _unsub = widget.download.emitter.onType<LogEvent>((e) {
       if (!mounted) return;
-      setState(() => _entries.add((
-        timestamp: e.timestamp,
-        level: e.level,
-        message: e.message,
-      )));
+      setState(
+        () => _entries.add((
+          timestamp: e.timestamp,
+          level: e.level,
+          message: e.message,
+        )),
+      );
     });
   }
 
@@ -1366,24 +1475,26 @@ class _LogCardState extends State<_LogCard> {
 
   @override
   Widget build(BuildContext context) {
-    return _GlassCard(
+    return DlxCard(
+      title: 'Activity Log',
+      titleIcon: Icons.receipt_long_rounded,
+      description: '${_entries.length} entries',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(
-            title: 'Activity Log',
-            icon: Icons.receipt_long_rounded,
-            trailing: '${_entries.length} entries',
-          ),
-          const SizedBox(height: AppSpacing.sm),
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 320),
             child: _entries.isEmpty
                 ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-                    child: Text('No log entries yet.',
-                        style: AppTextStyles.labelSm
-                            .copyWith(color: AppColors.onSurfaceVariant)),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.md,
+                    ),
+                    child: Text(
+                      'No log entries yet.',
+                      style: AppTextStyles.labelSm.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
                   )
                 : ListView.builder(
                     reverse: true,
@@ -1415,12 +1526,14 @@ class _LogRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(time,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 10,
-                color: AppColors.outlineVariant,
-              )),
+          Text(
+            time,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 10,
+              color: AppColors.outlineVariant,
+            ),
+          ),
           const SizedBox(width: AppSpacing.xs),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -1458,16 +1571,16 @@ class _LogRow extends StatelessWidget {
   }
 
   Color _logColor(DiagnosticLevel l) => switch (l) {
-        DiagnosticLevel.error => AppColors.error,
-        DiagnosticLevel.warn  => AppColors.tertiary,
-        DiagnosticLevel.info  => AppColors.onSurfaceVariant,
-      };
+    DiagnosticLevel.error => AppColors.error,
+    DiagnosticLevel.warn => AppColors.tertiary,
+    DiagnosticLevel.info => AppColors.onSurfaceVariant,
+  };
 
   String _logLabel(DiagnosticLevel l) => switch (l) {
-        DiagnosticLevel.error => 'ERR',
-        DiagnosticLevel.warn  => 'WRN',
-        DiagnosticLevel.info  => 'INF',
-      };
+    DiagnosticLevel.error => 'ERR',
+    DiagnosticLevel.warn => 'WRN',
+    DiagnosticLevel.info => 'INF',
+  };
 
   String _formatTime(int ms) {
     final dt = DateTime.fromMillisecondsSinceEpoch(ms);
@@ -1479,11 +1592,11 @@ class _LogRow extends StatelessWidget {
 }
 
 String _stateLabel(DownloadState s) => switch (s) {
-      DownloadState.downloading => 'Downloading',
-      DownloadState.probing => 'Probing...',
-      DownloadState.paused => 'Paused',
-      DownloadState.completed => 'Completed',
-      DownloadState.error => 'Error',
-      DownloadState.cancelled => 'Cancelled',
-      DownloadState.idle => 'Idle',
-    };
+  DownloadState.downloading => 'Downloading',
+  DownloadState.probing => 'Probing...',
+  DownloadState.paused => 'Paused',
+  DownloadState.completed => 'Completed',
+  DownloadState.error => 'Error',
+  DownloadState.cancelled => 'Cancelled',
+  DownloadState.idle => 'Idle',
+};

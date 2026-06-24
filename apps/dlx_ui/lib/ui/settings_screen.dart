@@ -5,6 +5,7 @@ import '../services/settings_store.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
 import 'widgets/dlx_button.dart';
+import 'widgets/dlx_card.dart';
 import 'widgets/folder_picker_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -230,15 +231,13 @@ class _EngineSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _GlassCard(
+    return DlxCard(
+      title: 'Engine Parameters',
+      titleIcon: Icons.memory_rounded,
+      titleIconColor: AppColors.primary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(
-              icon: Icons.memory_rounded,
-              iconColor: AppColors.primary,
-              title: 'Engine Parameters'),
-          const SizedBox(height: AppSpacing.lg),
 
           // Download folder
           _FieldLabel('Default Download Directory'),
@@ -404,15 +403,13 @@ class _DirectorySectionState extends State<_DirectorySection> {
 
   @override
   Widget build(BuildContext context) {
-    return _GlassCard(
+    return DlxCard(
+      title: 'Directory Mapping',
+      titleIcon: Icons.folder_open_rounded,
+      titleIconColor: AppColors.secondary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionHeader(
-              icon: Icons.folder_open_rounded,
-              iconColor: AppColors.secondary,
-              title: 'Directory Mapping'),
-          const SizedBox(height: AppSpacing.lg),
 
           // Auto-routing rules table
           Container(
@@ -576,21 +573,12 @@ class _RuleRow extends StatelessWidget {
 class _AboutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return _GlassCard(
+    return DlxCard(
+      title: 'About',
+      titleIcon: Icons.info_outline_rounded,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.info_outline_rounded,
-                  size: 18, color: AppColors.outline),
-              const SizedBox(width: AppSpacing.xs),
-              Text('About',
-                  style: AppTextStyles.headlineMd
-                      .copyWith(color: AppColors.onSurface)),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
           _AboutRow(label: 'Version', value: 'v1.0.0'),
           const Divider(color: AppColors.outlineVariant, height: 16),
           _AboutRow(label: 'Engine', value: 'downloadx-dart'),
@@ -700,7 +688,7 @@ class _MobileSaveCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _GlassCard(
+    return DlxCard(
       child: Column(
         children: [
           Text('Changes are applied immediately to new tasks.',
@@ -735,54 +723,6 @@ class _MobileSaveCard extends StatelessWidget {
 // Shared field widgets
 // ---------------------------------------------------------------------------
 
-class _GlassCard extends StatelessWidget {
-  final Widget child;
-  const _GlassCard({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: AppColors.outlineVariant),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: child,
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-
-  const _SectionHeader({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 20, color: iconColor),
-            const SizedBox(width: AppSpacing.sm),
-            Text(title,
-                style: AppTextStyles.headlineMd
-                    .copyWith(color: AppColors.onSurface)),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        const Divider(color: AppColors.outlineVariant, height: 1),
-      ],
-    );
-  }
-}
 
 class _FieldLabel extends StatelessWidget {
   final String text;

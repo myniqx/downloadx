@@ -5,6 +5,7 @@ import '../../models/download_vm.dart';
 import '../../util/format.dart';
 import '../../util/palette.dart';
 import 'dlx_button.dart';
+import 'dlx_card.dart';
 import 'download_progress_bar.dart';
 
 class TransferCard extends StatelessWidget {
@@ -40,59 +41,6 @@ class TransferCard extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Shared sub-widgets
-// ---------------------------------------------------------------------------
-
-class _CardShell extends StatefulWidget {
-  final Widget child;
-  final VoidCallback onTap;
-
-  const _CardShell({required this.child, required this.onTap});
-
-  @override
-  State<_CardShell> createState() => _CardShellState();
-}
-
-class _CardShellState extends State<_CardShell> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered
-                ? AppColors.surfaceContainerHigh.withValues(alpha: 0.8)
-                : AppColors.surfaceContainer.withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(
-              color: _hovered ? AppColors.outline : AppColors.outlineVariant,
-            ),
-          ),
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: _HoverState(
-            hovered: _hovered,
-            child: widget.child,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HoverState extends InheritedWidget {
-  final bool hovered;
-  const _HoverState({required this.hovered, required super.child});
-
-  @override
-  bool updateShouldNotify(_HoverState old) => old.hovered != hovered;
-}
 
 
 
@@ -131,25 +79,24 @@ class _MobileCard extends StatelessWidget {
     final completed = state == DownloadState.completed;
     final error = state == DownloadState.error;
 
-    return _CardShell(
+    return DlxCard(
       onTap: onTap,
+      layout: DlxCardLayout.iconLead,
+      leadIcon: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: colorForState(state).withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(iconForState(state), size: 20, color: colorForState(state)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row: icon + name + actions
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: colorForState(state).withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(iconForState(state), size: 20, color: colorForState(state)),
-              ),
-              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +116,6 @@ class _MobileCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.xs),
-              // Action buttons always visible on mobile
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
