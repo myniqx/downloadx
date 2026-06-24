@@ -247,7 +247,7 @@ class _MobileLayout extends StatelessWidget {
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
                       child: Text(
-                        d.targetPath ?? '—',
+                        vm.download.targetPath,
                         style: AppTextStyles.labelSm.copyWith(
                           color: AppColors.onSurfaceVariant,
                         ),
@@ -258,7 +258,7 @@ class _MobileLayout extends StatelessWidget {
                   ],
                 ),
                 editBuilder: (confirm, cancel) {
-                  final ctrl = TextEditingController(text: d.targetPath ?? '');
+                  final ctrl = TextEditingController(text: vm.download.targetPath);
                   return _InlineFolderEdit(
                     controller: ctrl,
                     onConfirm: () {
@@ -496,7 +496,7 @@ class _DesktopLayout extends StatelessWidget {
                                 const SizedBox(width: AppSpacing.xs),
                                 Expanded(
                                   child: Text(
-                                    d.targetPath ?? '—',
+                                    vm.download.targetPath,
                                     style: AppTextStyles.labelSm.copyWith(
                                       color: AppColors.onSurfaceVariant,
                                     ),
@@ -508,7 +508,7 @@ class _DesktopLayout extends StatelessWidget {
                             ),
                             editBuilder: (confirm, cancel) {
                               final ctrl = TextEditingController(
-                                text: d.targetPath ?? '',
+                                text: vm.download.targetPath,
                               );
                               return _InlineFolderEdit(
                                 controller: ctrl,

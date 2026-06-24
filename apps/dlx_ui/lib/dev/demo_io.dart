@@ -108,8 +108,10 @@ class DemoIo extends DownloadxIo {
   @override
   Future<List<int>> readFile(String path) async {
     final f = _files[path];
-    if (f == null) throw StateError('ENOENT: $path');
-    return f;
+    if (f != null) return f;
+    final len = _lengths[path];
+    if (len != null) return Uint8List(len);
+    throw StateError('ENOENT: $path');
   }
 
   @override
