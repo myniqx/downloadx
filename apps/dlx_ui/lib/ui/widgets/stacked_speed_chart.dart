@@ -32,9 +32,6 @@ class _StackedSpeedChartState extends State<StackedSpeedChart>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
-  /// Fraction of one column already scrolled off to the left (0→1).
-  double _scrollOffset = 0;
-
   /// How many frames we had last tick — detects new frame arrival.
   int _lastFrameCount = 0;
 
@@ -53,9 +50,7 @@ class _StackedSpeedChartState extends State<StackedSpeedChart>
     super.didUpdateWidget(old);
     final count = widget.frames.length;
     if (count > _lastFrameCount && _lastFrameCount > 0) {
-      // New frame arrived — animate scroll from 0 to 1 column width.
-      _scrollOffset = 1.0;
-      _ctrl.forward(from: 0).then((_) => setState(() => _scrollOffset = 0));
+      _ctrl.forward(from: 0);
     }
     _lastFrameCount = count;
   }
@@ -77,8 +72,7 @@ class _StackedSpeedChartState extends State<StackedSpeedChart>
           limits: widget.limits,
           seriesOrder: widget.seriesOrder,
           colorOf: widget.colorOf,
-          // Ease-out: starts fast, slows at the end.
-          scrollFrac: _scrollOffset * (1 - _ctrl.value),
+          scrollFrac: 1.0 - _ctrl.value,
         ),
       ),
     );

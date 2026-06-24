@@ -21,6 +21,9 @@ class DownloadVm extends ChangeNotifier {
   /// Latest per-chunk instant speed (bytes/sec), updated from chunk events.
   final Map<String, double> _chunkSpeed = {};
 
+  /// Timestamp (ms) when each chunk transitioned to completed/failed/reassigned.
+  final Map<String, int> chunkCompletedAt = {};
+
   /// Rolling per-chunk speed frames for the detail chart.
   final SpeedHistory chunkSpeedHistory = SpeedHistory();
 
@@ -67,6 +70,11 @@ class DownloadVm extends ChangeNotifier {
     } else if (e is ChunkLifecycleEvent) {
       if (e.status != ChunkStatus.downloading) {
         _chunkSpeed.remove(e.chunkId);
+      }
+      if (e.status == ChunkStatus.completed ||
+          e.status == ChunkStatus.failed ||
+          e.status == ChunkStatus.reassigned) {
+        chunkCompletedAt[e.chunkId] = DateTime.now().millisecondsSinceEpoch;
       }
     } else if (e is ProgressEvent) {
       currentSpeed = e.totalSpeed;
