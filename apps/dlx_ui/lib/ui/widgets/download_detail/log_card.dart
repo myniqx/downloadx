@@ -1,8 +1,8 @@
 import 'package:downloadx/downloadx.dart';
 import 'package:flutter/material.dart' hide DiagnosticLevel;
 
-import '../../util/palette.dart';
-import 'dlx_card.dart';
+import '../../../util/palette.dart';
+import '../dlx_card.dart';
 
 class LogCard extends StatefulWidget {
   final Download download;

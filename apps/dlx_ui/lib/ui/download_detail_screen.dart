@@ -5,14 +5,14 @@ import '../models/download_vm.dart';
 import '../services/download_service.dart';
 import '../util/format.dart';
 import '../util/palette.dart';
-import 'widgets/chunk_viz.dart';
 import 'widgets/dlx_button.dart';
 import 'widgets/dlx_card.dart';
-import 'widgets/download_settings_card.dart';
 import 'widgets/editable_field.dart';
 import 'widgets/folder_path_field.dart';
-import 'widgets/log_card.dart';
-import 'widgets/segment_viz.dart';
+import 'widgets/download_detail/chunk_viz.dart';
+import 'widgets/download_detail/download_settings_card.dart';
+import 'widgets/download_detail/log_card.dart';
+import 'widgets/download_detail/segment_viz.dart';
 
 class DownloadDetailScreen extends StatelessWidget {
   final DownloadVm vm;

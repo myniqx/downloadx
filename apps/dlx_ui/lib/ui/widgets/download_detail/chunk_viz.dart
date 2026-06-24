@@ -1,8 +1,8 @@
 import 'package:downloadx/downloadx.dart';
 import 'package:flutter/material.dart';
 
-import '../../models/download_vm.dart';
-import '../../util/palette.dart';
+import '../../../models/download_vm.dart';
+import '../../../util/palette.dart';
 import 'speed_bar_chart.dart';
 
 /// Segmented horizontal bar — each chunk is a proportional region,

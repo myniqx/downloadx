@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../util/palette.dart';
+import '../../../util/palette.dart';
 
 class SpeedBarChart extends StatelessWidget {
   final List<Map<String, double>> frames;
