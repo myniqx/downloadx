@@ -3,7 +3,7 @@ description: >-
   An IDM-style download manager for Dart and Flutter — parallel chunked
   downloads, dynamic splitting, resume across restarts, and pluggable I/O.
 version: 0.3.0
-repository: https://github.com/myniqx/downloadx
+repository: https://github.com/myniqx/downloadx/tree/main/apps/downloadx_dart
 homepage: https://myniqx.dev/projects/downloadx
 
 environment:
